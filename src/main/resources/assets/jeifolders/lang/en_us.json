@@ -1,0 +1,11 @@
+{
+  "screen.jeifolders.folder_name": "Folder Name",
+  "gui.jeifolders.bookmarks_for": "Bookmarks in %s",
+  "gui.jeifolders.no_bookmarks": "No bookmarks in this folder yet. Drag items here to add them.",
+  "gui.jeifolders.folder_name_prompt": "Enter Folder Name",
+  "gui.jeifolders.create_folder": "Create Folder",
+  "gui.jeifolders.confirm": "Confirm",
+  "gui.jeifolders.cancel": "Cancel",
+  "gui.jeifolders.delete_folder": "Delete Folder",
+  "gui.jeifolders.folder": "Add Folder"
+}

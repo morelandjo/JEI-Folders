@@ -1,0 +1,6 @@
+[[dependencies.jeifolders]]
+    modId="jei"
+    mandatory=true
+    versionRange="${jei_version_range}"
+    ordering="AFTER"
+    side="BOTH"
