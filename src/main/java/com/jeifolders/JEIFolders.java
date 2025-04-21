@@ -2,7 +2,7 @@ package com.jeifolders;
 
 import com.jeifolders.gui.FolderButton;
 import com.jeifolders.integration.JEIIntegration;
-import com.jeifolders.data.FolderManager;
+import com.jeifolders.data.FolderDataManager;
 import com.jeifolders.gui.FolderManagerGUI;
 import com.jeifolders.util.ModLogger;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
@@ -50,7 +50,7 @@ public class JEIFolders {
     private void onWorldLoad(LevelEvent.Load event) {
         if (event.getLevel().isClientSide() && !dataLoaded) {
             ModLogger.debug("Loading folder data on world load");
-            FolderManager.getInstance().loadData();
+            FolderDataManager.getInstance().loadData();
             dataLoaded = true;
         }
     }
@@ -58,7 +58,7 @@ public class JEIFolders {
     private void onWorldUnload(LevelEvent.Unload event) {
         if (event.getLevel().isClientSide()) {
             ModLogger.debug("Saving folder data on world unload");
-            FolderManager.getInstance().saveData();
+            FolderDataManager.getInstance().saveData();
             dataLoaded = false;
         }
     }
@@ -66,7 +66,7 @@ public class JEIFolders {
     private void onPlayerLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
         if (!dataLoaded) {
             ModLogger.debug("Loading folder data on player login");
-            FolderManager.getInstance().loadData();
+            FolderDataManager.getInstance().loadData();
             dataLoaded = true;
         }
     }

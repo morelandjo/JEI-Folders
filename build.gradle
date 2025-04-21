@@ -10,7 +10,7 @@ tasks.named('wrapper', Wrapper).configure {
 }
 
 version = mod_version
-group = mod_group_id
+group = mod_group_id 
 
 repositories {
     mavenCentral() // Add Maven Central for broader dependency resolution
@@ -99,7 +99,7 @@ dependencies {
     compileOnly "mezz.jei:jei-${mc_version}-neoforge-api:${jei_version}"
     
     // Full JEI implementation - added to localRuntime for development but not included in our mod's dependencies
-    implementation("mezz.jei:jei-1.21.1-neoforge:19.21.0.247")
+    implementation("mezz.jei:jei-${mc_version}-neoforge:${jei_version}")
 }
 
 // Process templates for mod metadata

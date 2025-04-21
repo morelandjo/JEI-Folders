@@ -12,23 +12,33 @@ import mezz.jei.gui.overlay.elements.IngredientElement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import javax.annotation.Nonnull;
 
 /**
  * Manages bookmark operations in JEI.
  */
 public class JEIBookmarkManager {
+    private static final JEIService jeiService = JEIIntegrationFactory.getJEIService();
+    private static final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+    private static final BookmarkService bookmarkService = JEIIntegrationFactory.getBookmarkService();
 
     /**
      * Gets all JEI bookmarks.
      */
     public static List<ITypedIngredient<?>> getAllBookmarks() {
-        Optional<IJeiRuntime> runtimeOptional = JEIIntegration.getJeiRuntime();
+        Optional<Object> runtimeOptional = jeiService.getJeiRuntime();
         if (runtimeOptional.isEmpty()) {
             ModLogger.error("JEI runtime is not available for fetching bookmarks.");
             return new ArrayList<>();
         }
         
-        IJeiRuntime jeiRuntime = runtimeOptional.get();
+        Object runtimeObj = runtimeOptional.get();
+        if (!(runtimeObj instanceof IJeiRuntime)) {
+            ModLogger.error("JEI runtime object is not of expected type");
+            return new ArrayList<>();
+        }
+        
+        IJeiRuntime jeiRuntime = (IJeiRuntime) runtimeObj;
         IBookmarkOverlay bookmarkOverlay = jeiRuntime.getBookmarkOverlay();
         List<ITypedIngredient<?>> bookmarks = new ArrayList<>();
 
@@ -57,21 +67,22 @@ public class JEIBookmarkManager {
             if (ingredient instanceof ITypedIngredient<?>) {
                 typedIngredient = (ITypedIngredient<?>) ingredient;
             } else {
-                typedIngredient = JEIIngredientManager.getTypedIngredientFromObject(ingredient);
-                if (typedIngredient == null) {
+                Optional<ITypedIngredient<?>> typedIngredientOpt = ingredientService.getTypedIngredientFromObject(ingredient);
+                if (typedIngredientOpt.isEmpty()) {
                     return false;
                 }
+                typedIngredient = typedIngredientOpt.get();
             }
 
             // Get the key for the ingredient
-            String key = JEIIngredientManager.getKeyForIngredient(typedIngredient);
+            String key = ingredientService.getKeyForIngredient(typedIngredient);
             if (key == null || key.isEmpty()) {
                 return false;
             }
 
             // Check if any bookmark matches this key
             for (ITypedIngredient<?> bookmark : bookmarks) {
-                String bookmarkKey = JEIIngredientManager.getKeyForIngredient(bookmark);
+                String bookmarkKey = ingredientService.getKeyForIngredient(bookmark);
                 if (key.equals(bookmarkKey)) {
                     return true;
                 }
@@ -86,7 +97,6 @@ public class JEIBookmarkManager {
      * Converts a list of bookmarks to JEI elements.
      * This is used by FolderBookmarkList to get elements for display.
      */
-    @SuppressWarnings("unchecked")
     public static List<Object> convertBookmarksToElements(List<Object> bookmarks) {
         List<Object> elements = new ArrayList<>();
         
@@ -107,16 +117,11 @@ public class JEIBookmarkManager {
      * Used by FolderBookmarkList to avoid direct JEI dependencies.
      */
     public static void notifySourceListChanged(List<Object> listeners) {
-        for (Object listener : listeners) {
-            if (listener instanceof IIngredientGridSource.SourceListChangedListener) {
-                ((IIngredientGridSource.SourceListChangedListener) listener).onSourceListChanged();
-            }
-        }
+        bookmarkService.notifySourceListChanged(listeners);
     }
 
     /**
-     * Special implementation of IIngredientGridSource that adapts our generic FolderBookmarkList
-     * to the JEI-specific interface.
+     * Implementation of IIngredientGridSource that adapts our generic FolderBookmarkList to the JEI-specific interface.
      */
     public static class JeiBookmarkAdapter implements IIngredientGridSource {
         private final FolderBookmarkList bookmarkList;
@@ -127,12 +132,11 @@ public class JEIBookmarkManager {
         
         @Override
         public List<IElement<?>> getElements() {
-            // Use a properly typed conversion method instead of an unchecked cast
             return convertToElementList(bookmarkList.getAllBookmarks());
         }
         
         @Override
-        public void addSourceListChangedListener(SourceListChangedListener listener) {
+        public void addSourceListChangedListener(@Nonnull SourceListChangedListener listener) {
             bookmarkList.addSourceListChangedListener(listener);
         }
     }
@@ -160,11 +164,29 @@ public class JEIBookmarkManager {
      */
     public static IElement<?> createIngredientElement(ITypedIngredient<?> ingredient) {
         try {
-            // Use the constructor directly instead of a non-existent create method
-            return new IngredientElement<>(ingredient);
+            if (ingredient == null) {
+                ModLogger.error("Cannot create ingredient element from null ingredient");
+                return null;
+            }
+            
+            return createIngredientElementSafe(ingredient);
         } catch (Exception e) {
             ModLogger.error("Failed to create ingredient element", e);
         }
         return null;
+    }
+
+    /**
+     * Type-safe helper method to create ingredient elements
+     */
+    private static <T> IElement<T> createIngredientElementSafe(ITypedIngredient<?> ingredient) {
+        try {
+            @SuppressWarnings("unchecked")
+            ITypedIngredient<T> typedIngredient = (ITypedIngredient<T>) ingredient;
+            return new IngredientElement<>(typedIngredient);
+        } catch (ClassCastException e) {
+            ModLogger.error("Type mismatch creating ingredient element: {}", e.getMessage());
+            return null;
+        }
     }
 }

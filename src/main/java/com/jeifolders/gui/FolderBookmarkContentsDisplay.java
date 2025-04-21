@@ -1,73 +1,62 @@
 package com.jeifolders.gui;
 
 
-import com.jeifolders.data.Folder;
-import com.jeifolders.data.FolderManager;
-import com.jeifolders.integration.JEIIngredientManager;
-import com.jeifolders.integration.JEIIntegration;
+import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.data.FolderDataManager;
+import com.jeifolders.integration.BookmarkDisplayHelper;
+import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import mezz.jei.api.ingredients.ITypedIngredient;
-import mezz.jei.api.runtime.IJeiRuntime;
 
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Displays bookmarks for a specific folder using JEI's bookmark overlay capabilities.
+ * Displays bookmarks for a specific folder.
  */
-public class FolderBookmarkContentsDisplay {
+public class FolderBookmarkContentsDisplay implements FolderChangeListener {
 
-    private final FolderManager folderManager;
-    private Folder activeFolder;
+    private final FolderDataManager folderManager;
+    private FolderDataRepresentation activeFolder;
     private int x;
     private int y;
     private int width;
     private int height;
-    private FolderBookmarkOverlay bookmarkOverlay;
+    private FolderContentsDisplay bookmarkOverlay;
     private boolean updatingBounds = false;
+    
+    // Replace direct JEI references with our helper
+    private final BookmarkDisplayHelper displayHelper = new BookmarkDisplayHelper();
     
     // Cache for performance
     private boolean needsRefresh = false;
     private final int[] bounds = new int[4]; // x, y, width, height
 
-    public FolderBookmarkContentsDisplay(FolderManager folderManager) {
+    public FolderBookmarkContentsDisplay(FolderDataManager folderManager) {
         this.folderManager = folderManager;
-        JEIIntegration.registerRuntimeAvailableCallback(this::initializeWithJeiRuntime);
+        
+        // Register as listener for folder changes
+        folderManager.addFolderChangeListener(this);
+        
+        // Load data on creation
         folderManager.loadData();
     }
     
-    /**
-     * Initialize the display with JEI runtime when it becomes available
-     */
-    private void initializeWithJeiRuntime(IJeiRuntime runtime) {
-        if (activeFolder != null) {
-            createOverlayForCurrentFolder(runtime);
-        }
-    }
-    
-    /**
-     * Creates a bookmark overlay for the current folder
-     */
-    private void createOverlayForCurrentFolder(IJeiRuntime runtime) {
-        if (activeFolder != null) {
-            Optional<FolderBookmarkOverlay> overlayOpt = FolderBookmarkOverlay.create(runtime, activeFolder);
-            overlayOpt.ifPresent(overlay -> {
-                this.bookmarkOverlay = overlay;
-                bookmarkOverlay.updateBounds(x, y, width, height);
-                refreshBookmarks();
-            });
+    @Override
+    public void onFolderContentsChanged(int folderId) {
+        // Check if this is our active folder
+        if (activeFolder != null && activeFolder.getId() == folderId) {
+            ModLogger.info("Active folder {} was modified, refreshing display", folderId);
+            // Force a refresh on next render
+            needsRefresh = true;
         }
     }
 
     /**
      * Sets the active folder and ensures bookmarks are properly loaded
      */
-    public void setActiveFolder(Folder folder) {
-        // Start timing for performance tracking
-        long startTime = System.currentTimeMillis();
-
+    public void setActiveFolder(FolderDataRepresentation folder) {
         // Early return if the folder hasn't changed
         if (this.activeFolder == folder) {
             ModLogger.debug("setActiveFolder called with same folder - skipping update");
@@ -78,18 +67,11 @@ public class FolderBookmarkContentsDisplay {
         
         if (folder != null) {
             ModLogger.debug("Setting active folder to: {} (ID: {})", folder.getName(), folder.getId());
-            // Get JEI runtime if available
-            Optional<IJeiRuntime> runtimeOpt = JEIIntegration.getJeiRuntime();
-            if (runtimeOpt.isPresent()) {
-                createOverlayForCurrentFolder(runtimeOpt.get());
-                
-                // Use the cached ingredients for this folder - only load once
-                loadCachedIngredientsForCurrentFolder();
-                
-                long totalTime = System.currentTimeMillis() - startTime;
-                ModLogger.info("Folder activation completed in {}ms: {} (ID: {})", 
-                    totalTime, folder.getName(), folder.getId());
-            }
+            createOverlayForCurrentFolder();
+            
+            // Use the cached ingredients for this folder
+            loadCachedIngredientsForCurrentFolder();
+            
         } else {
             // Clear the overlay if no folder is active
             bookmarkOverlay = null;
@@ -98,38 +80,41 @@ public class FolderBookmarkContentsDisplay {
     }
 
     /**
+     * Creates a bookmark overlay for the current folder
+     */
+    private void createOverlayForCurrentFolder() {
+        if (activeFolder != null) {
+            Optional<FolderContentsDisplay> overlayOpt = FolderContentsDisplay.create(displayHelper, activeFolder);
+            overlayOpt.ifPresent(overlay -> {
+                this.bookmarkOverlay = overlay;
+                bookmarkOverlay.updateBounds(x, y, width, height);
+                refreshBookmarks();
+            });
+        }
+    }
+
+    /**
      * Loads cached ingredients for the current folder
-     * Uses optimized batch loading and minimizes renderable updates
      */
     private void loadCachedIngredientsForCurrentFolder() {
         if (activeFolder == null || bookmarkOverlay == null) {
             return;
         }
 
-        // Start timing for performance tracking
-        long startTime = System.currentTimeMillis();
-
-        // Use the cached ingredients method - it will handle batch processing efficiently
-        List<ITypedIngredient<?>> cachedIngredients = folderManager.getCachedIngredientsForFolder(activeFolder.getId());
+        List<BookmarkIngredient> cachedIngredients = displayHelper.getCachedIngredientsForFolder(activeFolder.getId());
         
         if (bookmarkOverlay != null) {
-            // Set the ingredients just once to avoid redundant processing
             bookmarkOverlay.setIngredients(cachedIngredients);
-            
-            long totalTime = System.currentTimeMillis() - startTime;
-            ModLogger.info("Loaded {} ingredients for folder: {} in {}ms", 
-                cachedIngredients.size(), activeFolder.getName(), totalTime);
         }
     }
 
     /**
      * Updates the bounds of the bookmark display.
-     * Uses cached values to avoid unnecessary updates.
      */
     public void updateBounds(int x, int y, int width, int height) {
         // Check if bounds are actually changing
         if (bounds[0] == x && bounds[1] == y && bounds[2] == width && bounds[3] == height) {
-            return; // No change in bounds
+            return;
         }
         
         // Store the dimensions in both class fields and cache array
@@ -161,11 +146,10 @@ public class FolderBookmarkContentsDisplay {
     
     /**
      * Sets the ingredients directly in the bookmark overlay.
-     * Used for state restoration between UI rebuilds.
      * 
      * @param ingredients The list of typed ingredients to display
      */
-    public void setIngredients(List<ITypedIngredient<?>> ingredients) {
+    public void setIngredients(List<BookmarkIngredient> ingredients) {
         if (bookmarkOverlay != null) {
             try {
                 bookmarkOverlay.setIngredients(ingredients);
@@ -177,11 +161,10 @@ public class FolderBookmarkContentsDisplay {
     
     /**
      * Gets the current ingredients from the bookmark overlay.
-     * Used for state preservation between UI rebuilds.
      * 
      * @return The list of current typed ingredients
      */
-    public List<ITypedIngredient<?>> getIngredients() {
+    public List<BookmarkIngredient> getIngredients() {
         if (bookmarkOverlay != null) {
             return bookmarkOverlay.getIngredients();
         }
@@ -190,25 +173,38 @@ public class FolderBookmarkContentsDisplay {
 
     /**
      * Refreshes bookmarks from the active folder.
-     * Uses optimized batch loading and minimizes updates.
      */
     public void refreshBookmarks() {
-        if (activeFolder == null || bookmarkOverlay == null) {
+        if (activeFolder == null) {
+            ModLogger.debug("Cannot refresh bookmarks - no active folder");
             return;
         }
 
-        // Start timing for performance tracking
-        long startTime = System.currentTimeMillis();
-
         // Invalidate the cache for this folder to ensure fresh data
-        folderManager.invalidateIngredientsCache(activeFolder.getId());
+        displayHelper.invalidateIngredientsCache(activeFolder.getId());
+        
+        // Log the folder's current bookmarks
+        List<String> bookmarkKeys = folderManager.getFolderBookmarkKeys(activeFolder.getId());
+        ModLogger.info("Refreshing bookmarks for folder {} with {} bookmarks", 
+            activeFolder.getName(), bookmarkKeys.size());
+
+        if (bookmarkKeys.isEmpty()) {
+            ModLogger.info("No bookmarks to display for folder: {}", activeFolder.getName());
+            if (bookmarkOverlay != null) {
+                // Clear the overlay to show empty state
+                bookmarkOverlay.setIngredients(List.of());
+            }
+            return;
+        }
         
         // Then reload using the batch processing method
         loadCachedIngredientsForCurrentFolder();
         
-        long totalTime = System.currentTimeMillis() - startTime;
-        ModLogger.debug("Refreshed bookmarks for folder {} in {}ms", 
-            activeFolder.getName(), totalTime);
+        // Force update the overlay if it exists
+        if (bookmarkOverlay != null) {
+            bookmarkOverlay.refreshContents();
+        }
+        
     }
 
     /**
@@ -232,7 +228,7 @@ public class FolderBookmarkContentsDisplay {
             try {
                 bookmarkOverlay.draw(Minecraft.getInstance(), graphics, mouseX, mouseY, partialTick);
                 
-                // Only draw tooltips if mouse is over for performance
+                // Only draw tooltips if mouse is over
                 if (isMouseOver(mouseX, mouseY)) {
                     bookmarkOverlay.drawTooltips(Minecraft.getInstance(), graphics, mouseX, mouseY);
                 }
@@ -244,7 +240,6 @@ public class FolderBookmarkContentsDisplay {
 
     /**
      * Fast method to check if the given coordinates are over this display.
-     * Uses direct comparison instead of creating new objects.
      */
     public boolean isMouseOver(double mouseX, double mouseY) {
         return mouseX >= x && mouseX < x + width && 
@@ -259,7 +254,7 @@ public class FolderBookmarkContentsDisplay {
             return Optional.empty();
         }
         
-        // Only proceed if mouse is over this area - use the fast check
+        // Only proceed if mouse is over this area
         if (!isMouseOver(mouseX, mouseY)) {
             return Optional.empty();
         }

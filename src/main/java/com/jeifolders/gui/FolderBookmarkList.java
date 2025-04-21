@@ -1,8 +1,9 @@
 package com.jeifolders.gui;
 
-import com.jeifolders.data.Folder;
-import com.jeifolders.integration.JEIBookmarkManager;
-import com.jeifolders.integration.JEIIngredientManager;
+import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.integration.JEIIntegrationFactory;
+import com.jeifolders.integration.BookmarkService;
+import com.jeifolders.integration.IngredientService;
 import com.jeifolders.util.ModLogger;
 
 import java.util.ArrayList;
@@ -13,13 +14,16 @@ import java.util.List;
  * A specialized bookmark list for folders that integrates with JEI
  */
 public class FolderBookmarkList {
-    private Folder folder;
+    private FolderDataRepresentation folder;
     private final List<Object> bookmarks = new ArrayList<>();
     private final List<Object> listeners = new ArrayList<>();
+    
+    // Access services
+    private final BookmarkService bookmarkService = JEIIntegrationFactory.getBookmarkService();
+    private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
 
-    public void setFolder(Folder folder) {
+    public void setFolder(FolderDataRepresentation folder) {
         this.folder = folder;
-        // When folder changes, we should update our bookmarks
         refreshBookmarks();
     }
 
@@ -34,18 +38,15 @@ public class FolderBookmarkList {
             if (!keys.isEmpty()) {
                 ModLogger.info("Refreshing bookmarks for folder {} with {} keys", folder.getName(), keys.size());
                 
-                // Use JEIIngredientManager instead of JEIIntegration
-                List<Object> ingredients = JEIIngredientManager.getIngredientsForBookmarkKeys(keys);
-                bookmarks.addAll(ingredients);
+                // Use ingredient service to get ingredients for bookmark keys
+                bookmarks.addAll(ingredientService.getIngredientsForKeys(keys));
             } else {
                 ModLogger.info("Folder {} has no bookmarks", folder.getName());
             }
         }
         
-        // Notify listeners of the change
         notifyListenersOfChange();
     }
-
 
     /**
      * Add a listener that will be notified when the source list changes
@@ -59,8 +60,8 @@ public class FolderBookmarkList {
     /**
      * Notify listeners that the bookmark list has changed
      */
-    private void notifyListenersOfChange() {
-        JEIBookmarkManager.notifySourceListChanged(listeners);
+    public void notifyListenersOfChange() {
+        bookmarkService.notifySourceListChanged(listeners);
     }
 
     /**
@@ -79,9 +80,27 @@ public class FolderBookmarkList {
             
             // Also add to folder if we have one
             if (folder != null) {
-                String key = JEIIngredientManager.getKeyForIngredient(ingredient);
+                String key = ingredientService.getKeyForIngredient(ingredient);
                 if (key != null && !key.isEmpty() && !folder.containsBookmark(key)) {
                     folder.addBookmarkKey(key);
+                }
+            }
+            
+            // Notify listeners of the change
+            notifyListenersOfChange();
+        }
+    }
+    
+    /**
+     * Removes a bookmark directly
+     */
+    public void removeBookmark(Object ingredient) {
+        if (bookmarks.remove(ingredient)) {
+            // Also remove from folder if we have one
+            if (folder != null) {
+                String key = ingredientService.getKeyForIngredient(ingredient);
+                if (key != null && !key.isEmpty()) {
+                    folder.removeBookmark(key);
                 }
             }
             
@@ -99,5 +118,43 @@ public class FolderBookmarkList {
             notifyListenersOfChange();
         }
     }
-
+    
+    /**
+     * Gets all bookmarks and casts them to BookmarkIngredients
+     */
+    @SuppressWarnings("unchecked")
+    public List<com.jeifolders.integration.BookmarkIngredient> getIngredients() {
+        List<com.jeifolders.integration.BookmarkIngredient> result = new ArrayList<>();
+        for (Object bookmark : bookmarks) {
+            if (bookmark instanceof com.jeifolders.integration.BookmarkIngredient) {
+                result.add((com.jeifolders.integration.BookmarkIngredient) bookmark);
+            }
+        }
+        return result;
+    }
+    
+    /**
+     * Sets all ingredients in the bookmark list
+     */
+    public void setIngredients(List<com.jeifolders.integration.BookmarkIngredient> ingredients) {
+        bookmarks.clear();
+        bookmarks.addAll(ingredients);
+        
+        // Update folder bookmarks if we have a folder
+        if (folder != null) {
+            // Clear existing bookmarks
+            folder.clearBookmarks();
+            
+            // Add new bookmarks
+            for (Object ingredient : ingredients) {
+                String key = ingredientService.getKeyForIngredient(ingredient);
+                if (key != null && !key.isEmpty()) {
+                    folder.addBookmarkKey(key);
+                }
+            }
+        }
+        
+        // Notify listeners of the change
+        notifyListenersOfChange();
+    }
 }

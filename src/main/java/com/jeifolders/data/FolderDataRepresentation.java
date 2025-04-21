@@ -1,6 +1,5 @@
 package com.jeifolders.data;
 
-import com.jeifolders.JEIFolders;
 import com.jeifolders.util.ModLogger;
 
 import java.util.ArrayList;
@@ -13,12 +12,12 @@ import net.minecraft.nbt.Tag;
 /**
  * Represents a JEI folder with a unique ID and name.
  */
-public class Folder {
+public class FolderDataRepresentation {
     private final int id;
     private String name;
     private final List<String> bookmarkKeys = new ArrayList<>();
     
-    public Folder(int id, String name) {
+    public FolderDataRepresentation(int id, String name) {
         this.id = id;
         this.name = name;
     }
@@ -73,6 +72,16 @@ public class Folder {
     }
     
     /**
+     * Clears all bookmarks from this folder.
+     */
+    public void clearBookmarks() {
+        if (!bookmarkKeys.isEmpty()) {
+            ModLogger.debug("Cleared {} bookmarks from folder '{}'", bookmarkKeys.size(), name);
+            bookmarkKeys.clear();
+        }
+    }
+    
+    /**
      * Serializes the folder to an NBT tag.
      */
     public CompoundTag toNbt() {
@@ -93,15 +102,15 @@ public class Folder {
     /**
      * Creates a Folder object from an NBT tag.
      */
-    public static Folder fromNbt(CompoundTag tag) {
+    public static FolderDataRepresentation fromNbt(CompoundTag tag) {
         int id = tag.getInt("id");
         String name = tag.getString("name");
-        Folder folder = new Folder(id, name);
+        FolderDataRepresentation folder = new FolderDataRepresentation(id, name);
 
         if (tag.contains("bookmarks")) {
             ListTag bookmarksTag = tag.getList("bookmarks", Tag.TAG_STRING);
             for (int i = 0; i < bookmarksTag.size(); i++) {
-                folder.bookmarkKeys.add(bookmarksTag.getString(i)); // Direct add to avoid redundant checks for initial loading
+                folder.bookmarkKeys.add(bookmarksTag.getString(i));
             }
         }
 

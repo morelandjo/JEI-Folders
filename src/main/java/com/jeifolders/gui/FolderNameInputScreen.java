@@ -29,7 +29,6 @@ public class FolderNameInputScreen extends Screen {
     public FolderNameInputScreen(Screen parent, Consumer<String> onConfirm) {
         // Use empty component for the base Screen title to prevent automatic rendering
         super(Component.empty());
-        // Store the actual title in our own field
         this.dialogTitle = Component.translatable("gui.jeifolders.create_folder");
         this.parentScreen = parent;
         this.onConfirm = onConfirm;
@@ -41,19 +40,18 @@ public class FolderNameInputScreen extends Screen {
         centerX = this.width / 2;
         centerY = this.height / 2;
         
-        // Create the edit box for folder name input - using empty Component for the label
+        // Create the edit box for folder name input
         nameField = new EditBox(
             this.font,
             centerX - TEXT_FIELD_WIDTH / 2,
             centerY - TEXT_FIELD_HEIGHT - PADDING,
             TEXT_FIELD_WIDTH,
             TEXT_FIELD_HEIGHT,
-            Component.empty() // Use empty component instead of the placeholder text
+            Component.empty()
         );
         nameField.setMaxLength(32);
         nameField.setValue("");
-        nameField.setHint(placeholderText); // Set placeholder text using the proper hint method
-        nameField.setResponder(this::onTextChanged);
+        nameField.setHint(placeholderText);
         
         // Add confirm button
         addRenderableWidget(Button.builder(
@@ -96,9 +94,6 @@ public class FolderNameInputScreen extends Screen {
         }
     }
     
-    private void onTextChanged(String text) {
-        // Optional validation logic can be added here
-    }
     
     @Override
     public void render(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {

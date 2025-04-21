@@ -6,6 +6,7 @@ import com.jeifolders.gui.FolderExclusionHandler;
 import com.jeifolders.gui.FolderManagerGUI;
 import com.jeifolders.gui.GlobalIngredientDragManager;
 import com.jeifolders.gui.FolderButtonInterface;
+import com.jeifolders.gui.FolderButtonView;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -13,7 +14,6 @@ import mezz.jei.api.gui.handlers.IGuiContainerHandler;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
-import mezz.jei.api.runtime.IIngredientManager;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.Rect2i;
@@ -23,19 +23,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.concurrent.CopyOnWriteArrayList;
 
+/**
+ * Main JEI plugin class for JEI-Folders integration.
+ * Acts as the entry point for JEI integration.
+ */
 @JeiPlugin
 public class JEIIntegration implements IModPlugin {
     private static final ResourceLocation PLUGIN_ID = ResourceLocation.fromNamespaceAndPath(JEIFolders.MOD_ID, "jei_plugin");
-    private static IJeiRuntime jeiRuntime;
-    private static final List<Consumer<IJeiRuntime>> runtimeCallbacks = new CopyOnWriteArrayList<>();
-    private static IIngredientManager ingredientManager;
-    private static ITypedIngredient<?> currentDraggedIngredient;
-    private static final FolderExclusionHandler exclusionHandler = new FolderExclusionHandler();
     
-    // This flag will track if an ingredient is actually being dragged
-    private static boolean isActuallyDragging = false;
+    // Access the services through the factory
+    private final JEIService jeiService = JEIIntegrationFactory.getJEIService();
+    private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+    private final BookmarkService bookmarkService = JEIIntegrationFactory.getBookmarkService();
+    
+    // Static instance of the exclusion handler
+    private static final FolderExclusionHandler exclusionHandler = new FolderExclusionHandler();
 
     @Override
     public ResourceLocation getPluginUid() {
@@ -44,8 +47,8 @@ public class JEIIntegration implements IModPlugin {
 
     @Override
     public void registerGuiHandlers(IGuiHandlerRegistration registration) {
-        // Register our exclusion handler
-        registration.addGlobalGuiHandler(exclusionHandler);
+        // Register our exclusion handler using the JEI-specific wrapper
+        registration.addGlobalGuiHandler(new JEIExclusionHandler(exclusionHandler));
 
         // Register container handler to add folder areas to exclusion zones
         // Use raw types with unchecked conversion to match JEI's API expectations
@@ -59,14 +62,14 @@ public class JEIIntegration implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
-        setJeiRuntime(runtime);
-
-        // Initialize all components that need the JEI runtime
+        ModLogger.info("JEI runtime available, initializing with JeiRuntimeHelper");
+        
+        // Use the centralized runtime helper for initialization
+        JeiRuntimeHelper.initializeJeiRuntime(runtime);
+        
+        // Initialize components that specifically need runtime access
         GlobalIngredientDragManager.getInstance().setJeiRuntime(runtime);
         initializeFolderButton(runtime);
-
-        // Notify any registered callbacks
-        notifyRuntimeCallbacks(runtime);
     }
 
     private void initializeFolderButton(IJeiRuntime runtime) {
@@ -77,70 +80,78 @@ public class JEIIntegration implements IModPlugin {
         }
     }
 
-    private void notifyRuntimeCallbacks(IJeiRuntime runtime) {
-        for (Consumer<IJeiRuntime> callback : runtimeCallbacks) {
-            callback.accept(runtime);
-        }
-        runtimeCallbacks.clear();
-    }
-
     /**
      * Registers a callback to be executed when the JEI runtime becomes available.
      */
     public static void registerRuntimeAvailableCallback(Consumer<IJeiRuntime> callback) {
-        if (jeiRuntime != null) {
-            // If runtime is already available, call the callback immediately
-            callback.accept(jeiRuntime);
-        } else {
-            // Otherwise, save the callback for later execution
-            runtimeCallbacks.add(callback);
-        }
+        // Wrap the IJeiRuntime consumer in an Object consumer
+        Consumer<Object> wrappedCallback = obj -> {
+            if (obj instanceof IJeiRuntime jeiRuntime) {
+                callback.accept(jeiRuntime);
+            } else {
+                ModLogger.error("Runtime object is not an IJeiRuntime: {}", 
+                    obj != null ? obj.getClass().getName() : "null");
+            }
+        };
+        
+        JEIIntegrationFactory.getJEIService().registerRuntimeCallback(wrappedCallback);
     }
 
     public static void setJeiRuntime(IJeiRuntime runtime) {
-        jeiRuntime = runtime;
-        ingredientManager = runtime.getIngredientManager();
-        ModLogger.debug("JEI runtime set in JEIIntegration");
-        JEIIngredientManager.setIngredientManager(ingredientManager);
+        JEIIntegrationFactory.getJEIService().setJeiRuntime(runtime);
     }
 
     public static Optional<IJeiRuntime> getJeiRuntime() {
-        return Optional.ofNullable(jeiRuntime);
+        Optional<Object> runtimeObj = JEIIntegrationFactory.getJEIService().getJeiRuntime();
+        if (runtimeObj.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        Object obj = runtimeObj.get();
+        if (obj instanceof IJeiRuntime jeiRuntime) {
+            return Optional.of(jeiRuntime);
+        } else {
+            ModLogger.error("JEI runtime is not of expected type: {}", 
+                obj != null ? obj.getClass().getName() : "null");
+            return Optional.empty();
+        }
     }
 
     public static void setDraggedIngredient(ITypedIngredient<?> ingredient) {
-        currentDraggedIngredient = ingredient;
-        ModLogger.debug("Set dragged ingredient: {}", ingredient);
+        JEIIntegrationFactory.getJEIService().setDraggedIngredient(ingredient);
     }
 
     public static void clearDraggedIngredient() {
-        currentDraggedIngredient = null;
-        isActuallyDragging = false;
-        ModLogger.debug("Cleared dragged ingredient");
+        JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
     }
 
     public static Optional<ITypedIngredient<?>> getDraggedIngredient() {
-        // Add detailed logging to understand when this is called and what it returns
-        if (currentDraggedIngredient != null) {
-            ModLogger.debug("[HOVER-DEBUG] getDraggedIngredient called, ingredient present, isActuallyDragging={}", isActuallyDragging);
+        Optional<TypedIngredient> typedIngredientOpt = JEIIntegrationFactory.getJEIService().getDraggedIngredient();
+        if (typedIngredientOpt.isEmpty()) {
+            return Optional.empty();
         }
-        // Only return the dragged ingredient if we're actually dragging
-        if (isActuallyDragging && currentDraggedIngredient != null) {
-            return Optional.of(currentDraggedIngredient);
+        
+        TypedIngredient typedIngredient = typedIngredientOpt.get();
+        Object wrappedObj = typedIngredient.getWrappedIngredient();
+        
+        if (wrappedObj instanceof ITypedIngredient<?> jeiTypedIngredient) {
+            return Optional.of(jeiTypedIngredient);
+        } else {
+            ModLogger.error("Dragged ingredient is not of expected type: {}", 
+                wrappedObj != null ? wrappedObj.getClass().getName() : "null");
+            return Optional.empty();
         }
-        return Optional.empty();
     }
     
     public static void setActuallyDragging(boolean isDragging) {
-        isActuallyDragging = isDragging;
-        ModLogger.debug("Set actually dragging: {}", isDragging);
+        JEIIntegrationFactory.getJEIService().setActuallyDragging(isDragging);
     }
 
-    public static IIngredientManager getIngredientManager() {
-        if (ingredientManager == null && jeiRuntime != null) {
-            ingredientManager = jeiRuntime.getIngredientManager();
-        }
-        return ingredientManager;
+    /**
+     * Gets the shared exclusion handler instance
+     */
+    public static FolderExclusionHandler getExclusionHandler() {
+        return exclusionHandler;
     }
 
     /**
@@ -152,8 +163,9 @@ public class JEIIntegration implements IModPlugin {
             List<Rect2i> areas = new ArrayList<>();
 
             // Add the folder button exclusion zone if available
-            if (FolderButton.lastDrawnArea.getWidth() > 0 && FolderButton.lastDrawnArea.getHeight() > 0) {
-                areas.add(FolderButton.lastDrawnArea);
+            // Reference FolderButtonView.lastDrawnArea instead of FolderButton.lastDrawnArea
+            if (FolderButtonView.lastDrawnArea.getWidth() > 0 && FolderButtonView.lastDrawnArea.getHeight() > 0) {
+                areas.add(FolderButtonView.lastDrawnArea);
             }
 
             return areas;
@@ -188,8 +200,8 @@ public class JEIIntegration implements IModPlugin {
                 ModLogger.debug("[HOVER-FIX] Actual drag detected, mouse button is down");
                 
                 // Set the dragged ingredient for the actual drag
-                setDraggedIngredient(ingredient);
-                setActuallyDragging(true);
+                JEIIntegrationFactory.getJEIService().setDraggedIngredient(ingredient);
+                JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
                 
                 // Now add the targets since this is an actual drag
                 FolderButtonInterface buttonInterface = FolderManagerGUI.getFolderButton();
@@ -208,8 +220,8 @@ public class JEIIntegration implements IModPlugin {
             } else if (mouseButtonDown) {
                 // Mouse button was down but now it's up - reset the state
                 mouseButtonDown = false;
-                setActuallyDragging(false);
-                clearDraggedIngredient();
+                JEIIntegrationFactory.getJEIService().setActuallyDragging(false);
+                JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
                 ModLogger.debug("[HOVER-FIX] Mouse button released, drag operation ended");
             } else {
                 // This is just a hover, not a drag - don't return any targets
@@ -274,8 +286,8 @@ public class JEIIntegration implements IModPlugin {
         public void onComplete() {
             ModLogger.debug("[HOVER-FIX] Ghost ingredient drag completed");
             mouseButtonDown = false;
-            setActuallyDragging(false);
-            clearDraggedIngredient();
+            JEIIntegrationFactory.getJEIService().setActuallyDragging(false);
+            JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
         }
     }
 }

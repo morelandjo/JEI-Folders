@@ -14,6 +14,9 @@ import java.util.Optional;
  */
 public class JEIRenderHelper {
 
+    // Access the JEI service through the factory
+    private static final JEIService jeiService = JEIIntegrationFactory.getJEIService();
+
     /**
      * Renders an ingredient at the specified position.
      * @param ingredient The ingredient to render.
@@ -22,13 +25,19 @@ public class JEIRenderHelper {
      * @param y The y-coordinate for rendering.
      */
     public static <T> void renderIngredient(ITypedIngredient<T> ingredient, GuiGraphics graphics, int x, int y) {
-        Optional<IJeiRuntime> runtimeOptional = JEIIntegration.getJeiRuntime();
+        Optional<Object> runtimeOptional = jeiService.getJeiRuntime();
         if (runtimeOptional.isEmpty()) {
             ModLogger.error("JEI runtime is not available for rendering ingredients.");
             return;
         }
         
-        IJeiRuntime jeiRuntime = runtimeOptional.get();
+        Object runtimeObj = runtimeOptional.get();
+        if (!(runtimeObj instanceof IJeiRuntime)) {
+            ModLogger.error("JEI runtime object is not of expected type");
+            return;
+        }
+        
+        IJeiRuntime jeiRuntime = (IJeiRuntime) runtimeObj;
 
         try {
             IIngredientManager ingredientManager = jeiRuntime.getIngredientManager();

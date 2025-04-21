@@ -1,6 +1,6 @@
 package com.jeifolders.gui;
 
-import com.jeifolders.data.Folder;
+import com.jeifolders.data.FolderDataRepresentation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -11,30 +11,28 @@ import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 
 public class FolderRowButton extends AbstractWidget {
-    // Remove individual texture ResourceLocations, using GuiTextures instead
     private static final int ICON_WIDTH = GuiTextures.ICON_WIDTH;
     private static final int ICON_HEIGHT = GuiTextures.ICON_HEIGHT;
     private static final int TEXT_MAX_LENGTH = 3;
-    private static final int SUCCESS_ANIMATION_DURATION = 10; // duration in ticks (10 ticks = 500ms at 20tps)
+    private static final int SUCCESS_ANIMATION_DURATION = 10;
 
-    private final Folder folder;
+    private final FolderDataRepresentation folder;
     private boolean isHovered = false;
     private boolean isActive = false;
     private boolean showSuccessAnimation = false;
     private int successAnimationTicksRemaining = 0;
-    private final Consumer<Folder> clickHandler;
+    private final Consumer<FolderDataRepresentation> clickHandler;
     
     // Pre-computed values for rendering optimization
     private final String displayName;
     private final int textWidth;
     private int textX;
 
-    public FolderRowButton(int x, int y, Folder folder, Consumer<Folder> clickHandler) {
+    public FolderRowButton(int x, int y, FolderDataRepresentation folder, Consumer<FolderDataRepresentation> clickHandler) {
         super(x, y, ICON_WIDTH, ICON_HEIGHT, Component.literal(folder.getName()));
         this.folder = folder;
         this.clickHandler = clickHandler;
         
-        // Pre-compute the display name and text position for rendering efficiency
         if (folder.getName().length() > TEXT_MAX_LENGTH) {
             this.displayName = folder.getName().substring(0, TEXT_MAX_LENGTH);
         } else {
@@ -54,7 +52,7 @@ public class FolderRowButton extends AbstractWidget {
         // Use the GuiTextures helper to render the folder icon from the sprite sheet
         GuiTextures.renderFolderRowIcon(graphics, getX(), getY(), isActive, isHovered);
         
-        // Draw folder name below the icon (using pre-computed values)
+        // Draw folder name below the icon
         graphics.drawString(
             Minecraft.getInstance().font, 
             displayName, 
@@ -64,7 +62,7 @@ public class FolderRowButton extends AbstractWidget {
             true
         );
         
-        // Display tooltip when hovering - only create Component when needed
+        // Display tooltip when hovering
         if (isHovered) {
             graphics.renderTooltip(
                 Minecraft.getInstance().font,
@@ -122,7 +120,7 @@ public class FolderRowButton extends AbstractWidget {
         this.defaultButtonNarrationText(narrationOutput);
     }
     
-    public Folder getFolder() {
+    public FolderDataRepresentation getFolder() {
         return folder;
     }
     

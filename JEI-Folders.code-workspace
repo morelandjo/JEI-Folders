@@ -2,6 +2,12 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../JustEnoughItems"
+		},
+		{
+			"path": "../JEI-Folders-1.0/src"
 		}
 	],
 	"settings": {
