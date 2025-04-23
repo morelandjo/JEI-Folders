@@ -1,7 +1,6 @@
 package com.jeifolders.integration;
 
-import com.jeifolders.gui.FolderExclusionHandler;
-import com.jeifolders.util.ModLogger;
+import com.jeifolders.gui.ExclusionHandler;
 
 import mezz.jei.api.gui.handlers.IGlobalGuiHandler;
 import mezz.jei.api.runtime.IClickableIngredient;
@@ -15,9 +14,9 @@ import java.util.Optional;
  * This class handles the direct interactions with JEI API.
  */
 public class JEIExclusionHandler implements IGlobalGuiHandler {
-    private final FolderExclusionHandler exclusionHandler;
+    private final ExclusionHandler exclusionHandler;
     
-    public JEIExclusionHandler(FolderExclusionHandler exclusionHandler) {
+    public JEIExclusionHandler(ExclusionHandler exclusionHandler) {
         this.exclusionHandler = exclusionHandler;
     }
     

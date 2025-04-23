@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.JEIFolders;
 import net.minecraft.client.gui.GuiGraphics;
@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * Manages all GUI textures using a single sprite sheet.
  */
-public class GuiTextures {
+public class FolderButtonTextures {
     // The main sprite sheet containing all GUI textures
     public static final ResourceLocation SPRITE_SHEET = ResourceLocation.fromNamespaceAndPath(JEIFolders.MOD_ID, "textures/gui/folders.png");
 

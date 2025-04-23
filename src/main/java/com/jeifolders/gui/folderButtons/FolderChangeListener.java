@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
 /**
  * Interface for listeners that need to be notified when folder contents change

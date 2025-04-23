@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
 import java.util.List;
 

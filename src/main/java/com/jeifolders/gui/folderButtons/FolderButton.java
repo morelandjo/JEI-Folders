@@ -1,6 +1,7 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.data.FolderDataRepresentation;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -10,9 +11,9 @@ import net.minecraft.network.chat.Component;
 import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 
-public class FolderRowButton extends AbstractWidget {
-    private static final int ICON_WIDTH = GuiTextures.ICON_WIDTH;
-    private static final int ICON_HEIGHT = GuiTextures.ICON_HEIGHT;
+public class FolderButton extends AbstractWidget {
+    private static final int ICON_WIDTH = FolderButtonTextures.ICON_WIDTH;
+    private static final int ICON_HEIGHT = FolderButtonTextures.ICON_HEIGHT;
     private static final int TEXT_MAX_LENGTH = 3;
     private static final int SUCCESS_ANIMATION_DURATION = 10;
 
@@ -28,7 +29,7 @@ public class FolderRowButton extends AbstractWidget {
     private final int textWidth;
     private int textX;
 
-    public FolderRowButton(int x, int y, FolderDataRepresentation folder, Consumer<FolderDataRepresentation> clickHandler) {
+    public FolderButton(int x, int y, FolderDataRepresentation folder, Consumer<FolderDataRepresentation> clickHandler) {
         super(x, y, ICON_WIDTH, ICON_HEIGHT, Component.literal(folder.getName()));
         this.folder = folder;
         this.clickHandler = clickHandler;
@@ -50,7 +51,7 @@ public class FolderRowButton extends AbstractWidget {
                    mouseX < getX() + width && mouseY < getY() + height;
         
         // Use the GuiTextures helper to render the folder icon from the sprite sheet
-        GuiTextures.renderFolderRowIcon(graphics, getX(), getY(), isActive, isHovered);
+        FolderButtonTextures.renderFolderRowIcon(graphics, getX(), getY(), isActive, isHovered);
         
         // Draw folder name below the icon
         graphics.drawString(
@@ -132,14 +133,4 @@ public class FolderRowButton extends AbstractWidget {
         return isActive;
     }
     
-    /**
-     * Updates the position of this button.
-     * Recalculates text position if needed.
-     */
-    @Override
-    public void setX(int x) {
-        super.setX(x);
-        // Update text position when the button position changes
-        this.textX = getX() + (width - textWidth) / 2;
-    }
 }

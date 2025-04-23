@@ -166,13 +166,4 @@ public class FolderNameInputScreen extends Screen {
         }
     }
     
-    @Override
-    public void tick() {
-        // In some Minecraft versions, EditBox doesn't have a tick method
-        // We can still check focus here if needed
-        if (nameField != null && !nameField.isFocused()) {
-            nameField.setFocused(true);
-            setFocused(nameField);
-        }
-    }
 }

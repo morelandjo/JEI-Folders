@@ -2,7 +2,7 @@ package com.jeifolders.data;
 
 import com.jeifolders.util.SnbtFormat;
 import com.jeifolders.util.ModLogger;
-import com.jeifolders.gui.FolderChangeListener;
+import com.jeifolders.gui.folderButtons.FolderChangeListener;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.JEIService;

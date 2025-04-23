@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.data.FolderDataManager;
 import com.jeifolders.data.FolderDataRepresentation;
@@ -13,7 +13,7 @@ import java.util.function.Consumer;
  * Manages folder state and persistence.
  * Handles folder selection/activation and maintains state across UI rebuilds.
  */
-public class FolderStateManager {
+public class FolderButtonStateManager {
     // Static state for persistence across GUI rebuilds
     private static Integer lastActiveFolderId = null;
     private static List<TypedIngredient> lastBookmarkContents = new ArrayList<>();
@@ -22,12 +22,12 @@ public class FolderStateManager {
     
     // Instance fields
     private final FolderDataManager folderManager;
-    private final List<FolderRowButton> folderButtons = new ArrayList<>();
-    private FolderRowButton activeFolder = null;
+    private final List<FolderButton> folderButtons = new ArrayList<>();
+    private FolderButton activeFolder = null;
     private FolderDataRepresentation lastActiveFolder = null;
-    private final List<Consumer<FolderRowButton>> folderActivationListeners = new ArrayList<>();
+    private final List<Consumer<FolderButton>> folderActivationListeners = new ArrayList<>();
     
-    public FolderStateManager() {
+    public FolderButtonStateManager() {
         this.folderManager = FolderDataManager.getInstance();
     }
     
@@ -41,7 +41,7 @@ public class FolderStateManager {
      * @param folderSpacingY The vertical spacing between folders
      * @return The list of folder buttons that were created
      */
-    public List<FolderRowButton> loadFolders(int startX, int startY, int foldersPerRow, 
+    public List<FolderButton> loadFolders(int startX, int startY, int foldersPerRow, 
                                             int folderSpacingX, int folderSpacingY) {
         FolderDataRepresentation folderToRestore = lastActiveFolder;
         Integer folderIdToRestore = folderToRestore != null ? folderToRestore.getId() : null;
@@ -61,7 +61,7 @@ public class FolderStateManager {
         folderManager.loadData();
 
         List<FolderDataRepresentation> folders = folderManager.getAllFolders();
-        FolderRowButton buttonToActivate = null;
+        FolderButton buttonToActivate = null;
 
         for (int i = 0; i < folders.size(); i++) {
             FolderDataRepresentation folder = folders.get(i);
@@ -71,7 +71,7 @@ public class FolderStateManager {
             int x = startX + col * (folderSpacingX);
             int y = startY + row * folderSpacingY;
 
-            FolderRowButton button = new FolderRowButton(x, y, folder, this::onFolderClicked);
+            FolderButton button = new FolderButton(x, y, folder, this::onFolderClicked);
             folderButtons.add(button);
 
             if (folderIdToRestore != null && folder.getId() == folderIdToRestore) {
@@ -128,8 +128,8 @@ public class FolderStateManager {
 
         ModLogger.debug("Folder clicked: {}", folder.getName());
 
-        FolderRowButton clickedButton = null;
-        for (FolderRowButton button : folderButtons) {
+        FolderButton clickedButton = null;
+        for (FolderButton button : folderButtons) {
             if (button.getFolder() == folder) {
                 clickedButton = button;
                 break;
@@ -147,7 +147,7 @@ public class FolderStateManager {
             lastBookmarkContents = new ArrayList<>();
 
             // Notify listeners about deactivation
-            for (Consumer<FolderRowButton> listener : folderActivationListeners) {
+            for (Consumer<FolderButton> listener : folderActivationListeners) {
                 listener.accept(null);
             }
 
@@ -169,7 +169,7 @@ public class FolderStateManager {
         lastGuiRebuildTime = System.currentTimeMillis();
 
         // Notify listeners about activation
-        for (Consumer<FolderRowButton> listener : folderActivationListeners) {
+        for (Consumer<FolderButton> listener : folderActivationListeners) {
             listener.accept(activeFolder);
         }
     }
@@ -184,8 +184,8 @@ public class FolderStateManager {
     /**
      * Gets the folder button at the specified coordinates
      */
-    public FolderRowButton getFolderButtonAt(double mouseX, double mouseY) {
-        for (FolderRowButton button : folderButtons) {
+    public FolderButton getFolderButtonAt(double mouseX, double mouseY) {
+        for (FolderButton button : folderButtons) {
             if (mouseX >= button.getX() && mouseX < button.getX() + button.getWidth() &&
                 mouseY >= button.getY() && mouseY < button.getY() + button.getHeight()) {
                 return button;
@@ -198,7 +198,7 @@ public class FolderStateManager {
      * Tick update for all folder buttons
      */
     public void tickFolderButtons() {
-        for (FolderRowButton button : folderButtons) {
+        for (FolderButton button : folderButtons) {
             button.tick();
         }
     }
@@ -206,7 +206,7 @@ public class FolderStateManager {
     /**
      * Adds a listener for folder activation/deactivation events
      */
-    public void addFolderActivationListener(Consumer<FolderRowButton> listener) {
+    public void addFolderActivationListener(Consumer<FolderButton> listener) {
         folderActivationListeners.add(listener);
     }
     
@@ -216,11 +216,11 @@ public class FolderStateManager {
         return folderManager;
     }
     
-    public List<FolderRowButton> getFolderButtons() {
+    public List<FolderButton> getFolderButtons() {
         return folderButtons;
     }
     
-    public FolderRowButton getActiveFolder() {
+    public FolderButton getActiveFolder() {
         return activeFolder;
     }
     

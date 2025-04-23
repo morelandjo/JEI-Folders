@@ -1,6 +1,8 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.util.ModLogger;
+
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -12,11 +14,11 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * Manages frontend GUI elements for folders, including adding the FolderButton
  * to the GUI and providing access to it for other components.
  */
-public class FolderManagerGUI {
-    private static FolderButton folderButton;
+public class FolderGuiManager {
+    private static FolderButtonSystem folderButton;
     
     public static void init() {
-        NeoForge.EVENT_BUS.register(FolderManagerGUI.class);
+        NeoForge.EVENT_BUS.register(FolderGuiManager.class);
     }
     
     @SubscribeEvent
@@ -25,15 +27,14 @@ public class FolderManagerGUI {
         if (screen instanceof AbstractContainerScreen) {
             ModLogger.debug("Adding folder button to GUI: {}", screen.getClass().getSimpleName());
             
-            folderButton = new FolderButton();
+            folderButton = new FolderButtonSystem();
             event.addListener(folderButton);
         }
     }
 
     @SubscribeEvent
     public static void onTick(ServerTickEvent.Post event) {
-        // Update animations for all folder-related UI if the folder button exists
-        if (folderButton != null) {
+        if (folderButton != null && Minecraft.getInstance().screen instanceof AbstractContainerScreen) {
             folderButton.tick();
         }
     }

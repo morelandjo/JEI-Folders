@@ -1,5 +1,6 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
+import com.jeifolders.gui.bookmarks.BookmarkManager;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -15,21 +16,21 @@ import java.util.function.Consumer;
  * Main entry point for the folder button system.
  * 
  */
-public class FolderButton extends AbstractWidget implements FolderButtonInterface {
+public class FolderButtonSystem extends AbstractWidget implements FolderButtonInterface {
     // Specialized component classes
-    private final FolderStateManager stateManager;
+    private final FolderButtonStateManager stateManager;
     private final BookmarkManager bookmarkManager;
-    private final FolderButtonView view;
+    private final FolderButtonSystemView view;
 
-    public FolderButton() {
+    public FolderButtonSystem() {
         super(0, 0, 0, 0, Component.translatable("gui.jeifolders.folder"));
         
         ModLogger.debug("Initializing FolderButton with specialized components");
         
         // Initialize the component classes
-        this.stateManager = new FolderStateManager();
+        this.stateManager = new FolderButtonStateManager();
         this.bookmarkManager = new BookmarkManager(stateManager);
-        this.view = new FolderButtonView(stateManager, bookmarkManager);
+        this.view = new FolderButtonSystemView(stateManager, bookmarkManager);
         
         // Update dimensions to match the view
         this.width = view.getWidth();
@@ -59,7 +60,7 @@ public class FolderButton extends AbstractWidget implements FolderButtonInterfac
     }
     
     @Override
-    public List<FolderRowButton> getFolderButtons() {
+    public List<FolderButton> getFolderButtons() {
         return view.getFolderButtons();
     }
     
@@ -108,8 +109,8 @@ public class FolderButton extends AbstractWidget implements FolderButtonInterfac
     /**
      * Adds a listener for folder button clicks
      */
-    public static void addClickListener(Consumer<FolderButton> listener) {
-        FolderButtonView.addClickListener(view -> {
+    public static void addClickListener(Consumer<FolderButtonSystem> listener) {
+        FolderButtonSystemView.addClickListener(view -> {
             // When view fires event, adapt it to fire as if from FolderButton
             listener.accept(null);
         });

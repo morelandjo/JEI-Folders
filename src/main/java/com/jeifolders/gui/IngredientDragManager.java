@@ -1,15 +1,14 @@
 package com.jeifolders.gui;
 
 import com.jeifolders.util.ModLogger;
-import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.JEIService;
+import com.jeifolders.gui.folderButtons.FolderButtonInterface;
+import com.jeifolders.gui.folderButtons.FolderGuiManager;
 import com.jeifolders.integration.IngredientDragHandler;
 import com.jeifolders.integration.TypedIngredient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -19,28 +18,27 @@ import java.util.Optional;
 /**
  * Manages the detection of dragged ingredients from JEI globally.
  */
-public class GlobalIngredientDragManager {
-    private static GlobalIngredientDragManager instance;
+public class IngredientDragManager {
+    private static IngredientDragManager instance;
     private boolean isDragging = false;
     private int dragStartX = -1;
     private int dragStartY = -1;
     private int lastMouseX = -1;
     private int lastMouseY = -1;
     
-    // Access the JEI service through the factory
-    private final JEIService jeiService = JEIIntegrationFactory.getJEIService();
+    
     
     // Delegate JEI-specific functionality to the handler in the integration package
     private final IngredientDragHandler ingredientDragHandler = new IngredientDragHandler();
 
-    private GlobalIngredientDragManager() {
+    private IngredientDragManager() {
         // Register for Forge events
         NeoForge.EVENT_BUS.register(this);
     }
 
-    public static GlobalIngredientDragManager getInstance() {
+    public static IngredientDragManager getInstance() {
         if (instance == null) {
-            instance = new GlobalIngredientDragManager();
+            instance = new IngredientDragManager();
         }
         return instance;
     }
@@ -75,7 +73,7 @@ public class GlobalIngredientDragManager {
         }
 
         if (event.getButton() == 0 && isDragging) { // Left mouse button
-            FolderButtonInterface folderButton = FolderManagerGUI.getFolderButton();
+            FolderButtonInterface folderButton = FolderGuiManager.getFolderButton();
 
             // Get the dragged ingredient from our wrapper
             Optional<TypedIngredient> typedIngredientOpt = ingredientDragHandler.getDraggedIngredient();

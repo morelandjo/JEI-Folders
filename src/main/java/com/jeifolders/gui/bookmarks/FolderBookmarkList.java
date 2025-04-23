@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.bookmarks;
 
 import com.jeifolders.data.FolderDataRepresentation;
 import com.jeifolders.integration.JEIIntegrationFactory;

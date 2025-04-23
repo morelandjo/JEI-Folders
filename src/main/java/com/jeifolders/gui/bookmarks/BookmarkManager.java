@@ -1,9 +1,11 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.bookmarks;
 
 import com.jeifolders.data.FolderDataManager;
 import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.gui.folderButtons.FolderButton;
+import com.jeifolders.gui.folderButtons.FolderButtonStateManager;
 import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.ImmutableRectangle;
+import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.TypedIngredient;
@@ -13,7 +15,6 @@ import com.jeifolders.util.ModLogger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
 
 /**
  * Handles bookmark operations and display management.
@@ -21,18 +22,20 @@ import java.util.function.Consumer;
  */
 public class BookmarkManager {
     private final FolderDataManager folderManager;
-    private FolderBookmarkContentsDisplay bookmarkDisplay;
-    private final FolderStateManager stateManager;
+    private UnifiedFolderContentsDisplay bookmarkDisplay;
+    private final FolderButtonStateManager stateManager;
     
     // Bookmark display bounds
-    private ImmutableRectangle lastBookmarkBounds = null;
+    private Rectangle2i lastBookmarkBounds = null;
     private int calculatedNameY = -1;
     private int calculatedBookmarkDisplayY = -1;
 
-    public BookmarkManager(FolderStateManager stateManager) {
+    public BookmarkManager(FolderButtonStateManager stateManager) {
         this.stateManager = stateManager;
         this.folderManager = stateManager.getFolderManager();
-        this.bookmarkDisplay = new FolderBookmarkContentsDisplay(folderManager);
+        
+        // Create the unified display
+        createBookmarkDisplay();
         
         // Listen for folder activation/deactivation
         stateManager.addFolderActivationListener(this::onFolderActivationChanged);
@@ -41,17 +44,21 @@ public class BookmarkManager {
     /**
      * Called when a folder is activated or deactivated
      */
-    private void onFolderActivationChanged(FolderRowButton folderButton) {
+    private void onFolderActivationChanged(FolderButton folderButton) {
         if (folderButton == null) {
             // Folder was deactivated
-            bookmarkDisplay.setActiveFolder(null);
+            if (bookmarkDisplay != null) {
+                bookmarkDisplay.setActiveFolder(null);
+            }
         } else {
             // Folder was activated
-            bookmarkDisplay.setActiveFolder(folderButton.getFolder());
-            updateBookmarkDisplayBounds();
-            
-            // Update the bookmark contents cache
-            safeUpdateBookmarkContents();
+            if (bookmarkDisplay != null) {
+                bookmarkDisplay.setActiveFolder(folderButton.getFolder());
+                updateBookmarkDisplayBounds();
+                
+                // Update the bookmark contents cache
+                safeUpdateBookmarkContents();
+            }
         }
     }
     
@@ -75,23 +82,30 @@ public class BookmarkManager {
      * Creates a new bookmark display
      */
     public void createBookmarkDisplay() {
-        bookmarkDisplay = new FolderBookmarkContentsDisplay(folderManager);
+        // Create the unified display
+        Optional<UnifiedFolderContentsDisplay> displayOpt = UnifiedFolderContentsDisplay.create(folderManager);
         
-        // Make sure the display knows about any active folder and has bounds set
-        if (stateManager.hasActiveFolder()) {
-            FolderRowButton activeFolder = stateManager.getActiveFolder();
-            bookmarkDisplay.setActiveFolder(activeFolder.getFolder());
-            updateBookmarkDisplayBounds();
+        if (displayOpt.isPresent()) {
+            bookmarkDisplay = displayOpt.get();
             
-            // Apply cached bookmark contents if available
-            List<TypedIngredient> lastBookmarkContents = stateManager.getLastBookmarkContents();
-            if (!lastBookmarkContents.isEmpty()) {
-                ModLogger.debug("Applying {} cached bookmark items during display creation", 
-                    lastBookmarkContents.size());
-                // Convert TypedIngredient to BookmarkIngredient before passing to setIngredients
-                List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(lastBookmarkContents);
-                bookmarkDisplay.setIngredients(bookmarkIngredients);
+            // Make sure the display knows about any active folder and has bounds set
+            if (stateManager.hasActiveFolder()) {
+                FolderButton activeFolder = stateManager.getActiveFolder();
+                bookmarkDisplay.setActiveFolder(activeFolder.getFolder());
+                updateBookmarkDisplayBounds();
+                
+                // Apply cached bookmark contents if available
+                List<TypedIngredient> lastBookmarkContents = stateManager.getLastBookmarkContents();
+                if (!lastBookmarkContents.isEmpty()) {
+                    ModLogger.debug("Applying {} cached bookmark items during display creation", 
+                        lastBookmarkContents.size());
+                    // Convert TypedIngredient to BookmarkIngredient before passing to setIngredients
+                    List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(lastBookmarkContents);
+                    bookmarkDisplay.setIngredients(bookmarkIngredients);
+                }
             }
+        } else {
+            ModLogger.error("Failed to create bookmark display");
         }
     }
     
@@ -109,7 +123,7 @@ public class BookmarkManager {
             lastBookmarkBounds.getWidth() != bookmarkDisplayWidth ||
             lastBookmarkBounds.getHeight() != bookmarkDisplayHeight) {
 
-            lastBookmarkBounds = new ImmutableRectangle(0, calculatedBookmarkDisplayY,
+            lastBookmarkBounds = new Rectangle2i(0, calculatedBookmarkDisplayY,
                                                 bookmarkDisplayWidth, bookmarkDisplayHeight);
             bookmarkDisplay.updateBounds(0, calculatedBookmarkDisplayY,
                                        bookmarkDisplayWidth, bookmarkDisplayHeight);
@@ -120,7 +134,7 @@ public class BookmarkManager {
      * Refreshes the bookmark display with the latest data from the folder manager
      */
     public void forceFullRefresh() {
-        FolderRowButton activeFolder = stateManager.getActiveFolder();
+        FolderButton activeFolder = stateManager.getActiveFolder();
         if (bookmarkDisplay == null || activeFolder == null) {
             return;
         }
@@ -131,12 +145,11 @@ public class BookmarkManager {
             // Get the current folder
             FolderDataRepresentation currentFolder = activeFolder.getFolder();
             
-            // Use the centralized helper to refresh the bookmark display
-            List<TypedIngredient> ingredients = TypedIngredientHelper.refreshBookmarkDisplay(
-                bookmarkDisplay, 
-                currentFolder, 
-                folderManager
-            );
+            // Set the active folder which will trigger a refresh
+            bookmarkDisplay.setActiveFolder(currentFolder);
+            
+            // Force a complete refresh
+            bookmarkDisplay.forceRefresh();
             
             // Update the display bounds
             updateBookmarkDisplayBounds();
@@ -144,7 +157,7 @@ public class BookmarkManager {
             // Update the static state cache for GUI rebuilds
             safeUpdateBookmarkContents();
             
-            ModLogger.info("Bookmark display refresh completed successfully with {} ingredients", ingredients.size());
+            ModLogger.info("Bookmark display refresh completed successfully");
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmark display: {}", e.getMessage(), e);
         }
@@ -174,7 +187,9 @@ public class BookmarkManager {
         if (!savedIngredients.isEmpty()) {
             // Convert TypedIngredient to BookmarkIngredient using the helper class
             List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(savedIngredients);
-            bookmarkDisplay.setIngredients(bookmarkIngredients);
+            if (bookmarkDisplay != null) {
+                bookmarkDisplay.setIngredients(bookmarkIngredients);
+            }
         }
         // Otherwise use any cached ones
         else {
@@ -182,7 +197,9 @@ public class BookmarkManager {
             if (!lastBookmarkContents.isEmpty()) {
                 // Convert TypedIngredient to BookmarkIngredient using the helper class
                 List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(lastBookmarkContents);
-                bookmarkDisplay.setIngredients(bookmarkIngredients);
+                if (bookmarkDisplay != null) {
+                    bookmarkDisplay.setIngredients(bookmarkIngredients);
+                }
             }
         }
         
@@ -219,7 +236,7 @@ public class BookmarkManager {
         ModLogger.info("Generated ingredient key: {}", key);
 
         if (isFoldersVisible) {
-            FolderRowButton targetButton = stateManager.getFolderButtonAt(mouseX, mouseY);
+            FolderButton targetButton = stateManager.getFolderButtonAt(mouseX, mouseY);
             if (targetButton != null) {
                 FolderDataRepresentation folder = targetButton.getFolder();
                 ModLogger.info("Adding bookmark {} to folder {}", key, folder.getName());
@@ -237,7 +254,7 @@ public class BookmarkManager {
                     ModLogger.info("Folder {} now has {} bookmarks", folder.getName(), bookmarkKeys.size());
                     
                     // If the current folder is active, refresh its display
-                    FolderRowButton activeFolder = stateManager.getActiveFolder();
+                    FolderButton activeFolder = stateManager.getActiveFolder();
                     if (activeFolder != null && activeFolder.getFolder().getId() == folder.getId()) {
                         ModLogger.info("Refreshing bookmark display for active folder");
                         // Force a complete refresh cycle to ensure the UI updates
@@ -252,7 +269,7 @@ public class BookmarkManager {
             }
         }
 
-        FolderRowButton activeFolder = stateManager.getActiveFolder();
+        FolderButton activeFolder = stateManager.getActiveFolder();
         if (activeFolder != null && bookmarkDisplay != null && bookmarkDisplay.isMouseOver(mouseX, mouseY)) {
             ModLogger.info("Adding bookmark to active folder: {}", activeFolder.getFolder().getName());
             
@@ -314,7 +331,7 @@ public class BookmarkManager {
         Integer lastActiveFolderId = stateManager.getLastActiveFolderId();
         if (lastActiveFolderId == null) return;
 
-        FolderRowButton activeFolder = stateManager.getActiveFolder();
+        FolderButton activeFolder = stateManager.getActiveFolder();
         if (activeFolder == null) {
             ModLogger.warn("Could not find folder with ID {} to restore", lastActiveFolderId);
             return;
@@ -334,7 +351,7 @@ public class BookmarkManager {
     
     // Getters and setters
     
-    public FolderBookmarkContentsDisplay getBookmarkDisplay() {
+    public UnifiedFolderContentsDisplay getBookmarkDisplay() {
         return bookmarkDisplay;
     }
     

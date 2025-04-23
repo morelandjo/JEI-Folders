@@ -1,9 +1,8 @@
 package com.jeifolders;
 
-import com.jeifolders.gui.FolderButton;
 import com.jeifolders.integration.JEIIntegration;
 import com.jeifolders.data.FolderDataManager;
-import com.jeifolders.gui.FolderManagerGUI;
+import com.jeifolders.gui.folderButtons.FolderGuiManager;
 import com.jeifolders.util.ModLogger;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -38,7 +37,7 @@ public class JEIFolders {
 
     private void clientSetup(final FMLClientSetupEvent event) {
         ModLogger.info("JEI Folders client setup - initializing folder manager GUI");
-        FolderManagerGUI.init();
+        FolderGuiManager.init();
         
         // Register with JEI runtime when available
         JEIIntegration.registerRuntimeAvailableCallback(jeiRuntime -> {

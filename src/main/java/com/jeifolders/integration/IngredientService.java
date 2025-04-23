@@ -36,6 +36,14 @@ public interface IngredientService {
     List<ITypedIngredient<?>> getCachedIngredientsForFolder(int folderId);
     
     /**
+     * Gets cached ingredients for a folder as BookmarkIngredient objects
+     */
+    default List<BookmarkIngredient> getCachedBookmarkIngredientsForFolder(int folderId) {
+        List<ITypedIngredient<?>> ingredients = getCachedIngredientsForFolder(folderId);
+        return TypedIngredientHelper.wrapJeiIngredients(ingredients);
+    }
+    
+    /**
      * Invalidates the ingredient cache for a folder
      */
     void invalidateIngredientsCache(int folderId);

@@ -1,8 +1,10 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.gui.FolderNameInputScreen;
+import com.jeifolders.gui.bookmarks.BookmarkManager;
 import com.jeifolders.util.ModLogger;
-import com.jeifolders.util.JeiRuntimeManager;
+import com.jeifolders.integration.JEIIntegrationFactory;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -19,12 +21,12 @@ import java.util.function.Consumer;
  * Handles UI rendering and interactions for the folder button system.
  * Responsible for rendering, mouse handling, and UI state management.
  */
-public class FolderButtonView extends AbstractWidget implements FolderButtonInterface {
+public class FolderButtonSystemView extends AbstractWidget implements FolderButtonInterface {
     // Constants
     private static final int PADDING_X = 10;
     private static final int PADDING_Y = 10;
-    private static final int ICON_WIDTH = GuiTextures.ICON_WIDTH;
-    private static final int ICON_HEIGHT = GuiTextures.ICON_HEIGHT;
+    private static final int ICON_WIDTH = FolderButtonTextures.ICON_WIDTH;
+    private static final int ICON_HEIGHT = FolderButtonTextures.ICON_HEIGHT;
     private static final int FOLDER_SPACING_Y = 30;  
     private static final int FOLDER_SPACING_X = 2;
     private static final int EXCLUSION_PADDING = 10;
@@ -53,13 +55,13 @@ public class FolderButtonView extends AbstractWidget implements FolderButtonInte
     public static Rect2i lastDrawnArea = new Rect2i(0, 0, 0, 0);
     
     // Services
-    private final FolderStateManager stateManager;
+    private final FolderButtonStateManager stateManager;
     private final BookmarkManager bookmarkManager;
     
     // Event listeners
-    private static final List<Consumer<FolderButtonView>> clickListeners = new ArrayList<>();
+    private static final List<Consumer<FolderButtonSystemView>> clickListeners = new ArrayList<>();
 
-    public FolderButtonView(FolderStateManager stateManager, BookmarkManager bookmarkManager) {
+    public FolderButtonSystemView(FolderButtonStateManager stateManager, BookmarkManager bookmarkManager) {
         super(PADDING_X, PADDING_Y, ICON_WIDTH, ICON_HEIGHT, Component.translatable("gui.jeifolders.folder"));
         this.stateManager = stateManager;
         this.bookmarkManager = bookmarkManager;
@@ -144,10 +146,10 @@ public class FolderButtonView extends AbstractWidget implements FolderButtonInte
                    mouseX < addButtonX + width && mouseY < addButtonY + height;
 
         // Render the add folder button using the sprite sheet
-        GuiTextures.renderAddFolderIcon(graphics, addButtonX, addButtonY, isHovered);
+        FolderButtonTextures.renderAddFolderIcon(graphics, addButtonX, addButtonY, isHovered);
 
         if (isFoldersVisible) {
-            for (FolderRowButton button : stateManager.getFolderButtons()) {
+            for (FolderButton button : stateManager.getFolderButtons()) {
                 button.render(graphics, mouseX, mouseY, partialTick);
             }
         }
@@ -168,7 +170,7 @@ public class FolderButtonView extends AbstractWidget implements FolderButtonInte
     }
     
     private void renderActiveFolderDetails(GuiGraphics graphics, int mouseX, int mouseY) {
-        FolderRowButton activeFolder = stateManager.getActiveFolder();
+        FolderButton activeFolder = stateManager.getActiveFolder();
         if (activeFolder == null) {
             return;
         }
@@ -220,7 +222,7 @@ public class FolderButtonView extends AbstractWidget implements FolderButtonInte
         int deleteY = calculatedNameY - 4;
         
         // Render the delete button using the sprite sheet
-        GuiTextures.renderDeleteFolderIcon(graphics, deleteX, deleteY);
+        FolderButtonTextures.renderDeleteFolderIcon(graphics, deleteX, deleteY);
 
         deleteHovered = mouseX >= deleteX && mouseX < deleteX + 16 &&
                       mouseY >= deleteY && mouseY < deleteY + 16;
@@ -302,7 +304,7 @@ public class FolderButtonView extends AbstractWidget implements FolderButtonInte
         }
 
         if (isFoldersVisible) {
-            for (FolderRowButton folderButton : stateManager.getFolderButtons()) {
+            for (FolderButton folderButton : stateManager.getFolderButtons()) {
                 if (folderButton.mouseClicked(mouseX, mouseY, button)) {
                     return true;
                 }
@@ -397,11 +399,11 @@ public class FolderButtonView extends AbstractWidget implements FolderButtonInte
      * Sets the JEI runtime object
      */
     public void setJeiRuntime(Object runtime) {
-        JeiRuntimeManager.setRuntime(runtime);
+        JEIIntegrationFactory.getJEIService().setJeiRuntime(runtime);
     }
 
     public void initializeJeiRuntime() {
-        JeiRuntimeManager.registerObserver(runtime -> {
+        JEIIntegrationFactory.getJEIService().registerRuntimeCallback(runtime -> {
             // Perform any initialization that depends on the JEI runtime
             ModLogger.debug("JEI runtime initialized in FolderButtonView");
         });
@@ -409,14 +411,14 @@ public class FolderButtonView extends AbstractWidget implements FolderButtonInte
     
     // Static methods for listeners
     
-    public static void addClickListener(Consumer<FolderButtonView> listener) {
+    public static void addClickListener(Consumer<FolderButtonSystemView> listener) {
         clickListeners.add(listener);
     }
     
     // Implementation of FolderButtonInterface
     
     @Override
-    public List<FolderRowButton> getFolderButtons() {
+    public List<FolderButton> getFolderButtons() {
         return stateManager.getFolderButtons();
     }
 

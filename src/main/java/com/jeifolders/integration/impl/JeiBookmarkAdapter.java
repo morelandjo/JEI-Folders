@@ -1,8 +1,7 @@
 package com.jeifolders.integration.impl;
 
-import com.jeifolders.gui.FolderBookmarkList;
+import com.jeifolders.gui.bookmarks.FolderBookmarkList;
 import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 
 import mezz.jei.api.ingredients.ITypedIngredient;

@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * Handles exclusion areas for folder bookmarks in JEI.
  */
-public class FolderExclusionHandler {
+public class ExclusionHandler {
     private final Set<Rectangle2i> exclusionAreas = new HashSet<>();
     
     public void addExclusionArea(Rectangle2i area) {

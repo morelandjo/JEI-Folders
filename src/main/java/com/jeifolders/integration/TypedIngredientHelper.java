@@ -2,10 +2,15 @@ package com.jeifolders.integration;
 
 import com.jeifolders.data.FolderDataManager;
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.FolderBookmarkContentsDisplay;
+import com.jeifolders.gui.bookmarks.UnifiedFolderContentsDisplay;
 import com.jeifolders.util.ModLogger;
+import mezz.jei.api.ingredients.ITypedIngredient;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Helper utility for working with typed ingredients without direct JEI dependencies
@@ -110,7 +115,7 @@ public class TypedIngredientHelper {
      * @return The list of TypedIngredient objects that were loaded and set
      */
     public static List<TypedIngredient> refreshBookmarkDisplay(
-            FolderBookmarkContentsDisplay bookmarkDisplay,
+            UnifiedFolderContentsDisplay bookmarkDisplay,
             FolderDataRepresentation folder,
             FolderDataManager folderManager) {
         
@@ -134,5 +139,79 @@ public class TypedIngredientHelper {
             ModLogger.error("Error refreshing bookmark display: {}", e.getMessage(), e);
             return new ArrayList<>();
         }
+    }
+    
+    /**
+     * Wraps JEI ITypedIngredient objects in BookmarkIngredient wrappers.
+     * Consolidated from BookmarkDisplayHelper.
+     * 
+     * @param ingredients The JEI ingredients to wrap
+     * @return A list of BookmarkIngredient wrappers
+     */
+    public static List<BookmarkIngredient> wrapJeiIngredients(List<ITypedIngredient<?>> ingredients) {
+        if (ingredients == null || ingredients.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        return ingredients.stream()
+            .filter(i -> i != null)
+            .map(BookmarkIngredient::new)
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Unwraps BookmarkIngredient objects to JEI ITypedIngredient objects.
+     * Consolidated from BookmarkDisplayHelper.
+     * 
+     * @param bookmarkIngredients The wrappers to unwrap
+     * @return A list of JEI ITypedIngredient objects
+     */
+    public static List<ITypedIngredient<?>> unwrapToJeiIngredients(List<BookmarkIngredient> bookmarkIngredients) {
+        if (bookmarkIngredients == null || bookmarkIngredients.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        return bookmarkIngredients.stream()
+            .filter(i -> i != null && i.getTypedIngredient() != null)
+            .map(BookmarkIngredient::getTypedIngredient)
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Convert generic objects to BookmarkIngredient wrappers.
+     * Consolidated from BookmarkDisplayHelper and expanded to handle more types.
+     * 
+     * @param objects The objects to convert
+     * @return A list of BookmarkIngredient wrappers
+     */
+    @SuppressWarnings("unchecked")
+    public static List<BookmarkIngredient> convertObjectsToBookmarkIngredients(List<Object> objects) {
+        List<BookmarkIngredient> result = new ArrayList<>();
+        
+        if (objects == null || objects.isEmpty()) {
+            return result;
+        }
+        
+        for (Object obj : objects) {
+            if (obj instanceof ITypedIngredient<?>) {
+                result.add(new BookmarkIngredient((ITypedIngredient<?>)obj));
+            } else if (obj instanceof BookmarkIngredient) {
+                result.add((BookmarkIngredient)obj);
+            } else if (obj instanceof TypedIngredient) {
+                TypedIngredient typedIngredient = (TypedIngredient)obj;
+                Object wrappedObj = typedIngredient.getWrappedIngredient();
+                if (wrappedObj instanceof ITypedIngredient<?>) {
+                    result.add(new BookmarkIngredient((ITypedIngredient<?>)wrappedObj));
+                } else {
+                    ModLogger.warn("Unable to convert TypedIngredient with non-ITypedIngredient content: {}", 
+                        wrappedObj != null ? wrappedObj.getClass().getName() : "null");
+                }
+            } else {
+                ModLogger.warn("Skipping non-supported object: {}", 
+                    obj != null ? obj.getClass().getName() : "null");
+            }
+        }
+        
+        return result;
     }
 }

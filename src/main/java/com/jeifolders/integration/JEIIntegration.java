@@ -1,12 +1,13 @@
 package com.jeifolders.integration;
 
 import com.jeifolders.JEIFolders;
-import com.jeifolders.gui.FolderButton;
-import com.jeifolders.gui.FolderExclusionHandler;
-import com.jeifolders.gui.FolderManagerGUI;
-import com.jeifolders.gui.GlobalIngredientDragManager;
-import com.jeifolders.gui.FolderButtonInterface;
-import com.jeifolders.gui.FolderButtonView;
+import com.jeifolders.data.FolderDataManager;
+import com.jeifolders.gui.ExclusionHandler;
+import com.jeifolders.gui.IngredientDragManager;
+import com.jeifolders.gui.folderButtons.FolderButtonInterface;
+import com.jeifolders.gui.folderButtons.FolderButtonSystem;
+import com.jeifolders.gui.folderButtons.FolderButtonSystemView;
+import com.jeifolders.gui.folderButtons.FolderGuiManager;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -34,11 +35,10 @@ public class JEIIntegration implements IModPlugin {
     
     // Access the services through the factory
     private final JEIService jeiService = JEIIntegrationFactory.getJEIService();
-    private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-    private final BookmarkService bookmarkService = JEIIntegrationFactory.getBookmarkService();
+    
     
     // Static instance of the exclusion handler
-    private static final FolderExclusionHandler exclusionHandler = new FolderExclusionHandler();
+    private static final ExclusionHandler exclusionHandler = new ExclusionHandler();
 
     @Override
     public ResourceLocation getPluginUid() {
@@ -62,19 +62,44 @@ public class JEIIntegration implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
-        ModLogger.info("JEI runtime available, initializing with JeiRuntimeHelper");
+        ModLogger.info("JEI runtime available, initializing");
         
-        // Use the centralized runtime helper for initialization
-        JeiRuntimeHelper.initializeJeiRuntime(runtime);
+        // Initialize the runtime directly instead of using JeiRuntimeHelper
+        initializeJeiRuntime(runtime);
         
         // Initialize components that specifically need runtime access
-        GlobalIngredientDragManager.getInstance().setJeiRuntime(runtime);
+        IngredientDragManager.getInstance().setJeiRuntime(runtime);
         initializeFolderButton(runtime);
+    }
+    
+    /**
+     * Initializes the JEI runtime and sets up all necessary components.
+     * This should be called when the JEI runtime becomes available.
+     * 
+     * @param runtime The JEI runtime instance
+     */
+    private void initializeJeiRuntime(IJeiRuntime runtime) {
+        ModLogger.info("Initializing JEI runtime");
+        
+        // Set the runtime in the JEIService
+        jeiService.setJeiRuntime(runtime);
+        
+        // Request data to be loaded now that JEI is available
+        FolderDataManager.getInstance().loadData();
+    }
+
+    /**
+     * Checks if the JEI runtime is currently available
+     * 
+     * @return true if JEI runtime is available, false otherwise
+     */
+    public static boolean isJeiRuntimeAvailable() {
+        return JEIIntegrationFactory.getJEIService().getJeiRuntime().isPresent();
     }
 
     private void initializeFolderButton(IJeiRuntime runtime) {
-        FolderButtonInterface buttonInterface = FolderManagerGUI.getFolderButton();
-        if (buttonInterface instanceof FolderButton folderButton) {
+        FolderButtonInterface buttonInterface = FolderGuiManager.getFolderButton();
+        if (buttonInterface instanceof FolderButtonSystem folderButton) {
             folderButton.setJeiRuntime(runtime);
             ModLogger.debug("JEI runtime provided to folder button");
         }
@@ -150,7 +175,7 @@ public class JEIIntegration implements IModPlugin {
     /**
      * Gets the shared exclusion handler instance
      */
-    public static FolderExclusionHandler getExclusionHandler() {
+    public static ExclusionHandler getExclusionHandler() {
         return exclusionHandler;
     }
 
@@ -164,8 +189,8 @@ public class JEIIntegration implements IModPlugin {
 
             // Add the folder button exclusion zone if available
             // Reference FolderButtonView.lastDrawnArea instead of FolderButton.lastDrawnArea
-            if (FolderButtonView.lastDrawnArea.getWidth() > 0 && FolderButtonView.lastDrawnArea.getHeight() > 0) {
-                areas.add(FolderButtonView.lastDrawnArea);
+            if (FolderButtonSystemView.lastDrawnArea.getWidth() > 0 && FolderButtonSystemView.lastDrawnArea.getHeight() > 0) {
+                areas.add(FolderButtonSystemView.lastDrawnArea);
             }
 
             return areas;
@@ -204,8 +229,8 @@ public class JEIIntegration implements IModPlugin {
                 JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
                 
                 // Now add the targets since this is an actual drag
-                FolderButtonInterface buttonInterface = FolderManagerGUI.getFolderButton();
-                if (buttonInterface instanceof FolderButton folderButton) {
+                FolderButtonInterface buttonInterface = FolderGuiManager.getFolderButton();
+                if (buttonInterface instanceof FolderButtonSystem folderButton) {
                     // Add targets for folder buttons
                     folderButton.getFolderButtons().forEach(folderRowButton -> {
                         targets.add(createFolderTarget(folderRowButton, folderButton, ingredient));
@@ -232,8 +257,8 @@ public class JEIIntegration implements IModPlugin {
         }
 
         private <I> Target<I> createFolderTarget(
-                com.jeifolders.gui.FolderRowButton folderRowButton,
-                FolderButton folderButton,
+                com.jeifolders.gui.folderButtons.FolderButton folderRowButton,
+                FolderButtonSystem folderButton,
                 ITypedIngredient<I> ingredient) {
 
             return new Target<I>() {
@@ -261,7 +286,7 @@ public class JEIIntegration implements IModPlugin {
 
         private <I> Target<I> createBookmarkAreaTarget(
                 Rect2i bookmarkArea,
-                FolderButton folderButton,
+                FolderButtonSystem folderButton,
                 ITypedIngredient<I> ingredient) {
 
             return new Target<I>() {
