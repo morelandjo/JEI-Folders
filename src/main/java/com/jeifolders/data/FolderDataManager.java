@@ -2,10 +2,9 @@ package com.jeifolders.data;
 
 import com.jeifolders.util.SnbtFormat;
 import com.jeifolders.util.ModLogger;
-import com.jeifolders.gui.folderButtons.FolderChangeListener;
+import com.jeifolders.events.BookmarkEvents;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.JEIService;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -16,7 +15,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Manages backend folder data, including CRUD operations, bookmark management,
@@ -28,13 +26,11 @@ public class FolderDataManager {
     
     private final Map<Integer, FolderDataRepresentation> folders = new HashMap<>();
     private int nextFolderId = 0;
-    
-    // Use service interfaces instead of direct dependencies
-    private JEIService jeiService = JEIIntegrationFactory.getJEIService();
+
     private IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
     
-    // Add listeners list for folder changes
-    private final List<FolderChangeListener> folderChangeListeners = new CopyOnWriteArrayList<>();
+    // Access to the centralized event system
+    private final BookmarkEvents eventSystem = BookmarkEvents.getInstance();
     
     private FolderDataManager() {
         // Private constructor for singleton
@@ -79,7 +75,6 @@ public class FolderDataManager {
     
     /**
      * Adds a bookmark to a folder and saves data.
-     * Uses Optional for cleaner null handling.
      */
     public void addBookmarkToFolder(int folderId, String bookmarkKey) {
         getFolder(folderId).ifPresentOrElse(
@@ -88,7 +83,9 @@ public class FolderDataManager {
                 folder.addBookmarkKey(bookmarkKey);
                 invalidateIngredientsCache(folderId);
                 saveData();
-                notifyFolderContentsChanged(folderId);
+                
+                // Fire event notification
+                eventSystem.fireFolderContentsChanged(folderId);
             },
             // Folder doesn't exist
             () -> ModLogger.warn("Could not add bookmark - folder with id {} not found", folderId)
@@ -103,56 +100,11 @@ public class FolderDataManager {
             if (folder.removeBookmark(bookmarkKey)) {
                 invalidateIngredientsCache(folderId);
                 saveData();
-                notifyFolderContentsChanged(folderId);
+                
+                // Fire event notification
+                eventSystem.fireFolderContentsChanged(folderId);
             }
         });
-    }
-    
-    /**
-     * Registers a listener for folder content changes
-     */
-    public void addFolderChangeListener(FolderChangeListener listener) {
-        if (!folderChangeListeners.contains(listener)) {
-            folderChangeListeners.add(listener);
-        }
-    }
-    
-    /**
-     * Removes a folder change listener
-     */
-    public void removeFolderChangeListener(FolderChangeListener listener) {
-        folderChangeListeners.remove(listener);
-    }
-    
-    /**
-     * Notifies all listeners that a folder's contents have changed.
-     */
-    private void notifyFolderContentsChanged(int folderId) {
-        if (folderChangeListeners.isEmpty()) {
-            return;
-        }
-        
-        ModLogger.debug("Notifying {} listeners about change to folder ID: {}", 
-                folderChangeListeners.size(), folderId);
-                
-        folderChangeListeners.forEach(listener -> 
-            notifyListenerSafely(listener, folderId));
-    }
-
-    /**
-     * Safely notifies a listener about folder content changes,
-     * handling any exceptions that might occur.
-     * 
-     * @param listener The listener to notify
-     * @param folderId The ID of the folder that changed
-     */
-    private void notifyListenerSafely(FolderChangeListener listener, int folderId) {
-        try {
-            listener.onFolderContentsChanged(folderId);
-        } catch (Exception e) {
-            ModLogger.error("Error in folder change listener ({}): {}", 
-                listener.getClass().getSimpleName(), e.getMessage());
-        }
     }
     
     /**
@@ -161,17 +113,6 @@ public class FolderDataManager {
     public List<String> getFolderBookmarkKeys(int folderId) {
         FolderDataRepresentation folder = folders.get(folderId);
         return folder != null ? folder.getBookmarkKeys() : List.of();
-    }
-
-    /**
-     * Gets the JEIService instance, initializing it if needed.
-     * @return The JEIService instance
-     */
-    private JEIService getJeiService() {
-        if (jeiService == null) {
-            jeiService = JEIIntegrationFactory.getJEIService();
-        }
-        return jeiService;
     }
 
     /**
@@ -195,8 +136,7 @@ public class FolderDataManager {
             return Collections.emptyList();
         }
         
-        // Call the service implementation but return generic List<Object> instead
-        // to avoid exposing JEI types in the data layer
+        // Call the service implementation but return generic List<Object>
         return new ArrayList<>(getIngredientService().getCachedIngredientsForFolder(folderId));
     }
 
@@ -210,7 +150,6 @@ public class FolderDataManager {
 
     /**
      * Invalidates the entire ingredient cache.
-     * Uses lazy initialization to ensure the service is available.
      */
     public void invalidateAllIngredientCaches() {
         ModLogger.debug("Invalidating all ingredient caches");
@@ -289,7 +228,6 @@ public class FolderDataManager {
                 return Optional.empty();
             }
             
-            // Log file details in a single message
             double sizeKB = dataFile.length() / 1024.0;
             ModLogger.debug("Loaded data file ({} KB, {} chars) from {}", 
                 String.format("%.2f", sizeKB), 
@@ -349,10 +287,8 @@ public class FolderDataManager {
     public void saveData() {
         ModLogger.debug("Saving folders data. Current folders: {}", folders.size());
         
-        // First, prepare the data for saving
         CompoundTag data = createDataTag();
         
-        // Then save the data to file
         saveDataToFile(data);
     }
 

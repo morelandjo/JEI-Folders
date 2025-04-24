@@ -6,7 +6,6 @@ import com.jeifolders.gui.ExclusionHandler;
 import com.jeifolders.gui.IngredientDragManager;
 import com.jeifolders.gui.folderButtons.FolderButtonInterface;
 import com.jeifolders.gui.folderButtons.FolderButtonSystem;
-import com.jeifolders.gui.folderButtons.FolderButtonSystemView;
 import com.jeifolders.gui.folderButtons.FolderGuiManager;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
@@ -188,9 +187,8 @@ public class JEIIntegration implements IModPlugin {
             List<Rect2i> areas = new ArrayList<>();
 
             // Add the folder button exclusion zone if available
-            // Reference FolderButtonView.lastDrawnArea instead of FolderButton.lastDrawnArea
-            if (FolderButtonSystemView.lastDrawnArea.getWidth() > 0 && FolderButtonSystemView.lastDrawnArea.getHeight() > 0) {
-                areas.add(FolderButtonSystemView.lastDrawnArea);
+            if (FolderButtonSystem.lastDrawnArea.getWidth() > 0 && FolderButtonSystem.lastDrawnArea.getHeight() > 0) {
+                areas.add(FolderButtonSystem.lastDrawnArea);
             }
 
             return areas;

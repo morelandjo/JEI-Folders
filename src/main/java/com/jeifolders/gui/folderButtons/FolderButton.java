@@ -72,12 +72,29 @@ public class FolderButton extends AbstractWidget {
             );
         }
 
-        // Draw success animation if active using tick-based animation
+        // Draw success animation if active using tick-based animation, constrain to folder area
         if (showSuccessAnimation && successAnimationTicksRemaining > 0) {
+            // Calculate the bounds of the safe highlight zone
+            int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+            int guiWidth = 176; // Standard GUI width
+            int guiLeft = (screenWidth - guiWidth) / 2;
+            
+            // Constrain highlight to not go past the left GUI edge
+            int maxHighlightX = Math.max(0, Math.min(guiLeft - 5, getX() + getWidth() + 2));
+            
+            // Apply highlight with constrained boundaries
             float progress = successAnimationTicksRemaining / (float)SUCCESS_ANIMATION_DURATION;
             int alpha = (int)(progress * 255);
             int color = (alpha << 24) | 0x00FF00; // Green color with fading alpha
-            graphics.fill(getX() - 2, getY() - 2, getX() + getWidth() + 2, getY() + getHeight() + 2, color);
+            
+            // Constrained fill - only highlight up to the safe limit
+            graphics.fill(
+                Math.max(0, getX() - 2), 
+                getY() - 2, 
+                Math.min(maxHighlightX, getX() + getWidth() + 2), 
+                getY() + getHeight() + 2, 
+                color
+            );
         }
     }
     

@@ -1,12 +1,14 @@
 package com.jeifolders.gui.bookmarks;
 
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.folderButtons.FolderChangeListener;
+import com.jeifolders.events.BookmarkEvents;
 import com.jeifolders.data.FolderDataManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.Rectangle2i;
+import com.jeifolders.integration.TypedIngredient;
+import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.integration.impl.JeiBookmarkAdapter;
 import com.jeifolders.integration.impl.JeiContentsImpl;
 import com.jeifolders.util.ModLogger;
@@ -17,15 +19,18 @@ import net.minecraft.client.gui.GuiGraphics;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Unified display for folder bookmarks that handles both display management and rendering.
  * This class combines functionality previously split between FolderBookmarkContentsDisplay and FolderContentsDisplay.
  */
-public class UnifiedFolderContentsDisplay implements FolderChangeListener {
+public class UnifiedFolderContentsDisplay {
     // Constants
     private static final int MIN_CONTENT_HEIGHT = 40;
     private static final int MIN_CONTENT_WIDTH = 80;
+    private static final int DEFAULT_DISPLAY_WIDTH = 200;
+    private static final int DEFAULT_DISPLAY_HEIGHT = 100;
 
     // Core components
     private final FolderDataManager folderManager;
@@ -44,14 +49,21 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
     // Layout properties
     private int x;
     private int y;
-    private int width;
-    private int height;
+    private int width = DEFAULT_DISPLAY_WIDTH;
+    private int height = DEFAULT_DISPLAY_HEIGHT;
     private final int[] bounds = new int[4]; // x, y, width, height
+    private Rectangle2i lastCalculatedBounds = null;
+    private int calculatedNameY = -1;
+    private int calculatedDisplayY = -1;
     
     // Performance optimization
     private long lastUpdateTimestamp = 0;
     private int updateCounter = 0;
     private Rectangle2i lastCalculatedArea = Rectangle2i.EMPTY;
+    
+    // Event system
+    private final BookmarkEvents eventSystem = BookmarkEvents.getInstance();
+    private final Consumer<BookmarkEvents.BookmarkEvent> folderChangedListener;
 
     /**
      * Creates a new unified folder contents display
@@ -68,8 +80,17 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
         this.bookmarkAdapter = bookmarkAdapter;
         this.contentsImpl = contentsImpl;
         
-        // Register as listener for folder changes
-        folderManager.addFolderChangeListener(this);
+        // Create folder changed listener
+        this.folderChangedListener = event -> {
+            // Check if this event is for our active folder
+            if (activeFolder != null && event.getFolderId() == activeFolder.getId()) {
+                ModLogger.info("BookmarkEvents: Active folder {} was modified, refreshing display", event.getFolderId());
+                needsRefresh = true;
+            }
+        };
+        
+        // Register with new event system
+        eventSystem.addListener(BookmarkEvents.EventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
     }
 
     /**
@@ -127,16 +148,6 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
         return displayOpt;
     }
 
-    @Override
-    public void onFolderContentsChanged(int folderId) {
-        // Check if this is our active folder
-        if (activeFolder != null && activeFolder.getId() == folderId) {
-            ModLogger.info("Active folder {} was modified, refreshing display", folderId);
-            // Force a refresh on next render
-            needsRefresh = true;
-        }
-    }
-
     /**
      * Sets the active folder and ensures bookmarks are properly loaded
      */
@@ -169,27 +180,37 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
             return;
         }
 
-        // Invalidate the cache for this folder to ensure fresh data
-        ingredientService.invalidateIngredientsCache(activeFolder.getId());
-        
-        // Log the folder's current bookmarks
-        List<String> bookmarkKeys = folderManager.getFolderBookmarkKeys(activeFolder.getId());
-        ModLogger.info("Refreshing bookmarks for folder {} with {} bookmarks", 
-            activeFolder.getName(), bookmarkKeys.size());
-
-        if (bookmarkKeys.isEmpty()) {
-            ModLogger.info("No bookmarks to display for folder: {}", activeFolder.getName());
-            setIngredients(List.of());
-            return;
-        }
-        
-        // Load ingredients from keys
-        var cachedIngredients = ingredientService.getCachedBookmarkIngredientsForFolder(activeFolder.getId());
-        setIngredients(cachedIngredients);
-        
-        // Force layout update - use updateLayout instead of refreshContents
-        if (contentsImpl != null) {
-            contentsImpl.updateLayout(true);
+        try {
+            // Store the current page number before refreshing
+            int currentPageNumber = getCurrentPageNumber();
+            
+            // Use the centralized helper to load ingredients from this folder
+            List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(
+                TypedIngredientHelper.loadBookmarksFromFolder(folderManager, activeFolder.getId(), true)
+            );
+            
+            // Set the ingredients
+            setIngredients(bookmarkIngredients);
+            
+            // Force layout update
+            if (contentsImpl != null) {
+                contentsImpl.updateLayout(true);
+                
+                // Restore the page number if we had multiple pages
+                if (currentPageNumber > 1 && getPageCount() >= currentPageNumber) {
+                    // Navigate to the previously active page
+                    for (int i = 1; i < currentPageNumber; i++) {
+                        contentsImpl.nextPage();
+                    }
+                    ModLogger.debug("Restored pagination to page {} after refresh", currentPageNumber);
+                }
+            }
+            
+            // Fire a display refreshed event
+            eventSystem.fireDisplayRefreshed(activeFolder);
+            
+        } catch (Exception e) {
+            ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
         }
     }
 
@@ -226,15 +247,21 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
      * Updates the bounds of the display.
      */
     public void updateBounds(int x, int y, int width, int height) {
-        // Check if bounds are actually changing
-        if (bounds[0] == x && bounds[1] == y && bounds[2] == width && bounds[3] == height) {
+        // Calculate safe width to prevent GUI overlap
+        int safeWidth = getSafeDisplayWidth(width);
+        
+        // Check if bounds are actually changing (using safe width for comparison)
+        if (bounds[0] == x && bounds[1] == y && bounds[2] == safeWidth && bounds[3] == height) {
             return;
         }
+        
+        // Store the current page number before potential layout change
+        int currentPage = getCurrentPageNumber();
         
         // Store the dimensions in both class fields and cache array
         this.x = bounds[0] = x;
         this.y = bounds[1] = y;
-        this.width = bounds[2] = width;
+        this.width = bounds[2] = safeWidth; // Use constrained width
         this.height = bounds[3] = height;
         
         // Guard against recursive calls
@@ -245,16 +272,26 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
         updatingBounds = true;
         try {
             // Calculate content area
-            int availableWidth = Math.max(MIN_CONTENT_WIDTH, width);
+            int availableWidth = Math.max(MIN_CONTENT_WIDTH, safeWidth);
             int availableHeight = Math.max(MIN_CONTENT_HEIGHT, height);
             Rectangle2i newBounds = new Rectangle2i(x, y, availableWidth, availableHeight);
             
             // Update the contents implementation bounds
             boolean contentsBoundsUpdated = contentsImpl.updateBounds(newBounds);
             
-            // Update layout if needed
+            // Update layout if needed - update with preservePageState=true
             if (contentsBoundsUpdated) {
+                // Tell JEI layout updater not to reset pagination
                 contentsImpl.updateLayout(true);
+                
+                // If we were on a page other than page 1, restore it
+                if (currentPage > 1 && getPageCount() >= currentPage) {
+                    // Navigate back to the previous page
+                    for (int i = 1; i < currentPage; i++) {
+                        contentsImpl.nextPage();
+                    }
+                    ModLogger.debug("Restored pagination to page {} after bounds update", currentPage);
+                }
             }
             
             // Update background area
@@ -269,6 +306,27 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
         } finally {
             updatingBounds = false;
         }
+    }
+
+    /**
+     * Calculates a safe width for the display to prevent overlap with the game GUI
+     */
+    private int getSafeDisplayWidth(int requestedWidth) {
+        // Get the screen dimensions
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen == null) {
+            return requestedWidth;
+        }
+        
+        // Calculate the space available before the game GUI
+        int screenWidth = minecraft.getWindow().getGuiScaledWidth();
+        int guiWidth = 176; // Standard Minecraft GUI width
+        int guiLeft = (screenWidth - guiWidth) / 2;
+        
+        // Ensure we don't spill into the GUI by enforcing a maximum width
+        // Leave a 10-pixel safety margin
+        int maxAllowedWidth = Math.max(50, guiLeft - 10);
+        return Math.min(requestedWidth, maxAllowedWidth);
     }
 
     /**
@@ -297,10 +355,43 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
 
     /**
      * Checks if mouse coordinates are over this display.
+     * For drag operations, we use a more generous hit area.
      */
     public boolean isMouseOver(double mouseX, double mouseY) {
-        return mouseX >= x && mouseX < x + width && 
-               mouseY >= y && mouseY < y + height;
+        // Basic check if mouse is over the current display bounds
+        boolean overCurrentBounds = mouseX >= x && mouseX < x + width && 
+                                   mouseY >= y && mouseY < y + height;
+        
+        // If this is already true, no need for additional checks
+        if (overCurrentBounds) {
+            return true;
+        }
+        
+        // For drag operations, check against a more generous area
+        // This ensures ingredients can be dropped even with constrained width
+        if (backgroundArea != null && !backgroundArea.isEmpty()) {
+            boolean overBackground = mouseX >= backgroundArea.getX() && 
+                   mouseX <= backgroundArea.getX() + backgroundArea.getWidth() &&
+                   mouseY >= backgroundArea.getY() && 
+                   mouseY <= backgroundArea.getY() + backgroundArea.getHeight();
+                   
+            if (overBackground) {
+                return true;
+            }
+        }
+        
+        // For drag and drop, be even more lenient
+        // Check entire vertical column under the display X position
+        if (mouseX >= x && mouseX < x + width) {
+            // Give a 20 pixel margin above and below the display
+            boolean inVerticalRegion = mouseY >= y - 20 && mouseY <= y + height + 20;
+            if (inVerticalRegion) {
+                ModLogger.debug("Mouse in extended drag-and-drop hit area");
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -354,6 +445,215 @@ public class UnifiedFolderContentsDisplay implements FolderChangeListener {
      */
     public boolean isBackButtonClicked(double mouseX, double mouseY) {
         return contentsImpl.isBackButtonClicked(mouseX, mouseY);
+    }
+    
+    /**
+     * Handles a click on the bookmark display
+     * @return true if the click was handled
+     */
+    public boolean handleClick(double mouseX, double mouseY, int button) {
+        // Early return if not over the display
+        if (!isMouseOver(mouseX, mouseY)) {
+            return false;
+        }
+        
+        // Handle page navigation
+        if (button == 0) {
+            // Check if next page button is clicked
+            if (isNextButtonClicked(mouseX, mouseY)) {
+                nextPage();
+                return true;
+            }
+
+            // Check if back button is clicked
+            if (isBackButtonClicked(mouseX, mouseY)) {
+                previousPage();
+                return true;
+            }
+        }
+
+        // Check if a bookmark was clicked
+        Optional<String> clickedBookmarkKey = getBookmarkKeyAt(mouseX, mouseY);
+        return clickedBookmarkKey.isPresent();
+    }
+    
+    /**
+     * Handles an ingredient being dropped onto the display
+     * @return true if the drop was handled
+     */
+    public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
+        if (ingredient == null) {
+            ModLogger.info("Ingredient drop rejected: null ingredient");
+            return false;
+        }
+
+        // Critical check: If no active folder is set but we're getting a drop,
+        // log this unusual situation but try to proceed
+        if (activeFolder == null) {
+            ModLogger.warn("[HOVER-FIX] Ingredient dropped on bookmark display with no active folder");
+            return false;
+        }
+
+        // Only process drops that are over this display
+        if (!isMouseOver(mouseX, mouseY)) {
+            ModLogger.debug("Ingredient drop not over display area: ({}, {}) not in ({}, {}, {}, {})", 
+                          mouseX, mouseY, x, y, width, height);
+            return false;
+        }
+        
+        ModLogger.info("Processing ingredient drop on display - ingredient type: {}", 
+                      ingredient != null ? ingredient.getClass().getName() : "null");
+        
+        try {
+            // Try to get the ingredient key with detailed logging
+            String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
+            
+            if (key == null || key.isEmpty()) {
+                // Try an alternative approach for JEI-specific ingredients
+                key = tryAlternativeKeyGeneration(ingredient);
+                
+                if (key == null || key.isEmpty()) {
+                    ModLogger.warn("Failed to generate key for dropped ingredient of type: {}", 
+                                  ingredient.getClass().getName());
+                    return false;
+                }
+                
+                ModLogger.info("Generated key using alternative method: {}", key);
+            } else {
+                ModLogger.info("Generated ingredient key: {}", key);
+            }
+            
+            // Check if the folder already has this bookmark
+            if (activeFolder.containsBookmark(key)) {
+                ModLogger.info("Folder already contains this bookmark with key: {}", key);
+                return true;
+            }
+            
+            // Add the ingredient to the folder
+            int folderId = activeFolder.getId();
+            folderManager.addBookmarkToFolder(folderId, key);
+            
+            // Log the success
+            List<String> bookmarkKeys = folderManager.getFolderBookmarkKeys(folderId);
+            ModLogger.info("Folder '{}' now has {} bookmarks, added key: {}", 
+                          activeFolder.getName(), bookmarkKeys.size(), key);
+            
+            // Fire bookmark added event with the BookmarkEvents system
+            if (ingredient instanceof BookmarkIngredient) {
+                eventSystem.fireBookmarkAdded(activeFolder, (BookmarkIngredient)ingredient, key);
+            } else {
+                // For non-BookmarkIngredient, just fire a folder contents changed event
+                eventSystem.fireFolderContentsChanged(folderId);
+            }
+            
+            // Refresh the display
+            refreshBookmarks();
+            
+            // Save the changes
+            folderManager.saveData();
+            
+            return true;
+        } catch (Exception e) {
+            ModLogger.error("Error processing ingredient drop: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Try to generate a key from an ingredient using alternative methods
+     * This helps support various JEI implementations
+     */
+    private String tryAlternativeKeyGeneration(Object ingredient) {
+        try {
+            // Try to use the JEI service through our existing interfaces
+            IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+            if (ingredientService != null) {
+                // Try a direct call with different wrapping approaches
+                try {
+                    // First, try the direct approach
+                    String key = ingredientService.getKeyForIngredient(ingredient);
+                    if (key != null && !key.isEmpty()) {
+                        return key;
+                    }
+                    
+                    // Create a TypedIngredient wrapper and try again
+                    TypedIngredient wrapped = new TypedIngredient(ingredient);
+                    key = ingredientService.getKeyForIngredient(wrapped.getWrappedIngredient());
+                    if (key != null && !key.isEmpty()) {
+                        return key;
+                    }
+                } catch (Exception e) {
+                    ModLogger.debug("Standard key generation methods failed: {}", e.getMessage());
+                }
+                
+                // If all else fails, use reflection as a last resort to try to extract an ID
+                try {
+                    if (ingredient != null) {
+                        // Try to call toString and extract useful information
+                        String ingredientString = ingredient.toString();
+                        if (ingredientString != null && !ingredientString.isEmpty() && !ingredientString.equals("null")) {
+                            // Create a simple hash-based key if all else fails
+                            return "jeifolders:fallback:" + ingredientString.hashCode();
+                        }
+                    }
+                } catch (Exception e) {
+                    ModLogger.debug("Reflection-based key generation failed: {}", e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.warn("Alternative key generation failed: {}", e.getMessage());
+        }
+        
+        return "";
+    }
+    
+    /**
+     * Updates the bounds of the display based on calculated positions
+     */
+    public void updateBoundsFromCalculatedPositions() {
+        // If positions haven't been calculated yet, use defaults
+        int displayY = calculatedDisplayY >= 0 ? calculatedDisplayY : y;
+        
+        // Check if bounds are actually changing
+        Rectangle2i newBounds = new Rectangle2i(x, displayY, width, height);
+        if (lastCalculatedBounds != null && 
+            lastCalculatedBounds.getX() == newBounds.getX() && 
+            lastCalculatedBounds.getY() == newBounds.getY() && 
+            lastCalculatedBounds.getWidth() == newBounds.getWidth() && 
+            lastCalculatedBounds.getHeight() == newBounds.getHeight()) {
+            return;
+        }
+        
+        // Update the bounds
+        updateBounds(newBounds.getX(), newBounds.getY(), newBounds.getWidth(), newBounds.getHeight());
+        
+        // Store the calculated bounds
+        lastCalculatedBounds = newBounds;
+    }
+    
+    /**
+     * Sets the calculated positions for the display
+     */
+    public void setCalculatedPositions(int nameY, int displayY) {
+        this.calculatedNameY = nameY;
+        this.calculatedDisplayY = displayY;
+        
+        // Update bounds based on new positions
+        updateBoundsFromCalculatedPositions();
+    }
+    
+    /**
+     * Gets the calculated name Y position
+     */
+    public int getCalculatedNameY() {
+        return calculatedNameY;
+    }
+    
+    /**
+     * Gets the calculated display Y position
+     */
+    public int getCalculatedDisplayY() {
+        return calculatedDisplayY;
     }
     
     // Getters for coordinates

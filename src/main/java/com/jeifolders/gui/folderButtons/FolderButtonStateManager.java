@@ -7,7 +7,6 @@ import com.jeifolders.util.ModLogger;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * Manages folder state and persistence.
@@ -25,10 +24,11 @@ public class FolderButtonStateManager {
     private final List<FolderButton> folderButtons = new ArrayList<>();
     private FolderButton activeFolder = null;
     private FolderDataRepresentation lastActiveFolder = null;
-    private final List<Consumer<FolderButton>> folderActivationListeners = new ArrayList<>();
+    private final FolderEventManager eventManager;
     
     public FolderButtonStateManager() {
         this.folderManager = FolderDataManager.getInstance();
+        this.eventManager = FolderEventManager.getInstance();
     }
     
     /**
@@ -63,13 +63,15 @@ public class FolderButtonStateManager {
         List<FolderDataRepresentation> folders = folderManager.getAllFolders();
         FolderButton buttonToActivate = null;
 
+        // Create a temporary layout manager to calculate positions
+        FolderLayoutManager layoutCalculator = new FolderLayoutManager();
+
         for (int i = 0; i < folders.size(); i++) {
             FolderDataRepresentation folder = folders.get(i);
-            int gridPosition = i + 1; // +1 to leave index 0 for Add button
-            int row = gridPosition / foldersPerRow;
-            int col = gridPosition % foldersPerRow;
-            int x = startX + col * (folderSpacingX);
-            int y = startY + row * folderSpacingY;
+            // Calculate positions using folder index + 1 (leaving index 0 for Add button)
+            int[] position = layoutCalculator.calculateFolderPosition(i + 1);
+            int x = position[0];
+            int y = position[1];
 
             FolderButton button = new FolderButton(x, y, folder, this::onFolderClicked);
             folderButtons.add(button);
@@ -103,6 +105,10 @@ public class FolderButtonStateManager {
     public FolderDataRepresentation createFolder(String folderName) {
         FolderDataRepresentation folder = folderManager.createFolder(folderName);
         ModLogger.debug("Created folder: {} (ID: {})", folder.getName(), folder.getId());
+        
+        // Fire folder created event
+        eventManager.fireFolderCreatedEvent(folder);
+        
         return folder;
     }
     
@@ -115,9 +121,14 @@ public class FolderButtonStateManager {
         }
 
         int folderId = activeFolder.getFolder().getId();
-        ModLogger.debug("Deleting folder: {} (ID: {})", activeFolder.getFolder().getName(), folderId);
+        String folderName = activeFolder.getFolder().getName();
+        ModLogger.debug("Deleting folder: {} (ID: {})", folderName, folderId);
 
         folderManager.removeFolder(folderId);
+        
+        // Fire folder deleted event
+        eventManager.fireFolderDeletedEvent(folderId, folderName);
+        
         activeFolder = null;
     }
     
@@ -125,9 +136,9 @@ public class FolderButtonStateManager {
      * Called when a folder is clicked
      */
     private void onFolderClicked(FolderDataRepresentation folder) {
-
         ModLogger.debug("Folder clicked: {}", folder.getName());
 
+        // Find which button was clicked
         FolderButton clickedButton = null;
         for (FolderButton button : folderButtons) {
             if (button.getFolder() == folder) {
@@ -140,16 +151,18 @@ public class FolderButtonStateManager {
             return;
         }
 
+        // Fire the folder clicked event
+        eventManager.fireFolderClickedEvent(folder);
+
+        // Handle toggle behavior (deactivate if already active)
         if (activeFolder == clickedButton) {
             activeFolder.setActive(false);
             activeFolder = null;
             lastActiveFolderId = null;
             lastBookmarkContents = new ArrayList<>();
 
-            // Notify listeners about deactivation
-            for (Consumer<FolderButton> listener : folderActivationListeners) {
-                listener.accept(null);
-            }
+            // Fire folder deactivated event
+            eventManager.fireFolderDeactivatedEvent();
 
             ModLogger.debug("Folder deactivated, static state cleared");
             return;
@@ -168,10 +181,8 @@ public class FolderButtonStateManager {
         lastActiveFolderId = folder.getId();
         lastGuiRebuildTime = System.currentTimeMillis();
 
-        // Notify listeners about activation
-        for (Consumer<FolderButton> listener : folderActivationListeners) {
-            listener.accept(activeFolder);
-        }
+        // Fire folder activated event
+        eventManager.fireFolderActivatedEvent(clickedButton);
     }
     
     /**
@@ -204,10 +215,26 @@ public class FolderButtonStateManager {
     }
     
     /**
-     * Adds a listener for folder activation/deactivation events
+     * Adds a listener for folder activation/deactivation events using the event manager
+     * 
+     * @param listener Consumer that will be called when a folder is activated or deactivated
+     * @deprecated Use the FolderEventManager directly instead
      */
-    public void addFolderActivationListener(Consumer<FolderButton> listener) {
-        folderActivationListeners.add(listener);
+    @Deprecated
+    public void addFolderActivationListener(java.util.function.Consumer<FolderButton> listener) {
+        if (listener == null) return;
+        
+        // Bridge to the new event system
+        eventManager.addEventListener(FolderEventManager.EventType.FOLDER_ACTIVATED, event -> {
+            FolderButton button = event.getData("folderButton", FolderButton.class);
+            if (button != null) {
+                listener.accept(button);
+            }
+        });
+        
+        eventManager.addEventListener(FolderEventManager.EventType.FOLDER_DEACTIVATED, event -> {
+            listener.accept(null);
+        });
     }
     
     // Getters and setters
@@ -243,5 +270,9 @@ public class FolderButtonStateManager {
         
         long currentTime = System.currentTimeMillis();
         return currentTime - lastGuiRebuildTime < GUI_REBUILD_DEBOUNCE_TIME;
+    }
+    
+    public FolderEventManager getEventManager() {
+        return eventManager;
     }
 }

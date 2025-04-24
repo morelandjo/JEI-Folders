@@ -52,16 +52,9 @@ public class FolderDataStorageManager {
             }
             // Last resort fallback
             else {
-                // Use dimension as identifier
-                try {
-                    identifier = minecraft.level.dimension().location().toString().replace(':', '_');
-                    subdir = "dimensions";
-                    ModLogger.debug("Using dimension as fallback identifier: {}", identifier);
-                } catch (Exception e) {
-                    ModLogger.error("Could not get dimension info: {}", e.getMessage());
-                    identifier = "unknown";
-                    subdir = "fallback";
-                }
+                ModLogger.error("Unable to find world name, using default folder");
+                identifier = "all";
+                subdir = "all";
             }
             
             return createDirectory(minecraft.gameDirectory, 

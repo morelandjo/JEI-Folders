@@ -73,17 +73,45 @@ public class IngredientDragManager {
         }
 
         if (event.getButton() == 0 && isDragging) { // Left mouse button
+            // Get the currently active folder button interface
             FolderButtonInterface folderButton = FolderGuiManager.getFolderButton();
+            
+            if (folderButton == null) {
+                ModLogger.debug("No active folder button found for drop processing");
+                
+                // Reset the drag state and return
+                isDragging = false;
+                dragStartX = -1;
+                dragStartY = -1;
+                ingredientDragHandler.resetDragState();
+                return;
+            }
 
             // Get the dragged ingredient from our wrapper
             Optional<TypedIngredient> typedIngredientOpt = ingredientDragHandler.getDraggedIngredient();
-            if (folderButton != null && typedIngredientOpt.isPresent()) {
-                // Unwrap our TypedIngredient to get the JEI ITypedIngredient
+            if (typedIngredientOpt.isPresent()) {
                 TypedIngredient typedIngredient = typedIngredientOpt.get();
                 Object wrappedObj = typedIngredient.getWrappedIngredient();
                 
-                boolean handled = folderButton.handleIngredientDrop(event.getMouseX(), event.getMouseY(), wrappedObj);
-                ModLogger.info("Ingredient drop handled: {}", handled);
+                // Log the drop coordinates for debugging
+                ModLogger.debug("Processing ingredient drop at ({}, {})", event.getMouseX(), event.getMouseY());
+                
+                try {
+                    // First check if the drop should be handled by the folder button
+                    // This includes both folder buttons and the active display
+                    boolean handled = folderButton.handleIngredientDrop(event.getMouseX(), event.getMouseY(), wrappedObj);
+                    
+                    if (handled) {
+                        ModLogger.info("Ingredient drop successfully handled by folder system");
+                        event.setCanceled(true); // Prevent further processing
+                    } else {
+                        ModLogger.info("Ingredient drop not handled by folder system");
+                    }
+                } catch (Exception e) {
+                    ModLogger.error("Error during ingredient drop handling: {}", e.getMessage(), e);
+                }
+            } else {
+                ModLogger.debug("No ingredient being dragged at drop time");
             }
 
             // Reset drag state

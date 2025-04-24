@@ -2,12 +2,9 @@ package com.jeifolders.gui.bookmarks;
 
 import com.jeifolders.data.FolderDataManager;
 import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.events.BookmarkEvents;
 import com.jeifolders.gui.folderButtons.FolderButton;
 import com.jeifolders.gui.folderButtons.FolderButtonStateManager;
-import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.Rectangle2i;
-import com.jeifolders.integration.IngredientService;
-import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.util.ModLogger;
@@ -17,18 +14,17 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Handles bookmark operations and display management.
- * Responsible for bookmark display, ingredient drops, and bookmark operations.
+ * Handles high-level bookmark operations and display management.
  */
 public class BookmarkManager {
     private final FolderDataManager folderManager;
     private UnifiedFolderContentsDisplay bookmarkDisplay;
     private final FolderButtonStateManager stateManager;
+    private final BookmarkEvents eventSystem = BookmarkEvents.getInstance();
     
-    // Bookmark display bounds
-    private Rectangle2i lastBookmarkBounds = null;
-    private int calculatedNameY = -1;
-    private int calculatedBookmarkDisplayY = -1;
+    // Track last refresh time for performance optimization
+    private long lastRefreshTime = 0;
+    private static final long MIN_REFRESH_INTERVAL_MS = 100; // Prevent too frequent refreshes
 
     public BookmarkManager(FolderButtonStateManager stateManager) {
         this.stateManager = stateManager;
@@ -39,6 +35,29 @@ public class BookmarkManager {
         
         // Listen for folder activation/deactivation
         stateManager.addFolderActivationListener(this::onFolderActivationChanged);
+        
+        // Listen for bookmark events
+        setupEventListeners();
+    }
+    
+    /**
+     * Set up listeners for the centralized event system
+     */
+    private void setupEventListeners() {
+        // Listen for display refresh events to update the cache
+        eventSystem.addListener(BookmarkEvents.EventType.DISPLAY_REFRESHED, event -> {
+            safeUpdateBookmarkContents();
+        });
+        
+        // Listen for bookmark added events
+        eventSystem.addListener(BookmarkEvents.EventType.BOOKMARK_ADDED, event -> {
+            // If this is for our active folder, make sure we update the cache
+            if (stateManager.hasActiveFolder() && 
+                stateManager.getActiveFolder().getFolder().getId() == event.getFolderId()) {
+                ModLogger.debug("BookmarkManager received BOOKMARK_ADDED event, updating cache");
+                safeUpdateBookmarkContents();
+            }
+        });
     }
     
     /**
@@ -54,7 +73,7 @@ public class BookmarkManager {
             // Folder was activated
             if (bookmarkDisplay != null) {
                 bookmarkDisplay.setActiveFolder(folderButton.getFolder());
-                updateBookmarkDisplayBounds();
+                bookmarkDisplay.updateBoundsFromCalculatedPositions();
                 
                 // Update the bookmark contents cache
                 safeUpdateBookmarkContents();
@@ -67,11 +86,8 @@ public class BookmarkManager {
      */
     private void safeUpdateBookmarkContents() {
         if (bookmarkDisplay != null) {
-            // Get ingredients from the bookmark display and convert them
-            List<BookmarkIngredient> displayIngredients = bookmarkDisplay.getIngredients();
-            
-            // Create a new list and convert from BookmarkIngredient to TypedIngredient
-            List<TypedIngredient> bookmarkContents = TypedIngredientHelper.extractFromBookmarkIngredients(displayIngredients);
+            // Use the helper to get ingredients from the display
+            List<TypedIngredient> bookmarkContents = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
             
             // Update the state manager's cache
             stateManager.updateBookmarkContentsCache(bookmarkContents);
@@ -80,8 +96,16 @@ public class BookmarkManager {
     
     /**
      * Creates a new bookmark display
+     * @param preserveIngredients Whether to preserve the current ingredients if possible
+     * @return true if the display was successfully created
      */
-    public void createBookmarkDisplay() {
+    public boolean createBookmarkDisplay(boolean preserveIngredients) {
+        // Save current ingredients if requested
+        List<TypedIngredient> savedIngredients = new ArrayList<>();
+        if (preserveIngredients && bookmarkDisplay != null) {
+            savedIngredients = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
+        }
+        
         // Create the unified display
         Optional<UnifiedFolderContentsDisplay> displayOpt = UnifiedFolderContentsDisplay.create(folderManager);
         
@@ -92,206 +116,196 @@ public class BookmarkManager {
             if (stateManager.hasActiveFolder()) {
                 FolderButton activeFolder = stateManager.getActiveFolder();
                 bookmarkDisplay.setActiveFolder(activeFolder.getFolder());
-                updateBookmarkDisplayBounds();
+                bookmarkDisplay.updateBoundsFromCalculatedPositions();
                 
-                // Apply cached bookmark contents if available
-                List<TypedIngredient> lastBookmarkContents = stateManager.getLastBookmarkContents();
-                if (!lastBookmarkContents.isEmpty()) {
-                    ModLogger.debug("Applying {} cached bookmark items during display creation", 
-                        lastBookmarkContents.size());
-                    // Convert TypedIngredient to BookmarkIngredient before passing to setIngredients
-                    List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(lastBookmarkContents);
-                    bookmarkDisplay.setIngredients(bookmarkIngredients);
+                // Apply the saved ingredients if we have them
+                if (preserveIngredients && !savedIngredients.isEmpty()) {
+                    ModLogger.debug("Applying {} preserved ingredients during display creation", 
+                        savedIngredients.size());
+                    TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, savedIngredients);
+                }
+                // Otherwise, apply cached bookmark contents if available
+                else {
+                    List<TypedIngredient> lastBookmarkContents = stateManager.getLastBookmarkContents();
+                    if (!lastBookmarkContents.isEmpty()) {
+                        ModLogger.debug("Applying {} cached bookmark items during display creation", 
+                            lastBookmarkContents.size());
+                        TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, lastBookmarkContents);
+                    }
                 }
             }
+            return true;
         } else {
             ModLogger.error("Failed to create bookmark display");
+            return false;
         }
     }
     
     /**
-     * Updates the bookmark display bounds based on calculated positions
+     * Legacy method that creates a display without preserving ingredients
      */
-    public void updateBookmarkDisplayBounds() {
-        if (bookmarkDisplay == null) return;
-
-        int bookmarkDisplayWidth = 200;
-        int bookmarkDisplayHeight = 100;
-
-        if (lastBookmarkBounds == null ||
-            lastBookmarkBounds.getY() != calculatedBookmarkDisplayY ||
-            lastBookmarkBounds.getWidth() != bookmarkDisplayWidth ||
-            lastBookmarkBounds.getHeight() != bookmarkDisplayHeight) {
-
-            lastBookmarkBounds = new Rectangle2i(0, calculatedBookmarkDisplayY,
-                                                bookmarkDisplayWidth, bookmarkDisplayHeight);
-            bookmarkDisplay.updateBounds(0, calculatedBookmarkDisplayY,
-                                       bookmarkDisplayWidth, bookmarkDisplayHeight);
-        }
+    public void createBookmarkDisplay() {
+        createBookmarkDisplay(false);
     }
     
     /**
-     * Refreshes the bookmark display with the latest data from the folder manager
+     * Refreshes the bookmark display with the latest data
+     * 
+     * @return true if the refresh was successful
      */
-    public void forceFullRefresh() {
+    public boolean refreshBookmarkDisplay() {
+        // Check if we have an active folder
         FolderButton activeFolder = stateManager.getActiveFolder();
-        if (bookmarkDisplay == null || activeFolder == null) {
-            return;
+        if (activeFolder == null) {
+            ModLogger.debug("Cannot refresh bookmark display - no active folder");
+            return false;
         }
         
-        ModLogger.info("Refreshing folder display to show updated bookmarks");
+        // Check if we need to throttle refreshes
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+            ModLogger.debug("Skipping refresh - too soon since last refresh");
+            return false;
+        }
+        lastRefreshTime = currentTime;
         
         try {
-            // Get the current folder
-            FolderDataRepresentation currentFolder = activeFolder.getFolder();
-            
-            // Set the active folder which will trigger a refresh
-            bookmarkDisplay.setActiveFolder(currentFolder);
-            
-            // Force a complete refresh
-            bookmarkDisplay.forceRefresh();
-            
-            // Update the display bounds
-            updateBookmarkDisplayBounds();
+            // If the display is null, create a new one
+            if (bookmarkDisplay == null ) {
+                if (!createBookmarkDisplay(true)) {
+                    return false;
+                }
+            }
+            // Otherwise just refresh the current display
+            else {
+                FolderDataRepresentation currentFolder = activeFolder.getFolder();
+                TypedIngredientHelper.refreshBookmarkDisplay(bookmarkDisplay, currentFolder, folderManager);
+                bookmarkDisplay.updateBoundsFromCalculatedPositions();
+            }
             
             // Update the static state cache for GUI rebuilds
             safeUpdateBookmarkContents();
             
-            ModLogger.info("Bookmark display refresh completed successfully");
+            ModLogger.debug("Bookmark display refresh completed successfully");
+            return true;
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmark display: {}", e.getMessage(), e);
+            return false;
         }
     }
     
     /**
-     * Explicitly reloads the bookmark display for the active folder
-     */
-    public void reloadBookmarkDisplay() {
-        if (!stateManager.hasActiveFolder()) return;
-        
-        ModLogger.info("Explicitly reloading bookmark display");
-        
-        // Save the current ingredients if any
-        List<TypedIngredient> savedIngredients = new ArrayList<>();
-        if (bookmarkDisplay != null) {
-            // Get the current ingredients from bookmarkDisplay and extract the TypedIngredient objects
-            savedIngredients = TypedIngredientHelper.extractFromBookmarkIngredients(
-                bookmarkDisplay.getIngredients()
-            );
-        }
-        
-        // Create a new display
-        createBookmarkDisplay();
-        
-        // If we had ingredients before, restore them
-        if (!savedIngredients.isEmpty()) {
-            // Convert TypedIngredient to BookmarkIngredient using the helper class
-            List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(savedIngredients);
-            if (bookmarkDisplay != null) {
-                bookmarkDisplay.setIngredients(bookmarkIngredients);
-            }
-        }
-        // Otherwise use any cached ones
-        else {
-            List<TypedIngredient> lastBookmarkContents = stateManager.getLastBookmarkContents();
-            if (!lastBookmarkContents.isEmpty()) {
-                // Convert TypedIngredient to BookmarkIngredient using the helper class
-                List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(lastBookmarkContents);
-                if (bookmarkDisplay != null) {
-                    bookmarkDisplay.setIngredients(bookmarkIngredients);
-                }
-            }
-        }
-        
-        updateBookmarkDisplayBounds();
-    }
-    
-    /**
-     * Handles an ingredient drop at the specified coordinates
+     * Handles the dropping of an ingredient on the bookmark system.
+     * This method checks if the ingredient was dropped on a folder button or on the active display.
      * 
-     * @param mouseX The mouse X coordinate
-     * @param mouseY The mouse Y coordinate
-     * @param ingredient The ingredient being dropped
+     * @param mouseX The X coordinate of the mouse
+     * @param mouseY The Y coordinate of the mouse
+     * @param ingredient The ingredient that was dropped
      * @param isFoldersVisible Whether folders are currently visible
-     * @return true if the ingredient was handled, false otherwise
+     * @return true if the drop was handled, false otherwise
      */
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient, boolean isFoldersVisible) {
-        if (ingredient == null) {
-            ModLogger.warn("Received null ingredient for drop");
-            return false;
-        }
-
-        // Log more details about the ingredient being dropped
-        ModLogger.info("Handling ingredient drop: {}", ingredient.getClass().getName());
-        
-        // Use the IngredientService instead of direct JEIIngredientManager reference
-        IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-        String key = ingredientService.getKeyForIngredient(ingredient);
-        
-        if (key == null || key.isEmpty()) {
-            ModLogger.warn("Failed to generate key for ingredient: {}", ingredient);
-            return false;
-        }
-        
-        ModLogger.info("Generated ingredient key: {}", key);
-
+        // First check if it's a drop onto a folder button
         if (isFoldersVisible) {
             FolderButton targetButton = stateManager.getFolderButtonAt(mouseX, mouseY);
             if (targetButton != null) {
-                FolderDataRepresentation folder = targetButton.getFolder();
-                ModLogger.info("Adding bookmark {} to folder {}", key, folder.getName());
-                
-                // Check if the folder already contains this bookmark
-                if (folder.containsBookmark(key)) {
-                    ModLogger.info("Folder {} already contains this bookmark", folder.getName());
-                } else {
-                    // Add the bookmark to the folder
-                    folderManager.addBookmarkToFolder(folder.getId(), key);
-                    targetButton.playSuccessAnimation();
-                    
-                    // Get the folder's bookmark keys to confirm the bookmark was added
-                    List<String> bookmarkKeys = folderManager.getFolderBookmarkKeys(folder.getId());
-                    ModLogger.info("Folder {} now has {} bookmarks", folder.getName(), bookmarkKeys.size());
-                    
-                    // If the current folder is active, refresh its display
-                    FolderButton activeFolder = stateManager.getActiveFolder();
-                    if (activeFolder != null && activeFolder.getFolder().getId() == folder.getId()) {
-                        ModLogger.info("Refreshing bookmark display for active folder");
-                        // Force a complete refresh cycle to ensure the UI updates
-                        forceFullRefresh();
+                // Process folder button drop
+                int folderId = targetButton.getFolder().getId();
+                ModLogger.info("Adding ingredient to folder {}", folderId);
+                try {
+                    // Use TypedIngredientHelper to wrap the ingredient
+                    TypedIngredient typedIngredient = TypedIngredientHelper.wrapIngredient(ingredient);
+                    if (typedIngredient == null) {
+                        ModLogger.error("Failed to wrap ingredient");
+                        return false;
                     }
                     
-                    // Force a save to ensure the bookmark is persisted
-                    folderManager.saveData();
+                    // Get ingredient key for the bookmark
+                    String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
+                    if (key == null || key.isEmpty()) {
+                        ModLogger.error("Failed to generate key for ingredient");
+                        return false;
+                    }
+                    
+                    // Get folder details for logging
+                    String folderName = targetButton.getFolder().getName();
+                    ModLogger.info("Adding bookmark {} to folder {}", key, folderName);
+                    
+                    // Add to folder using folderManager's addBookmarkToFolder method
+                    folderManager.addBookmarkToFolder(folderId, key);
+                    eventSystem.fireFolderContentsChanged(folderId);
+                    return true;
+                } catch (Exception e) {
+                    ModLogger.error("Failed to add bookmark: {}", e.getMessage());
+                    return false;
                 }
-                
-                return true;
             }
         }
 
-        FolderButton activeFolder = stateManager.getActiveFolder();
-        if (activeFolder != null && bookmarkDisplay != null && bookmarkDisplay.isMouseOver(mouseX, mouseY)) {
-            ModLogger.info("Adding bookmark to active folder: {}", activeFolder.getFolder().getName());
+        // Then check if it's a drop on the active display
+        if (bookmarkDisplay != null) {
+            ModLogger.debug("Checking if drop at ({}, {}) is on bookmark display", mouseX, mouseY);
             
-            // Check if the folder already contains this bookmark
-            if (activeFolder.getFolder().containsBookmark(key)) {
-                ModLogger.info("Active folder already contains this bookmark");
+            // Get the display bounds for detailed logging
+            int displayX = bookmarkDisplay.getX();
+            int displayY = bookmarkDisplay.getY(); 
+            int displayWidth = bookmarkDisplay.getWidth();
+            int displayHeight = bookmarkDisplay.getHeight();
+            
+            // Log detailed information about drop coordinates and display area
+            ModLogger.debug("Display bounds: x={}, y={}, width={}, height={}", 
+                displayX, displayY, displayWidth, displayHeight);
+                
+            // Use the display's own isMouseOver method instead of simple bounds check
+            // This takes advantage of the extended hit area for drag and drop
+            boolean isInBounds = bookmarkDisplay.isMouseOver(mouseX, mouseY);
+
+            ModLogger.debug("Is drop within display bounds (using extended hit detection): {}", isInBounds);
+            
+            // If in bounds, handle the drop
+            if (isInBounds) {
+                // Check if stateManager thinks we have an active folder
+                boolean hasActiveFolder = stateManager.hasActiveFolder();
+                
+                // If no active folder according to stateManager but we have an active display,
+                // try to recover the folder from lastActiveFolderId
+                if (!hasActiveFolder) {
+                    Integer lastActiveFolderId = stateManager.getLastActiveFolderId();
+                    if (lastActiveFolderId != null) {
+                        ModLogger.info("No active folder detected but found lastActiveFolderId: {}", lastActiveFolderId);
+                        
+                        // Get the folder data - properly handle the Optional return type
+                        Optional<FolderDataRepresentation> folderDataOpt = folderManager.getFolder(lastActiveFolderId);
+                        if (folderDataOpt.isPresent()) {
+                            FolderDataRepresentation folderData = folderDataOpt.get();
+                            // Set this folder as active in the bookmark display
+                            bookmarkDisplay.setActiveFolder(folderData);
+                            ModLogger.info("Recovered active folder state for drop operation: {}", folderData.getName());
+                            
+                            // Now we can proceed with the drop
+                        } else {
+                            ModLogger.warn("Could not recover folder data for ID: {}", lastActiveFolderId);
+                        }
+                    }
+                }
+                
+                // Delegate to the bookmark display directly, even if stateManager says there's no active folder
+                boolean handled = bookmarkDisplay.handleIngredientDrop(mouseX, mouseY, ingredient);
+                
+                if (handled) {
+                    // Make sure we update our cache
+                    safeUpdateBookmarkContents();
+                    ModLogger.info("Bookmark display handled ingredient drop successfully");
+                } else {
+                    ModLogger.warn("Bookmark display failed to handle ingredient drop");
+                }
+                
+                return handled;
             } else {
-                // Add the bookmark to the folder
-                folderManager.addBookmarkToFolder(activeFolder.getFolder().getId(), key);
-                
-                // Log the number of bookmarks after adding
-                List<String> bookmarkKeys = folderManager.getFolderBookmarkKeys(activeFolder.getFolder().getId());
-                ModLogger.info("Active folder now has {} bookmarks", bookmarkKeys.size());
-                
-                // Force a complete refresh cycle to ensure the UI updates immediately
-                forceFullRefresh();
-                
-                // Force a save to ensure the bookmark is persisted
-                folderManager.saveData();
+                ModLogger.info("Drop coordinates outside of bookmark display bounds");
             }
-            
-            return true;
+        } else {
+            ModLogger.debug("No bookmark display available to receive drop");
         }
 
         ModLogger.info("No suitable target found for ingredient drop");
@@ -299,29 +313,30 @@ public class BookmarkManager {
     }
     
     /**
-     * Check if a mouse click on the bookmark display was handled
+     * Handles a click on the bookmark display
+     * 
+     * @param mouseX The mouse X position
+     * @param mouseY The mouse Y position
+     * @param button The mouse button
+     * @return true if the click was handled
      */
     public boolean handleBookmarkDisplayClick(double mouseX, double mouseY, int button) {
-        if (stateManager.hasActiveFolder() && bookmarkDisplay != null) {
-            // Add page navigation handling
-            if (button == 0) {
-                // Check if next page button is clicked
-                if (bookmarkDisplay.isNextButtonClicked(mouseX, mouseY)) {
-                    bookmarkDisplay.nextPage();
-                    return true;
-                }
-
-                // Check if back button is clicked
-                if (bookmarkDisplay.isBackButtonClicked(mouseX, mouseY)) {
-                    bookmarkDisplay.previousPage();
-                    return true;
-                }
-            }
-
-            Optional<String> clickedBookmarkKey = bookmarkDisplay.getBookmarkKeyAt(mouseX, mouseY);
-            return clickedBookmarkKey.isPresent();
+        if (bookmarkDisplay == null) {
+            return false;
         }
-        return false;
+        
+        // Let the display handle the click, which includes pagination buttons
+        boolean handled = bookmarkDisplay.handleClick(mouseX, mouseY, button);
+        
+        // If a click was handled, it might have been a pagination button
+        // Log debug information about pages
+        if (handled) {
+            ModLogger.debug("Bookmark display click handled. Current page: {}/{}", 
+                           bookmarkDisplay.getCurrentPageNumber(), 
+                           bookmarkDisplay.getPageCount());
+        }
+        
+        return handled;
     }
     
     /**
@@ -341,22 +356,29 @@ public class BookmarkManager {
             bookmarkDisplay.setActiveFolder(activeFolder.getFolder());
             List<TypedIngredient> lastBookmarkContents = stateManager.getLastBookmarkContents();
             if (!lastBookmarkContents.isEmpty()) {
-                // Convert TypedIngredient to BookmarkIngredient using the helper class
-                List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(lastBookmarkContents);
-                bookmarkDisplay.setIngredients(bookmarkIngredients);
+                // Use the helper to set ingredients on the display
+                TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, lastBookmarkContents);
             }
-            updateBookmarkDisplayBounds();
+            bookmarkDisplay.updateBoundsFromCalculatedPositions();
         }
     }
     
-    // Getters and setters
-    
+    /**
+     * Gets the bookmark display, creating it if needed (lazy initialization)
+     */
     public UnifiedFolderContentsDisplay getBookmarkDisplay() {
+        if (bookmarkDisplay == null) {
+            createBookmarkDisplay(true);
+        }
         return bookmarkDisplay;
     }
     
+    /**
+     * Sets the calculated positions for the bookmark display
+     */
     public void setCalculatedPositions(int nameY, int bookmarkDisplayY) {
-        this.calculatedNameY = nameY;
-        this.calculatedBookmarkDisplayY = bookmarkDisplayY;
+        if (bookmarkDisplay != null) {
+            bookmarkDisplay.setCalculatedPositions(nameY, bookmarkDisplayY);
+        }
     }
 }

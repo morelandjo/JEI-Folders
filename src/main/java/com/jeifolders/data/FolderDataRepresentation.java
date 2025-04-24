@@ -38,7 +38,6 @@ public class FolderDataRepresentation {
      * Add a bookmark key to this folder
      */
     public void addBookmarkKey(String key) {
-        // Check for duplicates before adding
         if (!bookmarkKeys.contains(key)) {
             bookmarkKeys.add(key);
             ModLogger.debug("Added bookmark key '{}' to folder '{}', now has {} bookmarks", 
