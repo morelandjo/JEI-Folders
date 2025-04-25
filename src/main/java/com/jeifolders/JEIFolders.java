@@ -2,7 +2,7 @@ package com.jeifolders;
 
 import com.jeifolders.integration.JEIIntegration;
 import com.jeifolders.data.FolderDataService;
-import com.jeifolders.gui.folderButtons.FolderRenderingManager;
+import com.jeifolders.gui.folderButtons.FolderButtonSystem;
 import com.jeifolders.util.ModLogger;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -19,32 +19,35 @@ public class JEIFolders {
     private boolean dataLoaded = false;
 
     public JEIFolders(IEventBus modEventBus) {
-        ModLogger.info("JEI Folders mod initializing");
+        ModLogger.info("JEI Folders initializing");
         
-        // Register setup methods for modloading - use MOD event bus for these
+        // Register setup methods
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::clientSetup);
         
-        // Register event handlers for world loading/unloading
+        // Register NeoForge events
         NeoForge.EVENT_BUS.addListener(this::onWorldLoad);
         NeoForge.EVENT_BUS.addListener(this::onWorldUnload);
         NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedIn);
+        
+        ModLogger.info("JEI Folders events registered");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        ModLogger.debug("JEI Folders common setup");
+        ModLogger.info("JEI Folders common setup");
     }
 
     private void clientSetup(final FMLClientSetupEvent event) {
         ModLogger.info("Setting up JEI Folders client");
         
-        // Initialize the folder rendering manager
-        FolderRenderingManager.init();
+        // Initialize the folder button system (which internally initializes the rendering manager)
+        FolderButtonSystem.init();
         
         // Initialize JEI integration
         JEIIntegration.registerRuntimeAvailableCallback(jeiRuntime -> {
             ModLogger.info("JEI Runtime available, initializing JEI-Folders integration");
-            // Any initialization that depends on JEI runtime
+            // Pass the JEI runtime to our main controller
+            FolderButtonSystem.getInstance().setJeiRuntime(jeiRuntime);
         });
         
         ModLogger.info("Client setup complete");
@@ -55,6 +58,11 @@ public class JEIFolders {
             ModLogger.debug("Loading folder data on world load");
             FolderDataService.getInstance().loadData();
             dataLoaded = true;
+            
+            // Refresh UI after data load if system is initialized
+            if (FolderButtonSystem.isInitialized()) {
+                FolderButtonSystem.getInstance().refreshBookmarkDisplay();
+            }
         }
     }
 
@@ -71,6 +79,11 @@ public class JEIFolders {
             ModLogger.debug("Loading folder data on player login");
             FolderDataService.getInstance().loadData();
             dataLoaded = true;
+            
+            // Refresh UI after data load if system is initialized
+            if (FolderButtonSystem.isInitialized()) {
+                FolderButtonSystem.getInstance().refreshBookmarkDisplay();
+            }
         }
     }
 }

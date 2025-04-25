@@ -4,7 +4,6 @@ import com.jeifolders.data.FolderDataRepresentation;
 import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.BookmarkService;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.ingredients.ITypedIngredient;
@@ -27,10 +26,8 @@ public class FolderBookmarkList {
     private final UnifiedFolderManager eventManager;
 
     // Access services
-    private final BookmarkService bookmarkService = JEIIntegrationFactory.getBookmarkService();
     private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
 
-    // Performance optimizations
     private boolean batchUpdateMode = false;
     private boolean pendingNotification = false;
 
@@ -59,8 +56,6 @@ public class FolderBookmarkList {
         if (folder != null) {
             List<String> keys = folder.getBookmarkKeys();
             if (!keys.isEmpty()) {
-                ModLogger.info("Refreshing bookmarks for folder {} with {} keys", folder.getName(), keys.size());
-
                 // Use ingredient service to get ingredients for bookmark keys
                 try {
                     startBatchUpdate();
@@ -79,8 +74,6 @@ public class FolderBookmarkList {
                     ingredients.clear();
                     ingredientMap.clear();
                 }
-            } else {
-                ModLogger.info("Folder {} has no bookmarks", folder.getName());
             }
         }
 
@@ -115,18 +108,16 @@ public class FolderBookmarkList {
             return;
         }
 
-        // Fire an event through our new event system if we have a folder
         if (folder != null) {
             eventManager.fireFolderContentsChangedEvent(folder);
         }
 
-        // Also notify JEI source list changed listeners
+        // Notify JEI source list changed listeners
         notifySourceListChangedListeners();
     }
 
     /**
      * Notify all source list changed listeners
-     * Should be called when the bookmark list changes
      */
     private void notifySourceListChangedListeners() {
         if (sourceListChangedListeners.isEmpty()) {
@@ -146,7 +137,6 @@ public class FolderBookmarkList {
 
     /**
      * Adds a JEI source list changed listener
-     * This method is required for integration with JEI's ingredient grid system
      */
     public void addSourceListChangedListener(IIngredientGridSource.SourceListChangedListener listener) {
         if (listener != null && !sourceListChangedListeners.contains(listener)) {
@@ -187,7 +177,6 @@ public class FolderBookmarkList {
         ingredients.add(ingredient);
         folder.addBookmarkKey(key);
 
-        // Fire the event notification
         eventManager.fireBookmarkAddedEvent(folder, ingredient, key);
 
         return true;
@@ -206,9 +195,8 @@ public class FolderBookmarkList {
         BookmarkIngredient ingredient = ingredientMap.remove(key);
         if (ingredient != null) {
             ingredients.remove(ingredient);
-            folder.removeBookmark(key);
+            folder.removeBookmarkKey(key);
 
-            // Fire the event notification
             eventManager.fireBookmarkRemovedEvent(folder, ingredient, key);
 
             return true;
@@ -251,7 +239,6 @@ public class FolderBookmarkList {
         if (folder != null) {
             folder.clearBookmarks();
 
-            // Fire the event notification
             eventManager.fireBookmarksClearedEvent(folder);
         }
     }

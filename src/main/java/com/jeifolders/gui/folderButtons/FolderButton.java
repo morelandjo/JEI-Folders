@@ -1,6 +1,7 @@
 package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.gui.LayoutConstants;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -33,14 +34,13 @@ public class FolderButton extends AbstractWidget {
     private Consumer<FolderDataRepresentation> clickHandler;
     private ButtonType buttonType = ButtonType.NORMAL;
     
-    // Pre-computed values for rendering optimization
     private final String displayName;
-    private final String fullName; // Store the full name for tooltip
+    private final String fullName;
     private final int textWidth;
     private int textX;
     private boolean needsTooltip;
     
-    // Cache tooltip component for performance
+    // Cache tooltip
     private Component tooltipComponent;
     
     // Cache for position updates
@@ -54,13 +54,13 @@ public class FolderButton extends AbstractWidget {
     public FolderButton(int x, int y, ButtonType buttonType) {
         super(x, y, ICON_WIDTH, ICON_HEIGHT, Component.literal("Add"));
         this.buttonType = buttonType;
-        this.folder = null; // Add button doesn't have an associated folder
-        this.clickHandler = null; // Will be set later through setClickHandler
+        this.folder = null; 
+        this.clickHandler = null;
         this.fullName = "Add Folder";
-        this.displayName = "+";
+        this.displayName = ""; // Empty string instead of "+" to not show text
         this.needsTooltip = true;
         this.tooltipComponent = Component.literal(fullName);
-        this.textWidth = Minecraft.getInstance().font.width(displayName);
+        this.textWidth = 0; // Set to 0 since we don't want text
         updateTextPosition();
     }
 
@@ -132,7 +132,6 @@ public class FolderButton extends AbstractWidget {
     public void setY(int y) {
         super.setY(y);
         if (lastY != y) {
-            // No need to update textX here, but update lastY
             lastY = y;
         }
     }
@@ -156,20 +155,26 @@ public class FolderButton extends AbstractWidget {
         isHovered = mouseX >= getX() && mouseY >= getY() && 
                    mouseX < getX() + width && mouseY < getY() + height;
         
-        // Use the GuiTextures helper to render the folder icon from the sprite sheet
-        FolderButtonTextures.renderFolderRowIcon(graphics, getX(), getY(), isActive, isHovered);
+        // Different rendering based on button type
+        if (buttonType == ButtonType.ADD) {
+            // Use the special Add button icon for the Add button
+            FolderButtonTextures.renderAddFolderIcon(graphics, getX(), getY(), isHovered);
+        } else {
+            // Regular folder icon for normal folder buttons
+            FolderButtonTextures.renderFolderRowIcon(graphics, getX(), getY(), isActive, isHovered);
+            
+            // Draw folder name below the icon
+            graphics.drawString(
+                Minecraft.getInstance().font, 
+                displayName, 
+                textX, 
+                getY() + ICON_HEIGHT + 2, 
+                0xFFFFFF,
+                true
+            );
+        }
         
-        // Draw folder name below the icon
-        graphics.drawString(
-            Minecraft.getInstance().font, 
-            displayName, 
-            textX, 
-            getY() + ICON_HEIGHT + 2, 
-            0xFFFFFF,
-            true
-        );
-        
-        // Display tooltip when hovering, but only if we need one
+        // Display tooltip when hovering
         if (isHovered && (needsTooltip || showSuccessAnimation)) {
             graphics.renderTooltip(
                 Minecraft.getInstance().font,
@@ -188,10 +193,9 @@ public class FolderButton extends AbstractWidget {
      * Renders the success animation with proper constraints
      */
     private void renderSuccessAnimation(GuiGraphics graphics) {
-        // Calculate the bounds of the safe highlight zone
+        // Calculate the bounds of the safe highlight zone using LayoutConstants
         int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int guiWidth = 176; // Standard GUI width
-        int guiLeft = (screenWidth - guiWidth) / 2;
+        int guiLeft = LayoutConstants.calculateGuiLeft(screenWidth);
         
         // Constrain highlight to not go past the left GUI edge
         int maxHighlightX = Math.max(0, Math.min(guiLeft - 5, getX() + getWidth() + 2));
@@ -201,7 +205,6 @@ public class FolderButton extends AbstractWidget {
         int alpha = (int)(progress * 255);
         int color = (alpha << 24) | 0x00FF00; // Green color with fading alpha
         
-        // Constrained fill - only highlight up to the safe limit
         graphics.fill(
             Math.max(0, getX() - 2), 
             getY() - 2, 

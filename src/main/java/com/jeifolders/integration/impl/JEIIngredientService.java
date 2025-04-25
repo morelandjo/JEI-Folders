@@ -348,7 +348,12 @@ public class JEIIngredientService implements IngredientService {
     }
     
     private List<String> getFolderBookmarkKeys(int folderId) {
-        return getFolderService().getFolderBookmarkKeys(folderId);
+        return getFolderService().getFolder(folderId)
+            .map(folder -> folder.getBookmarkKeys())
+            .orElseGet(() -> {
+                ModLogger.warn("Could not find folder with id {} for bookmarks", folderId);
+                return Collections.emptyList();
+            });
     }
     
     @Override

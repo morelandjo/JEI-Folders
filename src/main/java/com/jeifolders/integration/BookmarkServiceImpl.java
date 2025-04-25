@@ -37,7 +37,13 @@ public class BookmarkServiceImpl implements BookmarkService {
             return;
         }
         
-        folderService.addBookmarkToFolder(folderId, key);
+        Optional<FolderDataRepresentation> folder = folderService.getFolder(folderId);
+        if (folder.isEmpty()) {
+            ModLogger.warn("Could not find folder with id {} to add bookmark", folderId);
+            return;
+        }
+        
+        folder.get().addBookmarkKey(key);
         ModLogger.debug("Added bookmark {} to folder {}", key, folderId);
     }
     
@@ -49,7 +55,13 @@ public class BookmarkServiceImpl implements BookmarkService {
             return;
         }
         
-        folderService.removeBookmarkFromFolder(folderId, key);
+        Optional<FolderDataRepresentation> folder = folderService.getFolder(folderId);
+        if (folder.isEmpty()) {
+            ModLogger.warn("Could not find folder with id {} to remove bookmark", folderId);
+            return;
+        }
+        
+        folder.get().removeBookmarkKey(key);
         ModLogger.debug("Removed bookmark {} from folder {}", key, folderId);
     }
     

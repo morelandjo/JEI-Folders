@@ -36,7 +36,6 @@ public class ExclusionHandler {
 
     /**
      * Gets the current exclusion areas as Rect2i objects.
-     * This method is used by JEIExclusionHandler.
      */
     public Collection<Rect2i> getExclusionAreas() {
         if (exclusionAreas.isEmpty()) {

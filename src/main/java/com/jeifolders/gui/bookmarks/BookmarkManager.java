@@ -30,7 +30,7 @@ public class BookmarkManager {
         this.folderService = folderManager.getFolderService();
 
         // Create the unified display
-        createBookmarkDisplay();
+        createBookmarkDisplay(false);
 
         // Listen for folder activation/deactivation
         setupEventListeners();
@@ -149,13 +149,6 @@ public class BookmarkManager {
     }
 
     /**
-     * Legacy method that creates a display without preserving ingredients
-     */
-    public void createBookmarkDisplay() {
-        createBookmarkDisplay(false);
-    }
-
-    /**
      * Refreshes the bookmark display with the latest data
      *
      * @return true if the refresh was successful
@@ -238,8 +231,8 @@ public class BookmarkManager {
                     String folderName = targetButton.getFolder().getName();
                     ModLogger.info("Adding bookmark {} to folder {}", key, folderName);
 
-                    // Add to folder using folderService's addBookmarkToFolder method
-                    folderService.addBookmarkToFolder(folderId, key);
+                    // Add to folder using folderService's addBookmark method
+                    folderService.addBookmark(folderId, key);
                     folderManager.fireFolderContentsChangedEvent(folderId);
 
                     // Notify JEI of the changes
@@ -284,15 +277,12 @@ public class BookmarkManager {
                 if (!hasActiveFolder) {
                     Integer lastActiveFolderId = folderManager.getLastActiveFolderId();
                     if (lastActiveFolderId != null) {
-                        ModLogger.info("No active folder detected but found lastActiveFolderId: {}", lastActiveFolderId);
-
                         // Get the folder data - properly handle the Optional return type
                         Optional<FolderDataRepresentation> folderDataOpt = folderService.getFolder(lastActiveFolderId);
                         if (folderDataOpt.isPresent()) {
                             FolderDataRepresentation folderData = folderDataOpt.get();
                             // Set this folder as active in the bookmark display
                             bookmarkDisplay.setActiveFolder(folderData);
-                            ModLogger.info("Recovered active folder state for drop operation: {}", folderData.getName());
 
                             // Now we can proceed with the drop
                         } else {
@@ -307,20 +297,17 @@ public class BookmarkManager {
                 if (handled) {
                     // Make sure we update our cache
                     safeUpdateBookmarkContents();
-                    ModLogger.info("Bookmark display handled ingredient drop successfully");
                 } else {
-                    ModLogger.warn("Bookmark display failed to handle ingredient drop");
+                    ModLogger.debug("Bookmark display failed to handle ingredient drop");
                 }
 
                 return handled;
-            } else {
-                ModLogger.info("Drop coordinates outside of bookmark display bounds");
             }
         } else {
             ModLogger.debug("No bookmark display available to receive drop");
         }
 
-        ModLogger.info("No suitable target found for ingredient drop");
+        ModLogger.debug("No suitable target found for ingredient drop");
         return false;
     }
 
@@ -339,14 +326,6 @@ public class BookmarkManager {
 
         // Let the display handle the click, which includes pagination buttons
         boolean handled = bookmarkDisplay.handleClick(mouseX, mouseY, button);
-
-        // If a click was handled, it might have been a pagination button
-        // Log debug information about pages
-        if (handled) {
-            ModLogger.debug("Bookmark display click handled. Current page: {}/{}",
-                           bookmarkDisplay.getCurrentPageNumber(),
-                           bookmarkDisplay.getPageCount());
-        }
 
         return handled;
     }
@@ -403,8 +382,8 @@ public class BookmarkManager {
             // Get the folder data
             Optional<FolderDataRepresentation> folderOpt = folderService.getFolder(folderId);
             if (folderOpt.isPresent() && bookmarkDisplay != null) {
-                // Refresh the bookmark display with the updated folder contents
                 FolderDataRepresentation folder = folderOpt.get();
+                // Refresh the bookmark display with the updated folder contents
                 TypedIngredientHelper.refreshBookmarkDisplay(bookmarkDisplay, folder, folderService);
                 
                 // Update the contents cache

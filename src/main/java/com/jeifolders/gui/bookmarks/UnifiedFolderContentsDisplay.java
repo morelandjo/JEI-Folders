@@ -2,12 +2,12 @@ package com.jeifolders.gui.bookmarks;
 
 import com.jeifolders.data.FolderDataRepresentation;
 import com.jeifolders.data.FolderDataService;
+import com.jeifolders.gui.LayoutConstants;
 import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.Rectangle2i;
-import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.integration.impl.JeiBookmarkAdapter;
 import com.jeifolders.integration.impl.JeiContentsImpl;
@@ -22,8 +22,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * Unified display for folder bookmarks that handles both display management and rendering.
- * This class combines functionality previously split between FolderBookmarkContentsDisplay and FolderContentsDisplay.
+ * Display for folder bookmarks that handles both display management and rendering.
  */
 public class UnifiedFolderContentsDisplay {
     // Constants
@@ -56,9 +55,6 @@ public class UnifiedFolderContentsDisplay {
     private int calculatedNameY = -1;
     private int calculatedDisplayY = -1;
     
-    // Performance optimization
-    private long lastUpdateTimestamp = 0;
-    private int updateCounter = 0;
     private Rectangle2i lastCalculatedArea = Rectangle2i.EMPTY;
     
     // Event system
@@ -80,16 +76,15 @@ public class UnifiedFolderContentsDisplay {
         this.bookmarkAdapter = bookmarkAdapter;
         this.contentsImpl = contentsImpl;
         
-        // Create folder changed listener
+        // Folder changed listener
         this.folderChangedListener = event -> {
-            // Check if this event is for our active folder
             if (activeFolder != null && event.getFolderId() == activeFolder.getId()) {
                 ModLogger.info("FolderEventManager: Active folder {} was modified, refreshing display", event.getFolderId());
                 needsRefresh = true;
             }
         };
         
-        // Register with new event system
+        // Register with event system
         eventManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
     }
 
@@ -184,7 +179,6 @@ public class UnifiedFolderContentsDisplay {
             // Store the current page number before refreshing
             int currentPageNumber = getCurrentPageNumber();
             
-            // Use the centralized helper to load ingredients from this folder
             List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(
                 TypedIngredientHelper.loadBookmarksFromFolder(folderService, activeFolder.getId(), true)
             );
@@ -196,7 +190,7 @@ public class UnifiedFolderContentsDisplay {
             if (contentsImpl != null) {
                 contentsImpl.updateLayout(true);
                 
-                // Restore the page number if we had multiple pages
+                // Restore the page number
                 if (currentPageNumber > 1 && getPageCount() >= currentPageNumber) {
                     // Navigate to the previously active page
                     for (int i = 1; i < currentPageNumber; i++) {
@@ -207,7 +201,9 @@ public class UnifiedFolderContentsDisplay {
             }
             
             // Fire a display refreshed event
-            eventManager.fireDisplayRefreshedEvent(activeFolder);
+            eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.DISPLAY_REFRESHED)
+                .withFolder(activeFolder)
+                .build());
             
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
@@ -250,18 +246,17 @@ public class UnifiedFolderContentsDisplay {
         // Calculate safe width to prevent GUI overlap
         int safeWidth = getSafeDisplayWidth(width);
         
-        // Check if bounds are actually changing (using safe width for comparison)
+        // Check if bounds are actually changing
         if (bounds[0] == x && bounds[1] == y && bounds[2] == safeWidth && bounds[3] == height) {
             return;
         }
         
-        // Store the current page number before potential layout change
         int currentPage = getCurrentPageNumber();
         
         // Store the dimensions in both class fields and cache array
         this.x = bounds[0] = x;
         this.y = bounds[1] = y;
-        this.width = bounds[2] = safeWidth; // Use constrained width
+        this.width = bounds[2] = safeWidth;
         this.height = bounds[3] = height;
         
         // Guard against recursive calls
@@ -318,14 +313,9 @@ public class UnifiedFolderContentsDisplay {
             return requestedWidth;
         }
         
-        // Calculate the space available before the game GUI
+        // Use the utility method from LayoutConstants
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
-        int guiWidth = 176; // Standard Minecraft GUI width
-        int guiLeft = (screenWidth - guiWidth) / 2;
-        
-        // Ensure we don't spill into the GUI by enforcing a maximum width
-        // Leave a 10-pixel safety margin
-        int maxAllowedWidth = Math.max(50, guiLeft - 10);
+        int maxAllowedWidth = LayoutConstants.calculateMaxWidthBeforeGui(screenWidth);
         return Math.min(requestedWidth, maxAllowedWidth);
     }
 
@@ -368,7 +358,6 @@ public class UnifiedFolderContentsDisplay {
         }
         
         // For drag operations, check against a more generous area
-        // This ensures ingredients can be dropped even with constrained width
         if (backgroundArea != null && !backgroundArea.isEmpty()) {
             boolean overBackground = mouseX >= backgroundArea.getX() && 
                    mouseX <= backgroundArea.getX() + backgroundArea.getWidth() &&
@@ -483,14 +472,7 @@ public class UnifiedFolderContentsDisplay {
      */
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
         if (ingredient == null) {
-            ModLogger.info("Ingredient drop rejected: null ingredient");
-            return false;
-        }
-
-        // Critical check: If no active folder is set but we're getting a drop,
-        // log this unusual situation but try to proceed
-        if (activeFolder == null) {
-            ModLogger.warn("[HOVER-FIX] Ingredient dropped on bookmark display with no active folder");
+            ModLogger.debug("Ingredient drop rejected: null ingredient");
             return false;
         }
 
@@ -501,7 +483,7 @@ public class UnifiedFolderContentsDisplay {
             return false;
         }
         
-        ModLogger.info("Processing ingredient drop on display - ingredient type: {}", 
+        ModLogger.debug("Processing ingredient drop on display - ingredient type: {}", 
                       ingredient != null ? ingredient.getClass().getName() : "null");
         
         try {
@@ -514,29 +496,38 @@ public class UnifiedFolderContentsDisplay {
                 return false;
             }
             
-            ModLogger.info("Generated ingredient key: {}", key);
+            ModLogger.debug("Generated ingredient key: {}", key);
             
             // Check if the folder already has this bookmark
             if (activeFolder.containsBookmark(key)) {
-                ModLogger.info("Folder already contains this bookmark with key: {}", key);
                 return true;
             }
             
             // Add the ingredient to the folder
             int folderId = activeFolder.getId();
-            folderService.addBookmarkToFolder(folderId, key);
+            folderService.addBookmark(folderId, key);
             
             // Log the success
-            List<String> bookmarkKeys = folderService.getFolderBookmarkKeys(folderId);
-            ModLogger.info("Folder '{}' now has {} bookmarks, added key: {}", 
-                          activeFolder.getName(), bookmarkKeys.size(), key);
+            Optional<FolderDataRepresentation> folderOpt = folderService.getFolder(folderId);
+            if (folderOpt.isPresent()) {
+                FolderDataRepresentation folder = folderOpt.get();
+                List<String> bookmarkKeys = folder.getBookmarkKeys();
+                ModLogger.debug("Folder '{}' now has {} bookmarks, added key: {}", 
+                              activeFolder.getName(), bookmarkKeys.size(), key);
+            }
             
-            // Fire bookmark added event with the FolderEventManager system
+            // Fire bookmark added event with the EventBuilder pattern
             if (ingredient instanceof BookmarkIngredient) {
-                eventManager.fireBookmarkAddedEvent(activeFolder, (BookmarkIngredient)ingredient, key);
+                eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.BOOKMARK_ADDED)
+                    .withFolder(activeFolder)
+                    .withIngredient(ingredient)
+                    .withBookmarkKey(key)
+                    .build());
             } else {
                 // For non-BookmarkIngredient, just fire a folder contents changed event
-                eventManager.fireFolderContentsChangedEvent(folderId);
+                eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED)
+                    .withFolderId(folderId)
+                    .build());
             }
             
             // Refresh the display

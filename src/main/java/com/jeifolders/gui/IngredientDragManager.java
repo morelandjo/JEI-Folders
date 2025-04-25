@@ -2,7 +2,7 @@ package com.jeifolders.gui;
 
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.gui.folderButtons.FolderButtonInterface;
-import com.jeifolders.gui.folderButtons.FolderRenderingManager;
+import com.jeifolders.gui.folderButtons.FolderButtonSystem;
 import com.jeifolders.integration.IngredientDragHandler;
 import com.jeifolders.integration.TypedIngredient;
 import net.minecraft.client.Minecraft;
@@ -25,7 +25,7 @@ public class IngredientDragManager {
     private int lastMouseX = -1;
     private int lastMouseY = -1;
     
-    // Delegate JEI-specific functionality to the handler in the integration package
+    // Delegate functionality to the handler in the integration package
     private final IngredientDragHandler ingredientDragHandler = new IngredientDragHandler();
 
     private IngredientDragManager() {
@@ -70,8 +70,9 @@ public class IngredientDragManager {
         }
 
         if (event.getButton() == 0 && isDragging) { // Left mouse button
-            // Get the currently active folder button interface
-            FolderButtonInterface folderButton = FolderRenderingManager.getFolderButton();
+            // Get the currently active folder button interface from FolderButtonSystem
+            FolderButtonInterface folderButton = FolderButtonSystem.isInitialized() ? 
+                                                FolderButtonSystem.getInstance() : null;
             
             if (folderButton == null) {
                 ModLogger.debug("No active folder button found for drop processing");
@@ -89,8 +90,7 @@ public class IngredientDragManager {
                 ModLogger.debug("Processing ingredient drop at ({}, {})", event.getMouseX(), event.getMouseY());
                 
                 try {
-                    // First check if the drop should be handled by the folder button
-                    // This includes both folder buttons and the active display
+                    // Check if the drop should be handled by the folder button
                     boolean handled = folderButton.handleIngredientDrop(event.getMouseX(), event.getMouseY(), wrappedObj);
                     
                     if (handled) {

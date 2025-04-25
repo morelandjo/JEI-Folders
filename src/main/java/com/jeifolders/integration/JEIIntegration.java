@@ -97,10 +97,13 @@ public class JEIIntegration implements IModPlugin {
     }
 
     private void initializeFolderButton(IJeiRuntime runtime) {
-        FolderButtonInterface buttonInterface = FolderRenderingManager.getFolderButton();
-        if (buttonInterface instanceof FolderButtonSystem folderButton) {
+        // Get the folder button interface from FolderButtonSystem
+        if (FolderButtonSystem.isInitialized()) {
+            FolderButtonSystem folderButton = FolderButtonSystem.getInstance();
             folderButton.setJeiRuntime(runtime);
             ModLogger.debug("JEI runtime provided to folder button");
+        } else {
+            ModLogger.warn("FolderButtonSystem not initialized when JEI runtime became available");
         }
     }
 
@@ -227,8 +230,9 @@ public class JEIIntegration implements IModPlugin {
                 JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
                 
                 // Now add the targets since this is an actual drag
-                FolderButtonInterface buttonInterface = FolderRenderingManager.getFolderButton();
-                if (buttonInterface instanceof FolderButtonSystem folderButton) {
+                if (FolderButtonSystem.isInitialized()) {
+                    FolderButtonSystem folderButton = FolderButtonSystem.getInstance();
+                    
                     // Add targets for folder buttons
                     folderButton.getFolderButtons().forEach(folderRowButton -> {
                         targets.add(createFolderTarget(folderRowButton, folderButton, ingredient));

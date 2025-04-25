@@ -1,441 +1,688 @@
 package com.jeifolders.data;
 
 import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
-import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.util.SnbtFormat;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.TagParser;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.storage.LevelResource;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
+import net.minecraft.world.level.storage.WorldData;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 /**
- * Consolidated service class that handles all folder data operations including:
- * - CRUD operations for folders and bookmarks
- * - Data persistence through file storage
- * - Ingredient caching and management
+ * Central service for managing folder data and persistence.
+ * Handles loading, saving, and CRUD operations for folders.
  */
 public class FolderDataService {
-    private static final String FILENAME = "jeifolders.snbt";
-    private static final String CONFIG_BASE_PATH = "config/jeifolders";
-    private static final FolderDataService INSTANCE = new FolderDataService();
-    
-    private final Map<Integer, FolderDataRepresentation> folders = new HashMap<>();
-    private int nextFolderId = 0;
+    // Singleton instance
+    private static FolderDataService instance;
 
-    private IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-    private UnifiedFolderManager folderManager;
-    
+    // Data collections
+    private final Map<Integer, FolderDataRepresentation> folders = new HashMap<>();
+    private final Map<String, Object> ingredientCache = new HashMap<>();
+
+    // Runtime state
+    private Integer lastActiveFolderId = null;
+    private boolean isLoaded = false;
+    private boolean isDirty = false;
+    private boolean usingFallbackDir = false;
+
+    // File paths
+    private Path configDir;
+    private File dataFile;
+
+    // Constants
+    private static final String ALL_WORLDS_FOLDER = "all";
+    private static final String DATA_FILENAME = "jeifolders.snbt";
+    private static final String CONFIG_ROOT = "./config/jeifolders/";
+    private static final int MIN_SAVE_INTERVAL_MS = 5000; // Minimum time between saves
+    private long lastSaveTime = 0;
+    private UnifiedFolderManager callbackManager;
+
+    // NBT Keys
+    private static final String FOLDERS_KEY = "folders";
+    private static final String ACTIVE_FOLDER_KEY = "activeFolder";
+
     /**
      * Private constructor for singleton pattern
      */
     private FolderDataService() {
-        // Private constructor for singleton
+        setupConfigDir();
     }
-    
+
     /**
      * Get the singleton instance
      */
-    public static FolderDataService getInstance() {
-        return INSTANCE;
+    public static synchronized FolderDataService getInstance() {
+        if (instance == null) {
+            instance = new FolderDataService();
+        }
+        return instance;
     }
-    
+
     /**
-     * Sets the UnifiedFolderManager instance
+     * Sets up the configuration directory and data file
      */
-    public void setFolderManager(UnifiedFolderManager folderManager) {
-        this.folderManager = folderManager;
+    private void setupConfigDir() {
+        try {
+            // Base config directory
+            configDir = Paths.get(CONFIG_ROOT);
+
+            // Create the config directory if it doesn't exist
+            if (!Files.exists(configDir)) {
+                Files.createDirectories(configDir);
+                ModLogger.debug("Created config directory: {}", configDir);
+            }
+
+            // Always try to get a world-specific folder first
+            String worldFolderName = determineWorldFolder();
+            Path worldDir = configDir.resolve(worldFolderName);
+
+            try {
+                // Create the world-specific directory if it doesn't exist
+                if (!Files.exists(worldDir)) {
+                    Files.createDirectories(worldDir);
+                    ModLogger.debug("Created world-specific directory: {}", worldDir);
+                }
+
+                // Set the data file path
+                dataFile = worldDir.resolve(DATA_FILENAME).toFile();
+                ModLogger.debug("Data file path set to: {}", dataFile.getAbsolutePath());
+                usingFallbackDir = worldFolderName.equals(ALL_WORLDS_FOLDER);
+            } catch (Exception e) {
+                setupFallbackDir("Error creating world directory: " + e.getMessage());
+            }
+        } catch (Exception e) {
+            setupFallbackDir("Error setting up config directory: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Sets up a fallback directory when the primary setup fails
+     * 
+     * @param errorMessage The error message to log
+     */
+    private void setupFallbackDir(String errorMessage) {
+        ModLogger.error(errorMessage);
+        
+        try {
+            // Fallback to the default "all" location
+            Path fallbackDir = configDir.resolve(ALL_WORLDS_FOLDER);
+            if (!Files.exists(fallbackDir)) {
+                Files.createDirectories(fallbackDir);
+            }
+            dataFile = fallbackDir.resolve(DATA_FILENAME).toFile();
+            usingFallbackDir = true;
+            ModLogger.warn("Using fallback data file location: {}", dataFile.getAbsolutePath());
+        } catch (IOException ioEx) {
+            ModLogger.error("Failed to create fallback directory: {}", ioEx.getMessage());
+            
+            // Ultimate fallback - use a file in the current directory
+            dataFile = new File(DATA_FILENAME);
+            ModLogger.warn("Using emergency fallback data file: {}", dataFile.getAbsolutePath());
+        }
+    }
+
+    /**
+     * Safe wrapper for Minecraft instance access
+     */
+    private Minecraft getMinecraftSafe() {
+        try {
+            return Minecraft.getInstance();
+        } catch (Exception e) {
+            ModLogger.error("Error accessing Minecraft instance: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Determines the world-specific folder name based on server information
+     */
+    private String determineWorldFolder() {
+        try {
+            // Try multiple strategies to find the world name
+            String worldName = null;
+            
+            // Get the Minecraft instance safely
+            Minecraft minecraft = getMinecraftSafe();
+            
+            // Strategy 1: Get directly from ServerLifecycleHooks (most reliable for servers)
+            try {
+                MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+                if (server != null) {
+                    // This is safe because WorldData is the interface that server.getWorldData() returns
+                    worldName = server.getWorldData().getLevelName();
+                    ModLogger.debug("Got world name from ServerLifecycleHooks: {}", worldName);
+                }
+            } catch (Exception e) {
+                ModLogger.debug("Could not get world name from ServerLifecycleHooks: {}", e.getMessage());
+            }
+            
+           
+            
+            // Strategy 3: Try to get from integrated server
+            if (worldName == null && minecraft != null) {
+                try {
+                    IntegratedServer integratedServer = minecraft.getSingleplayerServer();
+                    if (integratedServer != null) {
+                        // This is safe because WorldData is the interface that integrated server uses
+                        worldName = integratedServer.getWorldData().getLevelName();
+                        ModLogger.debug("Got world name from integrated server: {}", worldName);
+                    }
+                } catch (Exception e) {
+                    ModLogger.debug("Could not get world name from integrated server: {}", e.getMessage());
+                }
+            }
+            
+            // Strategy 4: For multiplayer, try to get server address
+            if (worldName == null && minecraft != null && minecraft.getCurrentServer() != null) {
+                try {
+                    String serverName = minecraft.getCurrentServer().name;
+                    String serverIP = minecraft.getCurrentServer().ip;
+                    
+                    // Use server name if available, otherwise use IP
+                    if (serverName != null && !serverName.isEmpty()) {
+                        worldName = "mp_" + serverName.replace(' ', '_');
+                        ModLogger.debug("Using multiplayer server name as world name: {}", worldName);
+                    } else if (serverIP != null && !serverIP.isEmpty()) {
+                        worldName = "mp_" + serverIP.replace(':', '_');
+                        ModLogger.debug("Using multiplayer server address as world name: {}", worldName);
+                    }
+                } catch (Exception e) {
+                    ModLogger.debug("Could not get server info for multiplayer: {}", e.getMessage());
+                }
+            }
+            
+            
+            
+            // If we have a world name, sanitize and return it
+            if (worldName != null && !worldName.trim().isEmpty()) {
+                // Sanitize the world name for use as a directory name
+                worldName = worldName.replaceAll("[^a-zA-Z0-9_\\-.]", "_");
+                ModLogger.info("Using world-specific data folder: {}", worldName);
+                return worldName;
+            } else {
+                ModLogger.warn("Failed to determine world name after trying all strategies");
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error determining world folder: {}", e.getMessage());
+            e.printStackTrace();
+        }
+        
+        // Default to the "all" folder if we can't determine the world
+        ModLogger.info("Using default 'all' data folder (no specific world detected)");
+        return ALL_WORLDS_FOLDER;
     }
     
-    // ===== FOLDER DATA OPERATIONS =====
+    /**
+     * Resets the data service state by updating file paths and reloading data
+     */
+    public void resetDataPaths() {
+        ModLogger.debug("Resetting data paths and reloading data");
+        setupConfigDir();
+        loadData();
+    }
+
+    /**
+     * Loads all folder data from the data file
+     * 
+     * @return true if data was loaded successfully, false otherwise
+     */
+    public boolean loadData() {
+        // Reset loaded state to force a reload
+        isLoaded = false;
+        
+        // Clear any existing data
+        folders.clear();
+        ingredientCache.clear();
+        lastActiveFolderId = null;
+
+        // Make sure we have a valid data file path
+        setupConfigDir();
+
+        ModLogger.info("Loading data from {}", dataFile.getAbsolutePath());
+
+        // If the file doesn't exist, there's no data to load
+        if (!dataFile.exists()) {
+            ModLogger.info("No folder data file found at {}, will create new data", dataFile.getAbsolutePath());
+            isLoaded = true;
+            return true;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(dataFile))) {
+            // Read the full file content
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+
+            // Check if the file is empty
+            String snbtData = sb.toString().trim();
+            if (snbtData.isEmpty()) {
+                ModLogger.info("Data file is empty, treating as no data");
+                isLoaded = true;
+                return true;
+            }
+
+            // Parse the SNBT data to NBT
+            CompoundTag rootTag = TagParser.parseTag(snbtData);
+
+            // Load folders
+            if (rootTag.contains(FOLDERS_KEY, Tag.TAG_LIST)) {
+                ListTag foldersList = rootTag.getList(FOLDERS_KEY, Tag.TAG_COMPOUND);
+                ModLogger.debug("Found {} folders in data file", foldersList.size());
+
+                for (int i = 0; i < foldersList.size(); i++) {
+                    CompoundTag folderTag = foldersList.getCompound(i);
+                    
+                    // Parse folder from NBT
+                    FolderDataRepresentation folder = FolderDataRepresentation.fromNbt(folderTag);
+                    
+                    if (folder != null) {
+                        folders.put(folder.getId(), folder);
+                        ModLogger.debug("Loaded folder: {} (ID: {})", folder.getName(), folder.getId());
+                    } else {
+                        ModLogger.warn("Failed to load folder at index {}", i);
+                    }
+                }
+
+                ModLogger.info("Successfully loaded {} folders", folders.size());
+            }
+
+            // Load active folder ID
+            if (rootTag.contains(ACTIVE_FOLDER_KEY, Tag.TAG_INT)) {
+                lastActiveFolderId = rootTag.getInt(ACTIVE_FOLDER_KEY);
+                ModLogger.debug("Loaded active folder ID: {}", lastActiveFolderId);
+            }
+
+            // Load cached ingredients (for each folder's bookmarks)
+            for (FolderDataRepresentation folder : folders.values()) {
+                loadIngredientsForFolder(folder);
+            }
+
+            isLoaded = true;
+            isDirty = false;
+            
+            ModLogger.info("Data loaded successfully from {}", dataFile.getAbsolutePath());
+            return true;
+        } catch (Exception e) {
+            ModLogger.error("Error loading data from {}: {}", dataFile.getAbsolutePath(), e.getMessage());
+            e.printStackTrace();
+        }
+
+        // Default loading state to true even if there was an error, to avoid repeated load attempts
+        isLoaded = true;
+        return false;
+    }
     
     /**
-     * Creates a new folder with the given name.
+     * Saves all folder data to the data file
+     * 
+     * @return true if data was saved successfully, false otherwise
+     */
+    public boolean saveData() {
+        // Throttle saves to avoid excessive writes
+        long currentTime = System.currentTimeMillis();
+        if (!isDirty || currentTime - lastSaveTime < MIN_SAVE_INTERVAL_MS) {
+            return true;
+        }
+        
+        // Make sure the config directory is set up
+        setupConfigDir();
+        
+        ModLogger.debug("Saving data to {}", dataFile.getAbsolutePath());
+        
+        try {
+            // Create parent directories if they don't exist
+            File parentDir = dataFile.getParentFile();
+            if (parentDir != null && !parentDir.exists()) {
+                parentDir.mkdirs();
+            }
+            
+            // Create tag structure
+            CompoundTag rootTag = new CompoundTag();
+            
+            // Save folders
+            ListTag foldersList = new ListTag();
+            for (FolderDataRepresentation folder : folders.values()) {
+                CompoundTag folderTag = folder.toNbt();
+                foldersList.add(folderTag);
+            }
+            rootTag.put(FOLDERS_KEY, foldersList);
+            
+            // Save active folder ID
+            if (lastActiveFolderId != null) {
+                rootTag.putInt(ACTIVE_FOLDER_KEY, lastActiveFolderId);
+            }
+            
+            // Convert to SNBT and write to file
+            String snbt = SnbtFormat.format(rootTag);
+            
+            try (FileWriter writer = new FileWriter(dataFile)) {
+                writer.write(snbt);
+            }
+            
+            isDirty = false;
+            lastSaveTime = currentTime;
+            ModLogger.info("Data saved successfully to {}", dataFile.getAbsolutePath());
+            return true;
+        } catch (Exception e) {
+            ModLogger.error("Error saving data to {}: {}", dataFile.getAbsolutePath(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Registers a callback manager to notify of data changes
+     * 
+     * @param manager The folder manager to notify of changes
+     */
+    public void registerCallback(UnifiedFolderManager manager) {
+        this.callbackManager = manager;
+        ModLogger.debug("Callback manager registered with FolderDataService");
+    }
+
+    /**
+     * Loads ingredient data for a specific folder
+     * 
+     * @param folder The folder to load ingredients for
+     */
+    private void loadIngredientsForFolder(FolderDataRepresentation folder) {
+        if (folder == null) {
+            return;
+        }
+
+        // Get the service and check if it's available
+        var jeiService = JEIIntegrationFactory.getJEIService();
+        
+        // JEI might not be initialized yet
+        if (!jeiService.getJeiRuntime().isPresent()) {
+            ModLogger.debug("Cannot load ingredients - JEI runtime not available");
+            return;
+        }
+
+        // Get the ingredient service that has the getIngredientForKey method
+        var ingredientService = JEIIntegrationFactory.getIngredientService();
+        
+        // Load all bookmark ingredients
+        for (String bookmarkKey : folder.getBookmarkKeys()) {
+            try {
+                // Try to parse the ingredient from the bookmark key
+                var ingredientOpt = ingredientService.getIngredientForKey(bookmarkKey);
+                
+                if (ingredientOpt.isPresent()) {
+                    // Cache the ingredient if successfully parsed
+                    ingredientCache.put(bookmarkKey, ingredientOpt.get());
+                } else {
+                    ModLogger.debug("Failed to load ingredient for key: {}", bookmarkKey);
+                }
+            } catch (Exception e) {
+                ModLogger.debug("Error loading ingredient for key {}: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Get all folders
+     * 
+     * @return List of all folders
+     */
+    public List<FolderDataRepresentation> getAllFolders() {
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
+        return new ArrayList<>(folders.values());
+    }
+    
+    /**
+     * Get a folder by ID
+     * 
+     * @param id The folder ID
+     * @return Optional containing the folder, or empty if not found
+     */
+    public Optional<FolderDataRepresentation> getFolder(int id) {
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
+        return Optional.ofNullable(folders.get(id));
+    }
+    
+    /**
+     * Get the last active folder ID
+     * 
+     * @return The last active folder ID, or null if none was active
+     */
+    public Integer getLastActiveFolderId() {
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
+        return lastActiveFolderId;
+    }
+    
+    /**
+     * Set the last active folder ID
+     * 
+     * @param id The folder ID to set as active, or null to clear
+     */
+    public void setLastActiveFolderId(Integer id) {
+        lastActiveFolderId = id;
+        isDirty = true;
+        saveData();
+    }
+    
+    /**
+     * Creates a new folder
+     * 
+     * @param name The name of the folder
+     * @return The newly created folder
      */
     public FolderDataRepresentation createFolder(String name) {
-        FolderDataRepresentation folder = new FolderDataRepresentation(nextFolderId++, name);
-        folders.put(folder.getId(), folder);
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
+        
+        // Find the next available ID
+        int nextId = 1;
+        while (folders.containsKey(nextId)) {
+            nextId++;
+        }
+        
+        // Create the new folder
+        FolderDataRepresentation folder = new FolderDataRepresentation(nextId, name);
+        folders.put(nextId, folder);
+        
+        // Mark as dirty and save
+        isDirty = true;
         saveData();
+        
+        ModLogger.info("Created new folder: {} (ID: {})", name, nextId);
         return folder;
     }
     
     /**
-     * Removes a folder with the given ID.
+     * Deletes a folder
+     * 
+     * @param id The ID of the folder to delete
+     * @return true if the folder was deleted, false if it didn't exist
      */
-    public void removeFolder(int id) {
-        folders.remove(id);
-        invalidateIngredientsCache(id);
-        saveData();
-    }
-    
-    /**
-     * Gets a folder with the given ID.
-     */
-    public Optional<FolderDataRepresentation> getFolder(int folderId) {
-        return Optional.ofNullable(folders.get(folderId));
-    }
-    
-    /**
-     * Gets all folders.
-     */
-    public List<FolderDataRepresentation> getAllFolders() {
-        return new ArrayList<>(folders.values());
-    }
-    
-    // ===== BOOKMARK OPERATIONS =====
-    
-    /**
-     * Adds a bookmark to a folder and saves data.
-     */
-    public void addBookmarkToFolder(int folderId, String bookmarkKey) {
-        getFolder(folderId).ifPresentOrElse(
-            folder -> {
-                // Folder exists, add the bookmark
-                folder.addBookmarkKey(bookmarkKey);
-                invalidateIngredientsCache(folderId);
-                saveData();
-                
-                // Notify the unified folder manager
-                if (folderManager != null) {
-                    folderManager.notifyFolderContentsChanged(folderId);
-                }
-            },
-            // Folder doesn't exist
-            () -> ModLogger.warn("Could not add bookmark - folder with id {} not found", folderId)
-        );
-    }
-    
-    /**
-     * Removes a bookmark from a folder.
-     */
-    public void removeBookmarkFromFolder(int folderId, String bookmarkKey) {
-        getFolder(folderId).ifPresent(folder -> {
-            if (folder.removeBookmark(bookmarkKey)) {
-                invalidateIngredientsCache(folderId);
-                saveData();
-                
-                // Notify the unified folder manager
-                if (folderManager != null) {
-                    folderManager.notifyFolderContentsChanged(folderId);
-                }
+    public boolean deleteFolder(int id) {
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
+        
+        // Remove the folder
+        FolderDataRepresentation removed = folders.remove(id);
+        if (removed != null) {
+            // If this was the active folder, clear it
+            if (lastActiveFolderId != null && lastActiveFolderId == id) {
+                lastActiveFolderId = null;
             }
-        });
+            
+            // Mark as dirty and save
+            isDirty = true;
+            saveData();
+            
+            ModLogger.info("Deleted folder: {} (ID: {})", removed.getName(), id);
+            return true;
+        }
+        
+        return false;
     }
     
     /**
-     * Gets bookmarks for a specific folder.
+     * Updates a folder's name
+     * 
+     * @param id The ID of the folder to update
+     * @param newName The new name for the folder
+     * @return true if the folder was updated, false if it didn't exist
      */
-    public List<String> getFolderBookmarkKeys(int folderId) {
+    public boolean updateFolderName(int id, String newName) {
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
+        
+        // Get the folder
+        FolderDataRepresentation folder = folders.get(id);
+        if (folder != null) {
+            // Update the name
+            folder.setName(newName);
+            
+            // Mark as dirty and save
+            isDirty = true;
+            saveData();
+            
+            ModLogger.info("Updated folder name: {} (ID: {})", newName, id);
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Adds a bookmark to a folder
+     * 
+     * @param folderId The ID of the folder to add the bookmark to
+     * @param bookmarkKey The bookmark key to add
+     * @return true if the bookmark was added, false if the folder doesn't exist
+     */
+    public boolean addBookmark(int folderId, String bookmarkKey) {
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
+        
+        // Get the folder
         FolderDataRepresentation folder = folders.get(folderId);
-        return folder != null ? folder.getBookmarkKeys() : List.of();
-    }
-    
-    // ===== INGREDIENT MANAGEMENT =====
-
-    /**
-     * Gets the IngredientService instance, initializing it if needed.
-     */
-    private IngredientService getIngredientService() {
-        if (ingredientService == null) {
-            ingredientService = JEIIntegrationFactory.getIngredientService();
-        }
-        return ingredientService;
-    }
-
-    /**
-     * Gets the cached ingredients for a folder, processing them if not already cached.
-     */
-    public List<Object> getCachedIngredientsForFolder(int folderId) {
-        Optional<FolderDataRepresentation> folder = getFolder(folderId);
-        if (folder.isEmpty()) {
-            return Collections.emptyList();
-        }
-        
-        return new ArrayList<>(getIngredientService().getCachedIngredientsForFolder(folderId));
-    }
-
-    /**
-     * Invalidates the ingredient cache for a specific folder.
-     */
-    public void invalidateIngredientsCache(int folderId) {
-        getIngredientService().invalidateIngredientsCache(folderId);
-    }
-
-    /**
-     * Invalidates the entire ingredient cache.
-     */
-    public void invalidateAllIngredientCaches() {
-        ModLogger.debug("Invalidating all ingredient caches");
-        
-        IngredientService service = getIngredientService();
-        
-        if (service != null) {
-            try {
-                service.clearCache();
-                ModLogger.debug("Ingredient cache cleared successfully");
-            } catch (Exception e) {
-                ModLogger.error("Error while clearing ingredient cache: {}", e.getMessage());
-            }
-        } else {
-            ModLogger.debug("Cannot invalidate ingredient cache - ingredientService is unavailable");
-        }
-    }
-    
-    // ===== STORAGE OPERATIONS =====
-    
-    /**
-     * Gets the appropriate save directory for the current game context.
-     */
-    private File getSaveDirectory() {
-        Minecraft minecraft = Minecraft.getInstance();
-        
-        // If no level is loaded, we can't determine which world we're in
-        if (minecraft.level == null) {
-            ModLogger.warn("No level loaded, using generic config directory for folder data");
-            return createDirectory(minecraft.gameDirectory, CONFIG_BASE_PATH + "/default");
-        }
-        
-        try {
-            // Determine save location based on server type
-            String subdir;
-            String identifier;
-            
-            // Check if this is singleplayer
-            if (minecraft.isLocalServer() && minecraft.getSingleplayerServer() != null) {
-                // Get world name from singleplayer server
-                identifier = minecraft.getSingleplayerServer().getWorldData().getLevelName();
-                subdir = "worlds";
-                ModLogger.debug("Using singleplayer world-specific folder for '{}' save data", identifier);
-            }
-            // Check if we can get server info from level
-            else if (minecraft.level.getServer() != null) {
-                identifier = minecraft.level.getServer().getWorldData().getLevelName();
-                subdir = "worlds";
-                ModLogger.debug("Using world-specific folder for '{}' save data", identifier);
-            }
-            // Check for multiplayer connection
-            else if (minecraft.getCurrentServer() != null) {
-                identifier = minecraft.getCurrentServer().ip;
-                subdir = "servers";
-                ModLogger.debug("Using server-specific folder for '{}' save data", identifier);
-            }
-            // Last resort fallback
-            else {
-                ModLogger.error("Unable to find world name, using default folder");
-                identifier = "all";
-                subdir = "all";
-            }
-            
-            return createDirectory(minecraft.gameDirectory, 
-                String.format("%s/%s/%s", CONFIG_BASE_PATH, subdir, sanitizeFileName(identifier)));
-            
-        } catch (Exception e) {
-            ModLogger.error("Error determining save directory: {}", e.getMessage());
-            
-            // Fallback to a generic directory
-            return createDirectory(minecraft.gameDirectory, CONFIG_BASE_PATH + "/all");
-        }
-    }
-    
-    /**
-     * Helper method to create a directory if it doesn't exist
-     */
-    private File createDirectory(File base, String path) {
-        File dir = new File(base, path);
-        if (!dir.exists()) {
-            boolean created = dir.mkdirs();
-            if (created) {
-                ModLogger.debug("Created directory: {}", dir.getAbsolutePath());
-            }
-        }
-        return dir;
-    }
-    
-    /**
-     * Sanitizes a filename to prevent invalid characters
-     */
-    private String sanitizeFileName(String name) {
-        // Replace invalid filename characters with underscores
-        return name.replaceAll("[\\\\/:*?\"<>|]", "_");
-    }
-    
-    /**
-     * Gets the file path for the folder data in the appropriate save directory
-     */
-    private File getDataFile(String filename) {
-        File saveDir = getSaveDirectory();
-        if (saveDir == null) {
-            return null;
-        }
-        
-        // Ensure the directory exists
-        if (!saveDir.exists()) {
-            saveDir.mkdirs();
-        }
-        
-        return new File(saveDir, filename);
-    }
-    
-    /**
-     * Loads folder data from the SNBT file.
-     */
-    public void loadData() {
-        ModLogger.debug("Loading folder data...");
-        
-        // First, attempt to load raw data from file
-        Optional<String> rawData = loadRawDataFromFile();
-        
-        // If loading failed or returned empty data, initialize with defaults
-        if (rawData.isEmpty()) {
-            initializeEmptyData();
-            return;
-        }
-        
-        // Process the raw data into our data model
-        processDataContent(rawData.get());
-        
-        // Make sure caches are invalidated after loading
-        invalidateAllIngredientCaches();
-    }
-
-    /**
-     * Loads the raw string data from the SNBT file.
-     */
-    private Optional<String> loadRawDataFromFile() {
-        // Get the data file
-        File dataFile = getDataFile(FILENAME);
-        if (dataFile == null) {
-            ModLogger.warn("Cannot load folder data: No save directory available");
-            return Optional.empty();
-        }
-        
-        // Check if the file exists
-        if (!dataFile.exists()) {
-            ModLogger.info("No folder data file found at {}, will create new data", dataFile.getAbsolutePath());
-            return Optional.empty();
-        }
-        
-        // If file exists, try to read it
-        try {
-            // Read SNBT from file
-            StringBuilder snbtContent = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new FileReader(dataFile))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    snbtContent.append(line);
-                }
-            }
-            
-            String content = snbtContent.toString().trim();
-            if (content.isEmpty()) {
-                ModLogger.warn("Data file exists but is empty");
-                return Optional.empty();
-            }
-            
-            double sizeKB = dataFile.length() / 1024.0;
-            ModLogger.debug("Loaded data file ({} KB, {} chars) from {}", 
-                String.format("%.2f", sizeKB), 
-                content.length(), 
-                dataFile.getName());
-            
-            return Optional.of(content);
-        } catch (Exception e) {
-            ModLogger.error("Failed to load folder data: {}", e.getMessage(), e);
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Initializes the service with empty data.
-     */
-    private void initializeEmptyData() {
-        ModLogger.debug("Initializing with empty data");
-        folders.clear();
-        nextFolderId = 0;
-    }
-
-    /**
-     * Processes the raw data content into folder objects.
-     */
-    private void processDataContent(String content) {
-        try {
-            // Parse SNBT string to CompoundTag
-            CompoundTag rootTag = TagParser.parseTag(content);
-            nextFolderId = rootTag.getInt("nextId");
-            
-            folders.clear();
-            if (rootTag.contains("folders")) {
-                ListTag folderList = rootTag.getList("folders", Tag.TAG_COMPOUND);
-                ModLogger.debug("Loading {} folders from data", folderList.size());
+        if (folder != null) {
+            // Add the bookmark
+            if (folder.addBookmarkKey(bookmarkKey)) {
+                // Mark as dirty and save
+                isDirty = true;
+                saveData();
                 
-                for (int i = 0; i < folderList.size(); i++) {
-                    CompoundTag folderTag = folderList.getCompound(i);
-                    FolderDataRepresentation folder = FolderDataRepresentation.fromNbt(folderTag);
-                    folders.put(folder.getId(), folder);
-                }
-            } else {
-                ModLogger.debug("No folders found in data");
+                ModLogger.debug("Added bookmark to folder {} (ID: {}): {}", folder.getName(), folderId, bookmarkKey);
+                return true;
             }
-        } catch (Exception e) {
-            ModLogger.error("Failed to process folder data content: {}", e.getMessage());
-            // Initialize with empty data on parsing error
-            initializeEmptyData();
         }
+        
+        return false;
     }
-
+    
     /**
-     * Saves folder data to the SNBT file.
+     * Removes a bookmark from a folder
+     * 
+     * @param folderId The ID of the folder to remove the bookmark from
+     * @param bookmarkKey The bookmark key to remove
+     * @return true if the bookmark was removed, false if the folder doesn't exist or didn't contain the bookmark
      */
-    public void saveData() {
-        ModLogger.debug("Saving folders data. Current folders: {}", folders.size());
+    public boolean removeBookmark(int folderId, String bookmarkKey) {
+        // Make sure data is loaded
+        if (!isLoaded) {
+            loadData();
+        }
         
-        CompoundTag data = createDataTag();
+        // Get the folder
+        FolderDataRepresentation folder = folders.get(folderId);
+        if (folder != null) {
+            // Remove the bookmark
+            if (folder.removeBookmarkKey(bookmarkKey)) {
+                // Mark as dirty and save
+                isDirty = true;
+                saveData();
+                
+                ModLogger.debug("Removed bookmark from folder {} (ID: {}): {}", folder.getName(), folderId, bookmarkKey);
+                return true;
+            }
+        }
         
-        saveDataToFile(data);
+        return false;
     }
-
+    
     /**
-     * Creates a CompoundTag containing all folder data for saving.
+     * Gets a cached ingredient by key
+     * 
+     * @param key The ingredient key
+     * @return The cached ingredient, or null if not found
      */
-    private CompoundTag createDataTag() {
-        CompoundTag rootTag = new CompoundTag();
-        rootTag.putInt("nextId", nextFolderId);
-        
-        ListTag folderList = new ListTag();
-        for (FolderDataRepresentation folder : folders.values()) {
-            folderList.add(folder.toNbt());
-        }
-        rootTag.put("folders", folderList);
-        
-        return rootTag;
+    public Object getCachedIngredient(String key) {
+        return ingredientCache.get(key);
     }
-
+    
     /**
-     * Writes the provided data tag to the save file.
+     * Caches an ingredient
+     * 
+     * @param key The ingredient key
+     * @param ingredient The ingredient to cache
      */
-    private void saveDataToFile(CompoundTag dataTag) {
-        // Get the data file
-        File saveFile = getDataFile(FILENAME);
-        if (saveFile == null) {
-            ModLogger.warn("Could not save folder data - no save directory available");
-            return;
-        }
-        
-        ModLogger.debug("Saving to file: {}", saveFile.getAbsolutePath());
-        
-        try {
-            SnbtFormat.writeToFile(saveFile, dataTag);
-            ModLogger.debug("Successfully saved folder data");
-        } catch (IOException e) {
-            ModLogger.error("Error saving folders data: {}", e.getMessage(), e);
-        }
+    public void cacheIngredient(String key, Object ingredient) {
+        ingredientCache.put(key, ingredient);
+    }
+    
+    /**
+     * Clears all cached ingredients
+     */
+    public void clearCachedIngredients() {
+        ingredientCache.clear();
+    }
+    
+    /**
+     * Checks if the data is dirty (has unsaved changes)
+     * 
+     * @return true if there are unsaved changes
+     */
+    public boolean isDirty() {
+        return isDirty;
+    }
+    
+    /**
+     * Checks if we're using the fallback directory
+     * 
+     * @return true if using the fallback directory
+     */
+    public boolean isUsingFallbackDir() {
+        return usingFallbackDir;
     }
 }

@@ -36,28 +36,41 @@ public class FolderDataRepresentation {
     
     /**
      * Add a bookmark key to this folder
+     * 
+     * @param key The bookmark key to add
+     * @return true if the bookmark was added, false if it was already present or invalid
      */
-    public void addBookmarkKey(String key) {
-        if (!bookmarkKeys.contains(key)) {
+    public boolean addBookmarkKey(String key) {
+        if (key != null && !key.isEmpty() && !bookmarkKeys.contains(key)) {
             bookmarkKeys.add(key);
             ModLogger.debug("Added bookmark key '{}' to folder '{}', now has {} bookmarks", 
                 key, name, bookmarkKeys.size());
+            return true;
         }
+        return false;
     }
     
     /**
      * Removes a bookmark from this folder.
+     * 
+     * @param bookmarkKey The bookmark key to remove
+     * @return true if the bookmark was removed, false if it wasn't found
      */
-    public boolean removeBookmark(String bookmarkKey) {
-        boolean removed = bookmarkKeys.remove(bookmarkKey);
-        if (removed) {
-            ModLogger.debug("Removed bookmark '{}' from folder '{}'", bookmarkKey, name);
+    public boolean removeBookmarkKey(String bookmarkKey) {
+        if (bookmarkKey != null && !bookmarkKey.isEmpty()) {
+            boolean removed = bookmarkKeys.remove(bookmarkKey);
+            if (removed) {
+                ModLogger.debug("Removed bookmark '{}' from folder '{}'", bookmarkKey, name);
+            }
+            return removed;
         }
-        return removed;
+        return false;
     }
     
     /**
      * Get a copy of the bookmark keys to avoid modification issues
+     * 
+     * @return A copy of the list of bookmark keys
      */
     public List<String> getBookmarkKeys() {
         return new ArrayList<>(bookmarkKeys);
@@ -65,9 +78,12 @@ public class FolderDataRepresentation {
     
     /**
      * Checks if the folder contains the given bookmark.
+     * 
+     * @param bookmarkKey The bookmark key to check
+     * @return true if the bookmark is in this folder
      */
     public boolean containsBookmark(String bookmarkKey) {
-        return bookmarkKeys.contains(bookmarkKey);
+        return bookmarkKey != null && !bookmarkKey.isEmpty() && bookmarkKeys.contains(bookmarkKey);
     }
     
     /**
@@ -109,7 +125,10 @@ public class FolderDataRepresentation {
         if (tag.contains("bookmarks")) {
             ListTag bookmarksTag = tag.getList("bookmarks", Tag.TAG_STRING);
             for (int i = 0; i < bookmarksTag.size(); i++) {
-                folder.bookmarkKeys.add(bookmarksTag.getString(i));
+                String bookmarkKey = bookmarksTag.getString(i);
+                if (bookmarkKey != null && !bookmarkKey.isEmpty()) {
+                    folder.bookmarkKeys.add(bookmarkKey);
+                }
             }
         }
 

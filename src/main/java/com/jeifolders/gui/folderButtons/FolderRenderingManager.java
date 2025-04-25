@@ -1,27 +1,19 @@
 package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.gui.ExclusionHandler;
+import com.jeifolders.gui.LayoutConstants;
 import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.data.FolderDataRepresentation;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.Rect2i;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
-
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Unified rendering and layout manager for the folder system.
- * Consolidates functionality previously spread across:
- * - FolderLayoutManager
- * - FolderGuiManager
+ * Layout manager for the folder system.
+ * Responsible for calculating positions and dimensions for UI elements.
  */
 public class FolderRenderingManager {
     // Singleton instance
@@ -72,25 +64,12 @@ public class FolderRenderingManager {
     // ----- Reference to the unified folder manager -----
     private final UnifiedFolderManager folderManager;
     
-    // ----- GUI Management -----
-    private static FolderButtonSystem folderButton;
-    private static boolean isInitialized = false;
-    
     /**
      * Private constructor for singleton pattern
      */
     private FolderRenderingManager() {
         this.folderManager = UnifiedFolderManager.getInstance();
         calculateInitialLayout();
-        registerEventHandlers();
-    }
-    
-    /**
-     * Registers event handlers with NeoForge
-     */
-    private void registerEventHandlers() {
-        NeoForge.EVENT_BUS.register(FolderRenderingManager.class);
-        ModLogger.debug("FolderRenderingManager registered with NeoForge EVENT_BUS");
     }
     
     /**
@@ -112,58 +91,6 @@ public class FolderRenderingManager {
     }
     
     /**
-     * Get the folder button interface for external components to interact with
-     * 
-     * @return The folder button interface, or null if not initialized
-     */
-    public static FolderButtonInterface getFolderButton() {
-        return folderButton;
-    }
-    
-    /**
-     * Checks if the folder button system is initialized
-     * 
-     * @return true if the system is initialized and ready to use
-     */
-    public static boolean isInitialized() {
-        return isInitialized && folderButton != null;
-    }
-    
-    @SubscribeEvent
-    public static void onGuiInit(ScreenEvent.Init.Post event) {
-        Screen screen = event.getScreen();
-        if (screen instanceof AbstractContainerScreen) {
-            ModLogger.debug("Adding folder button to GUI: {}", screen.getClass().getSimpleName());
-            
-            // Create the folder button system once, or reuse the existing instance
-            if (folderButton == null || !isInitialized) {
-                folderButton = new FolderButtonSystem();
-                isInitialized = true;
-                ModLogger.debug("Created new FolderButtonSystem instance");
-            } else {
-                ModLogger.debug("Reusing existing FolderButtonSystem instance");
-            }
-            
-            // Add the button to the screen's listeners
-            event.addListener(folderButton);
-            
-            // Make sure the bookmark display is refreshed after screen initialization
-            if (folderButton != null) {
-                folderButton.refreshBookmarkDisplay();
-                ModLogger.debug("Refreshed bookmark display after GUI init");
-            }
-        }
-    }
-    
-    @SubscribeEvent
-    public static void onTick(ServerTickEvent.Post event) {
-        // Only tick the folder button when a container screen is open
-        if (folderButton != null && Minecraft.getInstance().screen instanceof AbstractContainerScreen) {
-            folderButton.tick();
-        }
-    }
-    
-    /**
      * Performs initial layout calculations
      */
     private void calculateInitialLayout() {
@@ -175,7 +102,7 @@ public class FolderRenderingManager {
      * 
      * @return true if screen dimensions have changed or cache is invalid
      */
-    private boolean needsRecalculation() {
+    public boolean needsRecalculation() {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.getWindow() == null) return true;
         
@@ -248,8 +175,7 @@ public class FolderRenderingManager {
 
         // Calculate available width and determine folders per row
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
-        int guiWidth = 176; // Standard GUI width
-        int guiLeft = (screenWidth - guiWidth) / 2;
+        int guiLeft = LayoutConstants.calculateGuiLeft(screenWidth);
 
         int availableWidth = Math.max(1, guiLeft - PADDING_X);
         int folderWidth = ICON_WIDTH + (2 * FOLDER_SPACING_X);
@@ -261,7 +187,7 @@ public class FolderRenderingManager {
         }
         
         // Calculate and cache maxExclusionWidth
-        cachedMaxExclusionWidth = Math.max(50, guiLeft);
+        cachedMaxExclusionWidth = LayoutConstants.calculateMaxWidthBeforeGui(screenWidth);
         
         ModLogger.debug("Layout calculation: screen width: {}, available width: {}, folders per row: {}", 
                       screenWidth, availableWidth, foldersPerRow);
@@ -278,7 +204,6 @@ public class FolderRenderingManager {
     
     /**
      * Calculates folder button position based on its index in the grid.
-     * Results are cached for performance.
      * 
      * @param index The index of the folder (0 is for the add button)
      * @return int[] array with [x, y] coordinates
@@ -378,7 +303,6 @@ public class FolderRenderingManager {
     
     /**
      * Calculates the delete button position based on screen dimensions
-     * Uses caching for better performance.
      * 
      * @return int[] array with [x, y] coordinates
      */
@@ -396,7 +320,7 @@ public class FolderRenderingManager {
         
         // Use cached maxExclusionWidth if available
         int maxExclusionWidth = cachedMaxExclusionWidth > 0 ? 
-            cachedMaxExclusionWidth : Math.max(50, (minecraft.getWindow().getGuiScaledWidth() - 176) / 2);
+            cachedMaxExclusionWidth : LayoutConstants.calculateMaxWidthBeforeGui(minecraft.getWindow().getGuiScaledWidth());
             
         maxExclusionWidth = Math.max(40, maxExclusionWidth - 10);
         
@@ -418,7 +342,6 @@ public class FolderRenderingManager {
     
     /**
      * Updates the exclusion zone dimensions based on current state
-     * Uses caching to avoid redundant calculations.
      * 
      * @param folderCount Number of folders
      * @param foldersVisible Whether folders are currently visible
@@ -451,7 +374,7 @@ public class FolderRenderingManager {
 
         // Use cached max exclusion width if available
         int maxExclusionWidth = cachedMaxExclusionWidth > 0 ? 
-            cachedMaxExclusionWidth : Math.max(50, (minecraft.getWindow().getGuiScaledWidth() - 176) / 2);
+            cachedMaxExclusionWidth : LayoutConstants.calculateMaxWidthBeforeGui(minecraft.getWindow().getGuiScaledWidth());
         
         // Calculate width of the exclusion zone
         int exclusionWidth;

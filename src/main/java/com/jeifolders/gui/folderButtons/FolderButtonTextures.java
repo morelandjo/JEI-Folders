@@ -5,22 +5,18 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * Manages all GUI textures using a single sprite sheet.
+ * Manages all GUI textures
  */
 public class FolderButtonTextures {
-    // The main sprite sheet containing all GUI textures
     public static final ResourceLocation SPRITE_SHEET = ResourceLocation.fromNamespaceAndPath(JEIFolders.MOD_ID, "textures/gui/folders.png");
 
-    // Total width and height of the sprite sheet
     private static final int SHEET_WIDTH = 64;
     private static final int SHEET_HEIGHT = 64;
 
-    // Standard icon dimensions
     public static final int ICON_WIDTH = 16;
     public static final int ICON_HEIGHT = 16;
 
     // Sprite positions in the sprite sheet (U, V coordinates)
-    // Updated icon locations based on your specifications
     private static final int FOLDER_ADD_U = 0;
     private static final int FOLDER_ADD_V = 0;
     

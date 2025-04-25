@@ -45,4 +45,17 @@ public class SnbtFormat {
         // This gives us something like {folders:[{id:0,name:"test",bookmarks:[]}],nextId:1}
         return tag.toString();
     }
+    
+    /**
+     * Format a CompoundTag to a nicely formatted SNBT string with indentation
+     * 
+     * @param tag The tag to format
+     * @return Formatted SNBT string
+     */
+    public static String format(CompoundTag tag) {
+        // Simple implementation that adds indentation to make the SNBT more readable
+        return tag.toString().replace(",", ",\n  ")
+            .replace("{", "{\n  ")
+            .replace("}", "\n}");
+    }
 }

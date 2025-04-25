@@ -146,16 +146,30 @@ public class TypedIngredientHelper {
         try {
             // First invalidate the cache if requested
             if (invalidateCache) {
-                folderService.invalidateIngredientsCache(folderId);
+                IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+                ingredientService.invalidateIngredientsCache(folderId);
             }
             
+            // Get the folder to access its bookmark keys
+            Optional<FolderDataRepresentation> folderOpt = folderService.getFolder(folderId);
+            if (!folderOpt.isPresent()) {
+                ModLogger.warn("Folder with ID {} not found", folderId);
+                return new ArrayList<>();
+            }
+            
+            FolderDataRepresentation folder = folderOpt.get();
+            
             // Get bookmark keys to log the count
-            List<String> bookmarkKeys = folderService.getFolderBookmarkKeys(folderId);
+            List<String> bookmarkKeys = folder.getBookmarkKeys();
             ModLogger.info("Loading {} bookmarks from folder ID {}", bookmarkKeys.size(), folderId);
             
-            // Get fresh ingredients from cache
-            List<Object> rawIngredients = folderService.getCachedIngredientsForFolder(folderId);
-            return wrapIngredients(rawIngredients);
+            // Get fresh ingredients from ingredient service
+            IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+            List<ITypedIngredient<?>> jeiIngredients = ingredientService.getCachedIngredientsForFolder(folderId);
+            
+            // Convert JEI ingredients to our wrappers
+            List<BookmarkIngredient> bookmarkIngredients = wrapJeiIngredients(jeiIngredients);
+            return extractFromBookmarkIngredients(bookmarkIngredients);
         } catch (Exception e) {
             ModLogger.error("Error loading bookmarks from folder {}: {}", folderId, e.getMessage(), e);
             return new ArrayList<>();
