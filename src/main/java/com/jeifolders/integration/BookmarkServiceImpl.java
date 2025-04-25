@@ -1,11 +1,10 @@
 package com.jeifolders.integration;
 
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.data.FolderDataManager;
+import com.jeifolders.data.FolderDataService;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -16,11 +15,11 @@ import java.util.Optional;
 public class BookmarkServiceImpl implements BookmarkService {
     private static final BookmarkServiceImpl INSTANCE = new BookmarkServiceImpl();
     private final IngredientService ingredientService;
-    private final FolderDataManager folderManager;
+    private final FolderDataService folderService;
     
     private BookmarkServiceImpl() {
         this.ingredientService = IngredientServiceImpl.getInstance();
-        this.folderManager = FolderDataManager.getInstance();
+        this.folderService = FolderDataService.getInstance();
     }
     
     /**
@@ -38,7 +37,7 @@ public class BookmarkServiceImpl implements BookmarkService {
             return;
         }
         
-        folderManager.addBookmarkToFolder(folderId, key);
+        folderService.addBookmarkToFolder(folderId, key);
         ModLogger.debug("Added bookmark {} to folder {}", key, folderId);
     }
     
@@ -50,7 +49,7 @@ public class BookmarkServiceImpl implements BookmarkService {
             return;
         }
         
-        folderManager.removeBookmarkFromFolder(folderId, key);
+        folderService.removeBookmarkFromFolder(folderId, key);
         ModLogger.debug("Removed bookmark {} from folder {}", key, folderId);
     }
     
@@ -66,7 +65,7 @@ public class BookmarkServiceImpl implements BookmarkService {
     
     @Override
     public List<String> getBookmarkKeysForFolder(int folderId) {
-        Optional<FolderDataRepresentation> folder = folderManager.getFolder(folderId);
+        Optional<FolderDataRepresentation> folder = folderService.getFolder(folderId);
         if (folder.isEmpty()) {
             ModLogger.warn("Could not find folder with id {}", folderId);
             return Collections.emptyList();
@@ -82,7 +81,7 @@ public class BookmarkServiceImpl implements BookmarkService {
             return false;
         }
         
-        Optional<FolderDataRepresentation> folder = folderManager.getFolder(folderId);
+        Optional<FolderDataRepresentation> folder = folderService.getFolder(folderId);
         return folder.isPresent() && folder.get().containsBookmark(key);
     }
     

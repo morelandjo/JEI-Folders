@@ -1,7 +1,6 @@
 package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.events.BookmarkEvents;
 import com.jeifolders.gui.FolderNameInputScreen;
 import com.jeifolders.gui.bookmarks.BookmarkManager;
 import com.jeifolders.integration.JEIIntegrationFactory;
@@ -35,27 +34,21 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     // Exclusion zone
     public static Rect2i lastDrawnArea = new Rect2i(0, 0, 0, 0);
     
-    // Services
-    private final FolderStateManager stateManager;
-    private final FolderButtonStateManager legacyStateManager; // For backward compatibility
+    // Consolidated managers
+    private final UnifiedFolderManager folderManager;
+    private final FolderRenderingManager renderingManager;
     private final BookmarkManager bookmarkManager;
-    private final BookmarkEvents eventSystem;
-    private final FolderLayoutManager layoutManager;
-    private final FolderEventManager eventManager;
     
     public FolderButtonSystem() {
         super(10, 10, FolderButtonTextures.ICON_WIDTH, FolderButtonTextures.ICON_HEIGHT, 
               Component.translatable("gui.jeifolders.folder"));
         
-        ModLogger.debug("Initializing FolderButton with specialized components");
+        ModLogger.debug("Initializing FolderButton with consolidated components");
         
         // Initialize the component classes
-        this.layoutManager = new FolderLayoutManager();
-        this.eventManager = FolderEventManager.getInstance();
-        this.stateManager = FolderStateManager.getInstance();
-        this.legacyStateManager = new FolderButtonStateManager(); // For backward compatibility
-        this.bookmarkManager = new BookmarkManager(legacyStateManager); // Will be updated later
-        this.eventSystem = BookmarkEvents.getInstance();
+        this.folderManager = UnifiedFolderManager.getInstance();
+        this.renderingManager = FolderRenderingManager.getInstance();
+        this.bookmarkManager = new BookmarkManager(folderManager);
         
         // Initialize window size tracking
         Minecraft minecraft = Minecraft.getInstance();
@@ -65,20 +58,20 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         }
         
         // Calculate initial layout and load folders
-        layoutManager.calculateFoldersPerRow();
+        renderingManager.calculateFoldersPerRow();
         loadFolders();
         
         // Update layout positions and bookmark display bounds
         updateLayoutPositions();
         
         ModLogger.debug("FolderButtonSystem initialized with {} folders, visibility: {}, foldersPerRow: {}",
-            stateManager.getFolderButtons().size(), stateManager.areFoldersVisible(), layoutManager.getFoldersPerRow());
+            folderManager.getFolderButtons().size(), folderManager.areFoldersVisible(), renderingManager.getFoldersPerRow());
             
         // Set up JEI runtime initialization
         initializeJeiRuntime();
         
         // Restore the state if needed
-        if (stateManager.shouldRestoreFromStaticState()) {
+        if (folderManager.shouldRestoreFromStaticState()) {
             bookmarkManager.restoreFromStaticState();
         }
         
@@ -89,38 +82,29 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      * Loads all folders and initializes folder buttons
      */
     private void loadFolders() {
-        List<FolderDataRepresentation> folders = stateManager.loadAllFolders();
-        Integer lastActiveFolderId = stateManager.getLastActiveFolderId();
+        List<FolderDataRepresentation> folders = folderManager.loadAllFolders();
+        Integer lastActiveFolderId = folderManager.getLastActiveFolderId();
         FolderButton buttonToActivate = null;
         
         // Create folder buttons from the loaded data
         for (int i = 0; i < folders.size(); i++) {
             FolderDataRepresentation folder = folders.get(i);
             // Calculate positions using index + 1 (leaving 0 for Add button)
-            int[] position = layoutManager.calculateFolderPosition(i + 1);
+            int[] position = renderingManager.calculateFolderPosition(i + 1);
             int x = position[0];
             int y = position[1];
 
             FolderButton button = new FolderButton(x, y, folder, this::onFolderClicked);
-            stateManager.getFolderButtons().add(button);
+            folderManager.getFolderButtons().add(button);
 
             if (lastActiveFolderId != null && folder.getId() == lastActiveFolderId) {
                 buttonToActivate = button;
             }
         }
 
-        // Sync with legacy state manager for now (will be removed later)
-        legacyStateManager.loadFolders(
-            layoutManager.getPaddingX(), 
-            layoutManager.getPaddingY(), 
-            layoutManager.getFoldersPerRow(),
-            layoutManager.getIconWidth() + (2 * layoutManager.getFolderSpacingX()),
-            layoutManager.getFolderSpacingY()
-        );
-
         // Set active folder if needed
         if (buttonToActivate != null) {
-            stateManager.setActiveFolder(buttonToActivate);
+            folderManager.setActiveFolder(buttonToActivate);
         }
     }
     
@@ -128,12 +112,12 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      * Updates the vertical positions for folder names and bookmark display
      */
     private void updateLayoutPositions() {
-        layoutManager.updateLayoutPositions(stateManager.getFolderButtons().size());
+        renderingManager.updateLayoutPositions(folderManager.getFolderButtons().size());
         
         // Update the bookmark manager with the calculated positions
         bookmarkManager.setCalculatedPositions(
-            layoutManager.getCalculatedNameY(), 
-            layoutManager.getCalculatedBookmarkDisplayY()
+            renderingManager.getFolderNameY(), 
+            renderingManager.getBookmarkDisplayY()
         );
     }
     
@@ -143,7 +127,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     private void onFolderClicked(FolderDataRepresentation folder) {
         // Find which button was clicked
         FolderButton clickedButton = null;
-        for (FolderButton button : stateManager.getFolderButtons()) {
+        for (FolderButton button : folderManager.getFolderButtons()) {
             if (button.getFolder() == folder) {
                 clickedButton = button;
                 break;
@@ -155,22 +139,22 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         }
 
         // Fire the folder clicked event
-        eventManager.fireFolderClickedEvent(folder);
+        folderManager.fireFolderClickedEvent(folder);
 
         // Handle toggle behavior (deactivate if already active)
-        if (stateManager.getActiveFolder() == clickedButton) {
-            stateManager.deactivateActiveFolder();
+        if (folderManager.getActiveFolder() == clickedButton) {
+            folderManager.deactivateActiveFolder();
             return;
         }
 
         // Set as active folder
-        stateManager.setActiveFolder(clickedButton);
+        folderManager.setActiveFolder(clickedButton);
     }
     
     @Override
     public void renderWidget(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // Calculate the position for the Add button as if it's the first icon in the grid
-        int[] addButtonPos = layoutManager.calculateAddButtonPosition();
+        int[] addButtonPos = renderingManager.calculateAddButtonPosition();
         int addButtonX = addButtonPos[0];
         int addButtonY = addButtonPos[1];
 
@@ -181,13 +165,13 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         // Render the add folder button using the sprite sheet
         FolderButtonTextures.renderAddFolderIcon(graphics, addButtonX, addButtonY, isHovered);
 
-        if (stateManager.areFoldersVisible()) {
-            for (FolderButton button : stateManager.getFolderButtons()) {
+        if (folderManager.areFoldersVisible()) {
+            for (FolderButton button : folderManager.getFolderButtons()) {
                 button.render(graphics, mouseX, mouseY, partialTick);
             }
         }
 
-        if (stateManager.hasActiveFolder()) {
+        if (folderManager.hasActiveFolder()) {
             renderActiveFolderDetails(graphics, mouseX, mouseY);
         } else {
             currentDeleteButtonX = -1;
@@ -195,7 +179,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
             deleteHovered = false;
         }
 
-        if (stateManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
+        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
             bookmarkManager.getBookmarkDisplay().render(graphics, mouseX, mouseY, partialTick);
         }
 
@@ -206,7 +190,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      * Renders details for the active folder, including name and delete button
      */
     private void renderActiveFolderDetails(GuiGraphics graphics, int mouseX, int mouseY) {
-        FolderButton activeFolder = stateManager.getActiveFolder();
+        FolderButton activeFolder = folderManager.getActiveFolder();
         if (activeFolder == null) {
             return;
         }
@@ -222,14 +206,14 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
             Minecraft.getInstance().font,
             displayName,
             10,
-            layoutManager.getCalculatedNameY(),
+            renderingManager.getFolderNameY(),
             0xFFFFFF,
             true
         );
 
         // Show tooltip with the full name when hovering over a truncated name
         if (!displayName.equals(fullName) && mouseX >= 10 && mouseX < 10 + Minecraft.getInstance().font.width(displayName) &&
-            mouseY >= layoutManager.getCalculatedNameY() - 4 && mouseY < layoutManager.getCalculatedNameY() + 10) {
+            mouseY >= renderingManager.getFolderNameY() - 4 && mouseY < renderingManager.getFolderNameY() + 10) {
             graphics.renderTooltip(
                 Minecraft.getInstance().font,
                 Component.literal(fullName),
@@ -238,7 +222,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         }
 
         // Calculate and position the delete button using the layout manager
-        int[] deleteButtonPos = layoutManager.calculateDeleteButtonPosition();
+        int[] deleteButtonPos = renderingManager.calculateDeleteButtonPosition();
         int deleteX = deleteButtonPos[0];
         int deleteY = deleteButtonPos[1];
         
@@ -265,24 +249,24 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      */
     private void updateExclusionZone() {
         int bookmarkDisplayHeight = 0;
-        if (stateManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
+        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
             bookmarkDisplayHeight = bookmarkManager.getBookmarkDisplay().getHeight();
         }
         
-        lastDrawnArea = layoutManager.updateExclusionZone(
-            stateManager.getFolderButtons().size(), 
-            stateManager.areFoldersVisible(), 
-            stateManager.hasActiveFolder(),
+        lastDrawnArea = renderingManager.updateExclusionZone(
+            folderManager.getFolderButtons().size(), 
+            folderManager.areFoldersVisible(), 
+            folderManager.hasActiveFolder(),
             bookmarkDisplayHeight
         );
         
         // Update bookmark display bounds if active
-        if (stateManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
-            Rect2i zone = layoutManager.getExclusionZone();
+        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
+            Rect2i zone = renderingManager.getExclusionZone();
             int bookmarkDisplayWidth = zone.getWidth() + 10;
             bookmarkManager.getBookmarkDisplay().updateBounds(
                 0, 
-                layoutManager.getCalculatedBookmarkDisplayY(), 
+                renderingManager.getBookmarkDisplayY(), 
                 bookmarkDisplayWidth,
                 bookmarkManager.getBookmarkDisplay().getHeight()
             );
@@ -293,17 +277,17 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (currentDeleteButtonX >= 0 && button == 0 && deleteHovered) {
             // Fire delete button clicked event before deleting
-            if (stateManager.hasActiveFolder()) {
-                eventManager.fireDeleteButtonClickedEvent(stateManager.getActiveFolder().getFolder().getId());
+            if (folderManager.hasActiveFolder()) {
+                folderManager.fireDeleteButtonClickedEvent(folderManager.getActiveFolder().getFolder().getId());
             }
             
-            stateManager.deleteActiveFolder();
+            folderManager.deleteActiveFolder();
             loadFolders();
             return true;
         }
 
-        if (stateManager.areFoldersVisible()) {
-            for (FolderButton folderButton : stateManager.getFolderButtons()) {
+        if (folderManager.areFoldersVisible()) {
+            for (FolderButton folderButton : folderManager.getFolderButtons()) {
                 if (folderButton.mouseClicked(mouseX, mouseY, button)) {
                     return true;
                 }
@@ -316,7 +300,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         }
 
         // Calculate the position for the Add button
-        int[] addButtonPos = layoutManager.calculateAddButtonPosition();
+        int[] addButtonPos = renderingManager.calculateAddButtonPosition();
         int addButtonX = addButtonPos[0];
         int addButtonY = addButtonPos[1];
 
@@ -324,7 +308,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         if (mouseX >= addButtonX && mouseX < addButtonX + width &&
             mouseY >= addButtonY && mouseY < addButtonY + height && button == 0) {
             // Fire add button clicked event
-            eventManager.fireAddButtonClickedEvent();
+            folderManager.fireAddButtonClickedEvent();
             
             this.showFolderNameInputScreen();
             return true;
@@ -353,12 +337,12 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
             lastWindowHeight = currentHeight;
             
             // Recalculate layout with preserved folder state
-            layoutManager.calculateFoldersPerRow();
+            renderingManager.calculateFoldersPerRow();
             loadFolders();
             updateLayoutPositions();
             
             // Force update bookmark display after window resize
-            if (stateManager.hasActiveFolder()) {
+            if (folderManager.hasActiveFolder()) {
                 // Use our explicit refresh method which handles everything properly
                 bookmarkManager.refreshBookmarkDisplay();
                 ModLogger.info("Updated bookmark display after resize");
@@ -372,9 +356,9 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      * @return The newly created folder
      */
     public FolderDataRepresentation createFolder(String name) {
-        FolderDataRepresentation folder = stateManager.createFolder(name);
+        FolderDataRepresentation folder = folderManager.createFolder(name);
         // Update UI state after folder creation
-        stateManager.setFoldersVisible(true);
+        folderManager.setFoldersVisible(true);
         loadFolders();
         updateLayoutPositions();
         return folder;
@@ -401,31 +385,22 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     @Override
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
         // First check if the ingredient is dropped on a folder button
-        FolderButton targetFolder = stateManager.getFolderButtonAt(mouseX, mouseY);
+        FolderButton targetFolder = folderManager.getFolderButtonAt(mouseX, mouseY);
         
         if (targetFolder != null) {
             // If dropped on a folder, activate it and add the ingredient
-            stateManager.setActiveFolder(targetFolder);
-            
-            // Sync with legacy state for backward compatibility
-            legacyStateManager.loadFolders(
-                layoutManager.getPaddingX(), 
-                layoutManager.getPaddingY(), 
-                layoutManager.getFoldersPerRow(),
-                layoutManager.getIconWidth() + (2 * layoutManager.getFolderSpacingX()),
-                layoutManager.getFolderSpacingY()
-            );
+            folderManager.setActiveFolder(targetFolder);
             
             // Fire ingredient dropped event
-            eventManager.fireIngredientDroppedEvent(ingredient, targetFolder.getFolder().getId());
+            folderManager.fireIngredientDroppedEvent(ingredient, targetFolder.getFolder().getId());
             
             // Use the bookmark manager to handle the actual ingredient storing
-            return bookmarkManager.handleIngredientDrop(mouseX, mouseY, ingredient, stateManager.areFoldersVisible());
+            return bookmarkManager.handleIngredientDrop(mouseX, mouseY, ingredient, folderManager.areFoldersVisible());
         }
         
         // Handle case where ingredient is dropped on bookmark area
-        if (stateManager.hasActiveFolder()) {
-            return bookmarkManager.handleIngredientDrop(mouseX, mouseY, ingredient, stateManager.areFoldersVisible());
+        if (folderManager.hasActiveFolder()) {
+            return bookmarkManager.handleIngredientDrop(mouseX, mouseY, ingredient, folderManager.areFoldersVisible());
         }
         
         return false;
@@ -433,7 +408,6 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     
     public void tick() {
         checkForWindowResize();
-        legacyStateManager.tickFolderButtons();
     }
     
     /**
@@ -469,72 +443,31 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     }
     
     /**
-     * Gets the state manager instance
-     * @return The state manager
+     * Gets the unified folder manager instance
+     * @return The unified folder manager
      */
-    public FolderStateManager getStateManager() {
-        return stateManager;
+    public UnifiedFolderManager getFolderManager() {
+        return folderManager;
     }
     
     /**
-     * Gets the event system instance
-     * @return The event system
+     * Gets the rendering manager instance
+     * @return The rendering manager
      */
-    public BookmarkEvents getEventSystem() {
-        return eventSystem;
-    }
-    
-    /**
-     * Adds a listener for folder button clicks
-     * @param listener The listener to add
-     * @deprecated Use the FolderEventManager directly instead
-     */
-    @Deprecated
-    public static void addClickListener(Consumer<FolderButtonSystem> listener) {
-        if (listener != null) {
-            // Bridge to the new event system
-            FolderEventManager manager = FolderEventManager.getInstance();
-            
-            // Map all click events to this listener
-            manager.addEventListener(FolderEventManager.EventType.ADD_BUTTON_CLICKED, event -> {
-                listener.accept(null);
-            });
-            
-            manager.addEventListener(FolderEventManager.EventType.FOLDER_CLICKED, event -> {
-                listener.accept(null);
-            });
-            
-            manager.addEventListener(FolderEventManager.EventType.DELETE_BUTTON_CLICKED, event -> {
-                listener.accept(null);
-            });
-            
-            manager.addEventListener(FolderEventManager.EventType.BOOKMARK_CLICKED, event -> {
-                listener.accept(null);
-            });
-        }
-    }
-    
-    /**
-     * Removes a click listener
-     * @param listener The listener to remove
-     * @deprecated Use the FolderEventManager directly instead
-     */
-    @Deprecated
-    public static void removeClickListener(Consumer<FolderButtonSystem> listener) {
-        // Not implemented in the bridge - use EventManager directly instead
-        ModLogger.warn("removeClickListener is deprecated - use FolderEventManager directly");
+    public FolderRenderingManager getRenderingManager() {
+        return renderingManager;
     }
     
     // Implementation of FolderButtonInterface
     
     @Override
     public List<FolderButton> getFolderButtons() {
-        return stateManager.getFolderButtons();
+        return folderManager.getFolderButtons();
     }
 
     @Override
     public boolean isBookmarkAreaAvailable() {
-        return stateManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null;
+        return folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null;
     }
 
     @Override
@@ -548,13 +481,5 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
             );
         }
         return new Rect2i(0, 0, 0, 0);
-    }
-
-    /**
-     * Gets the layout manager instance
-     * @return The layout manager
-     */
-    public FolderLayoutManager getLayoutManager() {
-        return layoutManager;
     }
 }

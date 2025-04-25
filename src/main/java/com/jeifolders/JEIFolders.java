@@ -1,8 +1,8 @@
 package com.jeifolders;
 
 import com.jeifolders.integration.JEIIntegration;
-import com.jeifolders.data.FolderDataManager;
-import com.jeifolders.gui.folderButtons.FolderGuiManager;
+import com.jeifolders.data.FolderDataService;
+import com.jeifolders.gui.folderButtons.FolderRenderingManager;
 import com.jeifolders.util.ModLogger;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -36,20 +36,24 @@ public class JEIFolders {
     }
 
     private void clientSetup(final FMLClientSetupEvent event) {
-        ModLogger.info("JEI Folders client setup - initializing folder manager GUI");
-        FolderGuiManager.init();
+        ModLogger.info("Setting up JEI Folders client");
         
-        // Register with JEI runtime when available
+        // Initialize the folder rendering manager
+        FolderRenderingManager.init();
+        
+        // Initialize JEI integration
         JEIIntegration.registerRuntimeAvailableCallback(jeiRuntime -> {
             ModLogger.info("JEI Runtime available, initializing JEI-Folders integration");
             // Any initialization that depends on JEI runtime
         });
+        
+        ModLogger.info("Client setup complete");
     }
 
     private void onWorldLoad(LevelEvent.Load event) {
         if (event.getLevel().isClientSide() && !dataLoaded) {
             ModLogger.debug("Loading folder data on world load");
-            FolderDataManager.getInstance().loadData();
+            FolderDataService.getInstance().loadData();
             dataLoaded = true;
         }
     }
@@ -57,7 +61,7 @@ public class JEIFolders {
     private void onWorldUnload(LevelEvent.Unload event) {
         if (event.getLevel().isClientSide()) {
             ModLogger.debug("Saving folder data on world unload");
-            FolderDataManager.getInstance().saveData();
+            FolderDataService.getInstance().saveData();
             dataLoaded = false;
         }
     }
@@ -65,7 +69,7 @@ public class JEIFolders {
     private void onPlayerLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
         if (!dataLoaded) {
             ModLogger.debug("Loading folder data on player login");
-            FolderDataManager.getInstance().loadData();
+            FolderDataService.getInstance().loadData();
             dataLoaded = true;
         }
     }

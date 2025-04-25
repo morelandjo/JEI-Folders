@@ -91,8 +91,26 @@ public class JeiBookmarkAdapter implements IIngredientGridSource {
      */
     public boolean addBookmark(ITypedIngredient<?> ingredient) {
         if (ingredient != null) {
-            bookmarkList.addBookmark(ingredient);
-            return true;
+            try {
+                // Convert ITypedIngredient to BookmarkIngredient
+                BookmarkIngredient bookmarkIngredient = new BookmarkIngredient(ingredient);
+                
+                // Generate a key for the ingredient
+                String key = com.jeifolders.integration.TypedIngredientHelper.getKeyForIngredient(ingredient);
+                if (key == null || key.isEmpty()) {
+                    ModLogger.warn("Failed to generate key for ingredient");
+                    return false;
+                }
+                
+                // Add the bookmark with the generated key
+                if (bookmarkList.addBookmark(bookmarkIngredient, key)) {
+                    // Notify listeners that the list has changed
+                    notifyListeners();
+                    return true;
+                }
+            } catch (Exception e) {
+                ModLogger.error("Error adding bookmark: {}", e.getMessage(), e);
+            }
         }
         return false;
     }

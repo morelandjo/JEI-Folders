@@ -1,12 +1,12 @@
 package com.jeifolders.integration;
 
 import com.jeifolders.JEIFolders;
-import com.jeifolders.data.FolderDataManager;
+import com.jeifolders.data.FolderDataService;
 import com.jeifolders.gui.ExclusionHandler;
 import com.jeifolders.gui.IngredientDragManager;
 import com.jeifolders.gui.folderButtons.FolderButtonInterface;
 import com.jeifolders.gui.folderButtons.FolderButtonSystem;
-import com.jeifolders.gui.folderButtons.FolderGuiManager;
+import com.jeifolders.gui.folderButtons.FolderRenderingManager;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -84,7 +84,7 @@ public class JEIIntegration implements IModPlugin {
         jeiService.setJeiRuntime(runtime);
         
         // Request data to be loaded now that JEI is available
-        FolderDataManager.getInstance().loadData();
+        FolderDataService.getInstance().loadData();
     }
 
     /**
@@ -97,7 +97,7 @@ public class JEIIntegration implements IModPlugin {
     }
 
     private void initializeFolderButton(IJeiRuntime runtime) {
-        FolderButtonInterface buttonInterface = FolderGuiManager.getFolderButton();
+        FolderButtonInterface buttonInterface = FolderRenderingManager.getFolderButton();
         if (buttonInterface instanceof FolderButtonSystem folderButton) {
             folderButton.setJeiRuntime(runtime);
             ModLogger.debug("JEI runtime provided to folder button");
@@ -227,7 +227,7 @@ public class JEIIntegration implements IModPlugin {
                 JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
                 
                 // Now add the targets since this is an actual drag
-                FolderButtonInterface buttonInterface = FolderGuiManager.getFolderButton();
+                FolderButtonInterface buttonInterface = FolderRenderingManager.getFolderButton();
                 if (buttonInterface instanceof FolderButtonSystem folderButton) {
                     // Add targets for folder buttons
                     folderButton.getFolderButtons().forEach(folderRowButton -> {

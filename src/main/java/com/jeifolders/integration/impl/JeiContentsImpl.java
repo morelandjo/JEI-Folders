@@ -117,7 +117,7 @@ public class JeiContentsImpl {
         
         try {
             // Clear existing bookmarks first
-            bookmarkAdapter.getFolderBookmarkList().clearBookmarks();
+            bookmarkAdapter.getFolderBookmarkList().clear();
             
             // Convert the BookmarkIngredient wrappers to JEI ingredients
             List<ITypedIngredient<?>> jeiIngredients = unwrapIngredients(bookmarkIngredients);

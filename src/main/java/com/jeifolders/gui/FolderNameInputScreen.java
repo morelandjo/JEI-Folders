@@ -78,22 +78,11 @@ public class FolderNameInputScreen extends Screen {
         // Add the name field to the screen
         addWidget(nameField);
         
-        // Set focus to the text field automatically
+        // Set focus to the text field
         setInitialFocus(nameField);
-        nameField.setFocused(true);
         
-        // Set the focus to the name field on each frame until focus is achieved
-        // This is necessary because some MC versions have issues with immediate focus
-        if (minecraft != null) {
-            minecraft.tell(() -> {
-                if (nameField != null && !nameField.isFocused()) {
-                    nameField.setFocused(true);
-                    setFocused(nameField);
-                }
-            });
-        }
+        
     }
-    
     
     @Override
     public void render(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {

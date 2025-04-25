@@ -1,6 +1,6 @@
 package com.jeifolders.integration;
 
-import com.jeifolders.data.FolderDataManager;
+import com.jeifolders.data.FolderDataService;
 import com.jeifolders.data.FolderDataRepresentation;
 import com.jeifolders.gui.bookmarks.UnifiedFolderContentsDisplay;
 import com.jeifolders.util.ModLogger;
@@ -137,24 +137,24 @@ public class TypedIngredientHelper {
      * Loads bookmarks from a folder and returns them as TypedIngredient objects.
      * Centralizes folder bookmark loading logic to avoid duplication.
      *
-     * @param folderManager The folder data manager to use
+     * @param folderService The folder data service to use
      * @param folderId The ID of the folder to load bookmarks from
      * @param invalidateCache Whether to invalidate the cache before loading
      * @return A list of TypedIngredient objects representing the folder's bookmarks
      */
-    public static List<TypedIngredient> loadBookmarksFromFolder(FolderDataManager folderManager, int folderId, boolean invalidateCache) {
+    public static List<TypedIngredient> loadBookmarksFromFolder(FolderDataService folderService, int folderId, boolean invalidateCache) {
         try {
             // First invalidate the cache if requested
             if (invalidateCache) {
-                folderManager.invalidateIngredientsCache(folderId);
+                folderService.invalidateIngredientsCache(folderId);
             }
             
             // Get bookmark keys to log the count
-            List<String> bookmarkKeys = folderManager.getFolderBookmarkKeys(folderId);
+            List<String> bookmarkKeys = folderService.getFolderBookmarkKeys(folderId);
             ModLogger.info("Loading {} bookmarks from folder ID {}", bookmarkKeys.size(), folderId);
             
             // Get fresh ingredients from cache
-            List<Object> rawIngredients = folderManager.getCachedIngredientsForFolder(folderId);
+            List<Object> rawIngredients = folderService.getCachedIngredientsForFolder(folderId);
             return wrapIngredients(rawIngredients);
         } catch (Exception e) {
             ModLogger.error("Error loading bookmarks from folder {}: {}", folderId, e.getMessage(), e);
@@ -168,13 +168,13 @@ public class TypedIngredientHelper {
      *
      * @param bookmarkDisplay The display to update
      * @param folder The folder to load ingredients from
-     * @param folderManager The folder data manager
+     * @param folderService The folder data service
      * @return The list of TypedIngredient objects that were loaded and set
      */
     public static List<TypedIngredient> refreshBookmarkDisplay(
             UnifiedFolderContentsDisplay bookmarkDisplay,
             FolderDataRepresentation folder,
-            FolderDataManager folderManager) {
+            FolderDataService folderService) {
         
         if (bookmarkDisplay == null || folder == null) {
             return new ArrayList<>();
@@ -182,7 +182,7 @@ public class TypedIngredientHelper {
         
         try {
             // Load bookmarks, invalidating cache
-            List<TypedIngredient> ingredients = loadBookmarksFromFolder(folderManager, folder.getId(), true);
+            List<TypedIngredient> ingredients = loadBookmarksFromFolder(folderService, folder.getId(), true);
             
             // Set active folder
             bookmarkDisplay.setActiveFolder(folder);

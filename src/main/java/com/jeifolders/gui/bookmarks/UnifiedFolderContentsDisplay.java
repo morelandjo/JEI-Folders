@@ -1,8 +1,8 @@
 package com.jeifolders.gui.bookmarks;
 
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.events.BookmarkEvents;
-import com.jeifolders.data.FolderDataManager;
+import com.jeifolders.data.FolderDataService;
+import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
@@ -33,7 +33,7 @@ public class UnifiedFolderContentsDisplay {
     private static final int DEFAULT_DISPLAY_HEIGHT = 100;
 
     // Core components
-    private final FolderDataManager folderManager;
+    private final FolderDataService folderService;
     private final IngredientService ingredientService;
     private final FolderBookmarkList bookmarkList;
     private final JeiBookmarkAdapter bookmarkAdapter;
@@ -62,19 +62,19 @@ public class UnifiedFolderContentsDisplay {
     private Rectangle2i lastCalculatedArea = Rectangle2i.EMPTY;
     
     // Event system
-    private final BookmarkEvents eventSystem = BookmarkEvents.getInstance();
-    private final Consumer<BookmarkEvents.BookmarkEvent> folderChangedListener;
+    private final UnifiedFolderManager eventManager = UnifiedFolderManager.getInstance();
+    private final Consumer<UnifiedFolderManager.FolderEvent> folderChangedListener;
 
     /**
      * Creates a new unified folder contents display
      */
     private UnifiedFolderContentsDisplay(
-        FolderDataManager folderManager, 
+        FolderDataService folderService, 
         FolderBookmarkList bookmarkList,
         JeiBookmarkAdapter bookmarkAdapter, 
         JeiContentsImpl contentsImpl
     ) {
-        this.folderManager = folderManager;
+        this.folderService = folderService;
         this.ingredientService = JEIIntegrationFactory.getIngredientService();
         this.bookmarkList = bookmarkList;
         this.bookmarkAdapter = bookmarkAdapter;
@@ -84,21 +84,21 @@ public class UnifiedFolderContentsDisplay {
         this.folderChangedListener = event -> {
             // Check if this event is for our active folder
             if (activeFolder != null && event.getFolderId() == activeFolder.getId()) {
-                ModLogger.info("BookmarkEvents: Active folder {} was modified, refreshing display", event.getFolderId());
+                ModLogger.info("FolderEventManager: Active folder {} was modified, refreshing display", event.getFolderId());
                 needsRefresh = true;
             }
         };
         
         // Register with new event system
-        eventSystem.addListener(BookmarkEvents.EventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
+        eventManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
     }
 
     /**
      * Creates a new instance of UnifiedFolderContentsDisplay
-     * @param folderManager The folder data manager
+     * @param folderService The folder data service
      * @return An optional containing the new display if creation was successful
      */
-    public static Optional<UnifiedFolderContentsDisplay> create(FolderDataManager folderManager) {
+    public static Optional<UnifiedFolderContentsDisplay> create(FolderDataService folderService) {
         try {
             // Get the JEI service and runtime directly
             var jeiService = JEIIntegrationFactory.getJEIService();
@@ -116,7 +116,7 @@ public class UnifiedFolderContentsDisplay {
             
             // Create the display with the JEI components
             var display = new UnifiedFolderContentsDisplay(
-                folderManager,
+                folderService,
                 bookmarkList,
                 bookmarkAdapter,
                 contentsImpl
@@ -131,15 +131,15 @@ public class UnifiedFolderContentsDisplay {
 
     /**
      * Creates a new instance for a specific folder
-     * @param folderManager The folder data manager
+     * @param folderService The folder data service
      * @param folder The folder to display
      * @return An optional containing the new display if creation was successful
      */
     public static Optional<UnifiedFolderContentsDisplay> createForFolder(
-        FolderDataManager folderManager,
+        FolderDataService folderService,
         FolderDataRepresentation folder
     ) {
-        var displayOpt = create(folderManager);
+        var displayOpt = create(folderService);
         
         displayOpt.ifPresent(display -> {
             display.setActiveFolder(folder);
@@ -186,7 +186,7 @@ public class UnifiedFolderContentsDisplay {
             
             // Use the centralized helper to load ingredients from this folder
             List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(
-                TypedIngredientHelper.loadBookmarksFromFolder(folderManager, activeFolder.getId(), true)
+                TypedIngredientHelper.loadBookmarksFromFolder(folderService, activeFolder.getId(), true)
             );
             
             // Set the ingredients
@@ -207,7 +207,7 @@ public class UnifiedFolderContentsDisplay {
             }
             
             // Fire a display refreshed event
-            eventSystem.fireDisplayRefreshed(activeFolder);
+            eventManager.fireDisplayRefreshedEvent(activeFolder);
             
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
@@ -505,23 +505,16 @@ public class UnifiedFolderContentsDisplay {
                       ingredient != null ? ingredient.getClass().getName() : "null");
         
         try {
-            // Try to get the ingredient key with detailed logging
+            // Try to get the ingredient key
             String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
             
             if (key == null || key.isEmpty()) {
-                // Try an alternative approach for JEI-specific ingredients
-                key = tryAlternativeKeyGeneration(ingredient);
-                
-                if (key == null || key.isEmpty()) {
-                    ModLogger.warn("Failed to generate key for dropped ingredient of type: {}", 
-                                  ingredient.getClass().getName());
-                    return false;
-                }
-                
-                ModLogger.info("Generated key using alternative method: {}", key);
-            } else {
-                ModLogger.info("Generated ingredient key: {}", key);
+                ModLogger.warn("Failed to generate key for dropped ingredient of type: {}", 
+                              ingredient.getClass().getName());
+                return false;
             }
+            
+            ModLogger.info("Generated ingredient key: {}", key);
             
             // Check if the folder already has this bookmark
             if (activeFolder.containsBookmark(key)) {
@@ -531,80 +524,32 @@ public class UnifiedFolderContentsDisplay {
             
             // Add the ingredient to the folder
             int folderId = activeFolder.getId();
-            folderManager.addBookmarkToFolder(folderId, key);
+            folderService.addBookmarkToFolder(folderId, key);
             
             // Log the success
-            List<String> bookmarkKeys = folderManager.getFolderBookmarkKeys(folderId);
+            List<String> bookmarkKeys = folderService.getFolderBookmarkKeys(folderId);
             ModLogger.info("Folder '{}' now has {} bookmarks, added key: {}", 
                           activeFolder.getName(), bookmarkKeys.size(), key);
             
-            // Fire bookmark added event with the BookmarkEvents system
+            // Fire bookmark added event with the FolderEventManager system
             if (ingredient instanceof BookmarkIngredient) {
-                eventSystem.fireBookmarkAdded(activeFolder, (BookmarkIngredient)ingredient, key);
+                eventManager.fireBookmarkAddedEvent(activeFolder, (BookmarkIngredient)ingredient, key);
             } else {
                 // For non-BookmarkIngredient, just fire a folder contents changed event
-                eventSystem.fireFolderContentsChanged(folderId);
+                eventManager.fireFolderContentsChangedEvent(folderId);
             }
             
             // Refresh the display
             refreshBookmarks();
             
             // Save the changes
-            folderManager.saveData();
+            folderService.saveData();
             
             return true;
         } catch (Exception e) {
             ModLogger.error("Error processing ingredient drop: {}", e.getMessage(), e);
             return false;
         }
-    }
-
-    /**
-     * Try to generate a key from an ingredient using alternative methods
-     * This helps support various JEI implementations
-     */
-    private String tryAlternativeKeyGeneration(Object ingredient) {
-        try {
-            // Try to use the JEI service through our existing interfaces
-            IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-            if (ingredientService != null) {
-                // Try a direct call with different wrapping approaches
-                try {
-                    // First, try the direct approach
-                    String key = ingredientService.getKeyForIngredient(ingredient);
-                    if (key != null && !key.isEmpty()) {
-                        return key;
-                    }
-                    
-                    // Create a TypedIngredient wrapper and try again
-                    TypedIngredient wrapped = new TypedIngredient(ingredient);
-                    key = ingredientService.getKeyForIngredient(wrapped.getWrappedIngredient());
-                    if (key != null && !key.isEmpty()) {
-                        return key;
-                    }
-                } catch (Exception e) {
-                    ModLogger.debug("Standard key generation methods failed: {}", e.getMessage());
-                }
-                
-                // If all else fails, use reflection as a last resort to try to extract an ID
-                try {
-                    if (ingredient != null) {
-                        // Try to call toString and extract useful information
-                        String ingredientString = ingredient.toString();
-                        if (ingredientString != null && !ingredientString.isEmpty() && !ingredientString.equals("null")) {
-                            // Create a simple hash-based key if all else fails
-                            return "jeifolders:fallback:" + ingredientString.hashCode();
-                        }
-                    }
-                } catch (Exception e) {
-                    ModLogger.debug("Reflection-based key generation failed: {}", e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            ModLogger.warn("Alternative key generation failed: {}", e.getMessage());
-        }
-        
-        return "";
     }
     
     /**

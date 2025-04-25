@@ -2,11 +2,10 @@ package com.jeifolders.gui;
 
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.gui.folderButtons.FolderButtonInterface;
-import com.jeifolders.gui.folderButtons.FolderGuiManager;
+import com.jeifolders.gui.folderButtons.FolderRenderingManager;
 import com.jeifolders.integration.IngredientDragHandler;
 import com.jeifolders.integration.TypedIngredient;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -25,8 +24,6 @@ public class IngredientDragManager {
     private int dragStartY = -1;
     private int lastMouseX = -1;
     private int lastMouseY = -1;
-    
-    
     
     // Delegate JEI-specific functionality to the handler in the integration package
     private final IngredientDragHandler ingredientDragHandler = new IngredientDragHandler();
@@ -74,16 +71,11 @@ public class IngredientDragManager {
 
         if (event.getButton() == 0 && isDragging) { // Left mouse button
             // Get the currently active folder button interface
-            FolderButtonInterface folderButton = FolderGuiManager.getFolderButton();
+            FolderButtonInterface folderButton = FolderRenderingManager.getFolderButton();
             
             if (folderButton == null) {
                 ModLogger.debug("No active folder button found for drop processing");
-                
-                // Reset the drag state and return
-                isDragging = false;
-                dragStartX = -1;
-                dragStartY = -1;
-                ingredientDragHandler.resetDragState();
+                resetDragState();
                 return;
             }
 
@@ -114,11 +106,7 @@ public class IngredientDragManager {
                 ModLogger.debug("No ingredient being dragged at drop time");
             }
 
-            // Reset drag state
-            isDragging = false;
-            dragStartX = -1;
-            dragStartY = -1;
-            ingredientDragHandler.resetDragState();
+            resetDragState();
         }
     }
 
@@ -155,9 +143,15 @@ public class IngredientDragManager {
             }
         }
     }
-
-    public void renderDraggedIngredient(GuiGraphics graphics, int mouseX, int mouseY) {
-        // No special rendering needed as JEI handles it
+    
+    /**
+     * Reset all drag state variables to their default values
+     */
+    private void resetDragState() {
+        isDragging = false;
+        dragStartX = -1;
+        dragStartY = -1;
+        ingredientDragHandler.resetDragState();
     }
 
     public boolean isDragging() {

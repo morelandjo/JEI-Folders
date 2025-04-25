@@ -1,10 +1,11 @@
 package com.jeifolders.data;
 
-import com.jeifolders.util.SnbtFormat;
-import com.jeifolders.util.ModLogger;
-import com.jeifolders.events.BookmarkEvents;
+import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
+import com.jeifolders.util.ModLogger;
+import com.jeifolders.util.SnbtFormat;
+import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -17,28 +18,44 @@ import java.io.IOException;
 import java.util.*;
 
 /**
- * Manages backend folder data, including CRUD operations, bookmark management,
- * and data persistence (saving/loading to SNBT files).
+ * Consolidated service class that handles all folder data operations including:
+ * - CRUD operations for folders and bookmarks
+ * - Data persistence through file storage
+ * - Ingredient caching and management
  */
-public class FolderDataManager {
+public class FolderDataService {
     private static final String FILENAME = "jeifolders.snbt";
-    private static final FolderDataManager INSTANCE = new FolderDataManager();
+    private static final String CONFIG_BASE_PATH = "config/jeifolders";
+    private static final FolderDataService INSTANCE = new FolderDataService();
     
     private final Map<Integer, FolderDataRepresentation> folders = new HashMap<>();
     private int nextFolderId = 0;
 
     private IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+    private UnifiedFolderManager folderManager;
     
-    // Access to the centralized event system
-    private final BookmarkEvents eventSystem = BookmarkEvents.getInstance();
-    
-    private FolderDataManager() {
+    /**
+     * Private constructor for singleton pattern
+     */
+    private FolderDataService() {
         // Private constructor for singleton
     }
     
-    public static FolderDataManager getInstance() {
+    /**
+     * Get the singleton instance
+     */
+    public static FolderDataService getInstance() {
         return INSTANCE;
     }
+    
+    /**
+     * Sets the UnifiedFolderManager instance
+     */
+    public void setFolderManager(UnifiedFolderManager folderManager) {
+        this.folderManager = folderManager;
+    }
+    
+    // ===== FOLDER DATA OPERATIONS =====
     
     /**
      * Creates a new folder with the given name.
@@ -73,6 +90,8 @@ public class FolderDataManager {
         return new ArrayList<>(folders.values());
     }
     
+    // ===== BOOKMARK OPERATIONS =====
+    
     /**
      * Adds a bookmark to a folder and saves data.
      */
@@ -84,8 +103,10 @@ public class FolderDataManager {
                 invalidateIngredientsCache(folderId);
                 saveData();
                 
-                // Fire event notification
-                eventSystem.fireFolderContentsChanged(folderId);
+                // Notify the unified folder manager
+                if (folderManager != null) {
+                    folderManager.notifyFolderContentsChanged(folderId);
+                }
             },
             // Folder doesn't exist
             () -> ModLogger.warn("Could not add bookmark - folder with id {} not found", folderId)
@@ -101,8 +122,10 @@ public class FolderDataManager {
                 invalidateIngredientsCache(folderId);
                 saveData();
                 
-                // Fire event notification
-                eventSystem.fireFolderContentsChanged(folderId);
+                // Notify the unified folder manager
+                if (folderManager != null) {
+                    folderManager.notifyFolderContentsChanged(folderId);
+                }
             }
         });
     }
@@ -114,10 +137,11 @@ public class FolderDataManager {
         FolderDataRepresentation folder = folders.get(folderId);
         return folder != null ? folder.getBookmarkKeys() : List.of();
     }
+    
+    // ===== INGREDIENT MANAGEMENT =====
 
     /**
      * Gets the IngredientService instance, initializing it if needed.
-     * @return The IngredientService instance
      */
     private IngredientService getIngredientService() {
         if (ingredientService == null) {
@@ -130,13 +154,11 @@ public class FolderDataManager {
      * Gets the cached ingredients for a folder, processing them if not already cached.
      */
     public List<Object> getCachedIngredientsForFolder(int folderId) {
-        // Delegate to the IngredientService
         Optional<FolderDataRepresentation> folder = getFolder(folderId);
-        if (!folder.isPresent()) {
+        if (folder.isEmpty()) {
             return Collections.emptyList();
         }
         
-        // Call the service implementation but return generic List<Object>
         return new ArrayList<>(getIngredientService().getCachedIngredientsForFolder(folderId));
     }
 
@@ -144,7 +166,6 @@ public class FolderDataManager {
      * Invalidates the ingredient cache for a specific folder.
      */
     public void invalidateIngredientsCache(int folderId) {
-        // Delegate to the IngredientService
         getIngredientService().invalidateIngredientsCache(folderId);
     }
 
@@ -154,10 +175,8 @@ public class FolderDataManager {
     public void invalidateAllIngredientCaches() {
         ModLogger.debug("Invalidating all ingredient caches");
         
-        // Get the ingredient service using the lazy getter
         IngredientService service = getIngredientService();
         
-        // Try to clear cache if service is available
         if (service != null) {
             try {
                 service.clearCache();
@@ -168,6 +187,101 @@ public class FolderDataManager {
         } else {
             ModLogger.debug("Cannot invalidate ingredient cache - ingredientService is unavailable");
         }
+    }
+    
+    // ===== STORAGE OPERATIONS =====
+    
+    /**
+     * Gets the appropriate save directory for the current game context.
+     */
+    private File getSaveDirectory() {
+        Minecraft minecraft = Minecraft.getInstance();
+        
+        // If no level is loaded, we can't determine which world we're in
+        if (minecraft.level == null) {
+            ModLogger.warn("No level loaded, using generic config directory for folder data");
+            return createDirectory(minecraft.gameDirectory, CONFIG_BASE_PATH + "/default");
+        }
+        
+        try {
+            // Determine save location based on server type
+            String subdir;
+            String identifier;
+            
+            // Check if this is singleplayer
+            if (minecraft.isLocalServer() && minecraft.getSingleplayerServer() != null) {
+                // Get world name from singleplayer server
+                identifier = minecraft.getSingleplayerServer().getWorldData().getLevelName();
+                subdir = "worlds";
+                ModLogger.debug("Using singleplayer world-specific folder for '{}' save data", identifier);
+            }
+            // Check if we can get server info from level
+            else if (minecraft.level.getServer() != null) {
+                identifier = minecraft.level.getServer().getWorldData().getLevelName();
+                subdir = "worlds";
+                ModLogger.debug("Using world-specific folder for '{}' save data", identifier);
+            }
+            // Check for multiplayer connection
+            else if (minecraft.getCurrentServer() != null) {
+                identifier = minecraft.getCurrentServer().ip;
+                subdir = "servers";
+                ModLogger.debug("Using server-specific folder for '{}' save data", identifier);
+            }
+            // Last resort fallback
+            else {
+                ModLogger.error("Unable to find world name, using default folder");
+                identifier = "all";
+                subdir = "all";
+            }
+            
+            return createDirectory(minecraft.gameDirectory, 
+                String.format("%s/%s/%s", CONFIG_BASE_PATH, subdir, sanitizeFileName(identifier)));
+            
+        } catch (Exception e) {
+            ModLogger.error("Error determining save directory: {}", e.getMessage());
+            
+            // Fallback to a generic directory
+            return createDirectory(minecraft.gameDirectory, CONFIG_BASE_PATH + "/all");
+        }
+    }
+    
+    /**
+     * Helper method to create a directory if it doesn't exist
+     */
+    private File createDirectory(File base, String path) {
+        File dir = new File(base, path);
+        if (!dir.exists()) {
+            boolean created = dir.mkdirs();
+            if (created) {
+                ModLogger.debug("Created directory: {}", dir.getAbsolutePath());
+            }
+        }
+        return dir;
+    }
+    
+    /**
+     * Sanitizes a filename to prevent invalid characters
+     */
+    private String sanitizeFileName(String name) {
+        // Replace invalid filename characters with underscores
+        return name.replaceAll("[\\\\/:*?\"<>|]", "_");
+    }
+    
+    /**
+     * Gets the file path for the folder data in the appropriate save directory
+     */
+    private File getDataFile(String filename) {
+        File saveDir = getSaveDirectory();
+        if (saveDir == null) {
+            return null;
+        }
+        
+        // Ensure the directory exists
+        if (!saveDir.exists()) {
+            saveDir.mkdirs();
+        }
+        
+        return new File(saveDir, filename);
     }
     
     /**
@@ -194,12 +308,10 @@ public class FolderDataManager {
 
     /**
      * Loads the raw string data from the SNBT file.
-     * 
-     * @return An Optional containing the file content, or empty if loading failed
      */
     private Optional<String> loadRawDataFromFile() {
-        // Use FolderStorageManager to get the data file
-        File dataFile = FolderDataStorageManager.getDataFile(FILENAME);
+        // Get the data file
+        File dataFile = getDataFile(FILENAME);
         if (dataFile == null) {
             ModLogger.warn("Cannot load folder data: No save directory available");
             return Optional.empty();
@@ -242,7 +354,7 @@ public class FolderDataManager {
     }
 
     /**
-     * Initializes the manager with empty data.
+     * Initializes the service with empty data.
      */
     private void initializeEmptyData() {
         ModLogger.debug("Initializing with empty data");
@@ -252,8 +364,6 @@ public class FolderDataManager {
 
     /**
      * Processes the raw data content into folder objects.
-     * 
-     * @param content The raw SNBT content to process
      */
     private void processDataContent(String content) {
         try {
@@ -294,8 +404,6 @@ public class FolderDataManager {
 
     /**
      * Creates a CompoundTag containing all folder data for saving.
-     *
-     * @return The CompoundTag representing all folder data
      */
     private CompoundTag createDataTag() {
         CompoundTag rootTag = new CompoundTag();
@@ -312,12 +420,10 @@ public class FolderDataManager {
 
     /**
      * Writes the provided data tag to the save file.
-     *
-     * @param dataTag The CompoundTag containing the data to save
      */
     private void saveDataToFile(CompoundTag dataTag) {
-        // Use FolderStorageManager to get the data file
-        File saveFile = FolderDataStorageManager.getDataFile(FILENAME);
+        // Get the data file
+        File saveFile = getDataFile(FILENAME);
         if (saveFile == null) {
             ModLogger.warn("Could not save folder data - no save directory available");
             return;

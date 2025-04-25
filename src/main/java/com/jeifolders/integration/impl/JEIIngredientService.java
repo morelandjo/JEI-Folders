@@ -1,10 +1,9 @@
 package com.jeifolders.integration.impl;
 
-import com.jeifolders.data.FolderDataManager;
+import com.jeifolders.data.FolderDataService;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.util.ModLogger;
 
-import com.mojang.serialization.Codec;
 import mezz.jei.api.helpers.ICodecHelper;
 import mezz.jei.api.helpers.IJeiHelpers;
 import mezz.jei.api.ingredients.IIngredientHelper;
@@ -29,8 +28,8 @@ public class JEIIngredientService implements IngredientService {
     // Cache for ingredients by key
     private final Map<String, ITypedIngredient<?>> keyToIngredientCache = new ConcurrentHashMap<>();
     
-    // Reference to the folder manager to access bookmark keys - initialized lazily to avoid circular dependency
-    private FolderDataManager folderManager;
+    // Reference to the folder service to access bookmark keys - initialized lazily to avoid circular dependency
+    private FolderDataService folderService;
     
     // JEI's ingredient manager (set when JEI runtime is available)
     private IIngredientManager ingredientManager;
@@ -42,15 +41,15 @@ public class JEIIngredientService implements IngredientService {
      * Creates a new JEIIngredientService instance.
      */
     public JEIIngredientService() {
-        // Don't initialize folderManager here to avoid circular dependency
+        // Don't initialize folderService here to avoid circular dependency
     }
     
-    // Get folder manager lazily to avoid circular dependency
-    private FolderDataManager getFolderManager() {
-        if (folderManager == null) {
-            folderManager = FolderDataManager.getInstance();
+    // Get folder service lazily to avoid circular dependency
+    private FolderDataService getFolderService() {
+        if (folderService == null) {
+            folderService = FolderDataService.getInstance();
         }
-        return folderManager;
+        return folderService;
     }
     
     /**
@@ -349,7 +348,7 @@ public class JEIIngredientService implements IngredientService {
     }
     
     private List<String> getFolderBookmarkKeys(int folderId) {
-        return getFolderManager().getFolderBookmarkKeys(folderId);
+        return getFolderService().getFolderBookmarkKeys(folderId);
     }
     
     @Override

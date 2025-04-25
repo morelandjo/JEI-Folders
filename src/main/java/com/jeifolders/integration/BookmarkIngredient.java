@@ -46,6 +46,19 @@ public class BookmarkIngredient {
     }
     
     /**
+     * Get the raw ingredient object contained within the typed ingredient.
+     * This provides direct access to the underlying Minecraft item/fluid/etc.
+     * 
+     * @return The raw ingredient object
+     */
+    public Object getWrappedIngredient() {
+        if (typedIngredient == null) {
+            return null;
+        }
+        return typedIngredient.getIngredient();
+    }
+    
+    /**
      * Get a simple string representation of this ingredient.
      * 
      * @return A string representation

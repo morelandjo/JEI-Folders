@@ -1,24 +1,42 @@
 package com.jeifolders.gui.folderButtons;
 
+import com.jeifolders.gui.ExclusionHandler;
+import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.util.ModLogger;
+import com.jeifolders.data.FolderDataRepresentation;
+
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.Rect2i;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Centralizes all layout calculations for the folder button system.
- * This class handles positioning of folders, buttons, and UI elements.
+ * Unified rendering and layout manager for the folder system.
+ * Consolidates functionality previously spread across:
+ * - FolderLayoutManager
+ * - FolderGuiManager
  */
-public class FolderLayoutManager {
-    // Layout constants
+public class FolderRenderingManager {
+    // Singleton instance
+    private static FolderRenderingManager instance;
+    
+    // ----- Layout Constants -----
     private static final int PADDING_X = 10;
     private static final int PADDING_Y = 10;
     private static final int ICON_WIDTH = FolderButtonTextures.ICON_WIDTH;
     private static final int ICON_HEIGHT = FolderButtonTextures.ICON_HEIGHT;
-    private static final int FOLDER_SPACING_Y = 30;  
+    private static final int FOLDER_SPACING_Y = 30;
     private static final int FOLDER_SPACING_X = 2;
     private static final int EXCLUSION_PADDING = 10;
     
-    // Layout cache
+    // ----- Layout Cache -----
     private int cachedScreenWidth = -1;
     private int cachedScreenHeight = -1;
     private int foldersPerRow = 1;
@@ -27,29 +45,122 @@ public class FolderLayoutManager {
     private long lastCalculationTime = 0;
     private static final int LAYOUT_RECALC_INTERVAL_MS = 1000;
     
-    // Additional cached values
+    // ----- Additional Cached Values -----
     private int cachedFolderCount = -1;
     private int cachedRows = -1;
     private int cachedGridWidth = -1;
     private int cachedMaxExclusionWidth = -1;
     
-    // Calculated positions
+    // ----- Calculated Positions -----
     private int calculatedNameY = -1;
     private int calculatedBookmarkDisplayY = -1;
     private int nameYOffset = 0;
     private int[] cachedDeleteButtonPosition = new int[2];
     private boolean deleteButtonCacheValid = false;
     
-    // Exclusion zone
+    // ----- Exclusion Zone Management -----
+    private final ExclusionHandler exclusionHandler = new ExclusionHandler();
     private Rect2i exclusionZone = new Rect2i(0, 0, 0, 0);
     private boolean exclusionZoneCacheValid = false;
     private boolean lastFoldersVisible = true;
     private boolean lastHasActiveFolder = false;
     private int lastBookmarkDisplayHeight = 0;
     
-    // Constructor
-    public FolderLayoutManager() {
+    // ----- Rendering State -----
+    private boolean needsRebuild = true;
+    
+    // ----- Reference to the unified folder manager -----
+    private final UnifiedFolderManager folderManager;
+    
+    // ----- GUI Management -----
+    private static FolderButtonSystem folderButton;
+    private static boolean isInitialized = false;
+    
+    /**
+     * Private constructor for singleton pattern
+     */
+    private FolderRenderingManager() {
+        this.folderManager = UnifiedFolderManager.getInstance();
         calculateInitialLayout();
+        registerEventHandlers();
+    }
+    
+    /**
+     * Registers event handlers with NeoForge
+     */
+    private void registerEventHandlers() {
+        NeoForge.EVENT_BUS.register(FolderRenderingManager.class);
+        ModLogger.debug("FolderRenderingManager registered with NeoForge EVENT_BUS");
+    }
+    
+    /**
+     * Initialize the folder GUI system
+     */
+    public static void init() {
+        getInstance();
+        ModLogger.debug("FolderRenderingManager initialized");
+    }
+    
+    /**
+     * Get the singleton instance
+     */
+    public static synchronized FolderRenderingManager getInstance() {
+        if (instance == null) {
+            instance = new FolderRenderingManager();
+        }
+        return instance;
+    }
+    
+    /**
+     * Get the folder button interface for external components to interact with
+     * 
+     * @return The folder button interface, or null if not initialized
+     */
+    public static FolderButtonInterface getFolderButton() {
+        return folderButton;
+    }
+    
+    /**
+     * Checks if the folder button system is initialized
+     * 
+     * @return true if the system is initialized and ready to use
+     */
+    public static boolean isInitialized() {
+        return isInitialized && folderButton != null;
+    }
+    
+    @SubscribeEvent
+    public static void onGuiInit(ScreenEvent.Init.Post event) {
+        Screen screen = event.getScreen();
+        if (screen instanceof AbstractContainerScreen) {
+            ModLogger.debug("Adding folder button to GUI: {}", screen.getClass().getSimpleName());
+            
+            // Create the folder button system once, or reuse the existing instance
+            if (folderButton == null || !isInitialized) {
+                folderButton = new FolderButtonSystem();
+                isInitialized = true;
+                ModLogger.debug("Created new FolderButtonSystem instance");
+            } else {
+                ModLogger.debug("Reusing existing FolderButtonSystem instance");
+            }
+            
+            // Add the button to the screen's listeners
+            event.addListener(folderButton);
+            
+            // Make sure the bookmark display is refreshed after screen initialization
+            if (folderButton != null) {
+                folderButton.refreshBookmarkDisplay();
+                ModLogger.debug("Refreshed bookmark display after GUI init");
+            }
+        }
+    }
+    
+    @SubscribeEvent
+    public static void onTick(ServerTickEvent.Post event) {
+        // Only tick the folder button when a container screen is open
+        if (folderButton != null && Minecraft.getInstance().screen instanceof AbstractContainerScreen) {
+            folderButton.tick();
+        }
     }
     
     /**
@@ -89,13 +200,34 @@ public class FolderLayoutManager {
     /**
      * Invalidates all cached calculations
      */
-    private void invalidateAllCaches() {
+    public void invalidateAllCaches() {
         positionsCacheValid = false;
         deleteButtonCacheValid = false;
         exclusionZoneCacheValid = false;
         cachedRows = -1;
         cachedGridWidth = -1;
         cachedMaxExclusionWidth = -1;
+    }
+    
+    /**
+     * Mark that the UI needs to be rebuilt
+     */
+    public void markNeedsRebuild() {
+        this.needsRebuild = true;
+    }
+    
+    /**
+     * Check if the UI needs rebuilding
+     */
+    public boolean needsRebuild() {
+        return needsRebuild;
+    }
+    
+    /**
+     * Resets the rebuild flag
+     */
+    public void clearRebuildFlag() {
+        this.needsRebuild = false;
     }
     
     /**
@@ -128,11 +260,20 @@ public class FolderLayoutManager {
             invalidateAllCaches();
         }
         
-        // Calculate and cache maxExclusionWidth since it's used in multiple methods
+        // Calculate and cache maxExclusionWidth
         cachedMaxExclusionWidth = Math.max(50, guiLeft);
         
         ModLogger.debug("Layout calculation: screen width: {}, available width: {}, folders per row: {}", 
                       screenWidth, availableWidth, foldersPerRow);
+    }
+    
+    /**
+     * Gets the current number of folders per row
+     * 
+     * @return The current number of folders that can fit in a row
+     */
+    public int getFoldersPerRow() {
+        return foldersPerRow;
     }
     
     /**
@@ -148,7 +289,7 @@ public class FolderLayoutManager {
             int x = cachedPositions[index * 2];
             int y = cachedPositions[index * 2 + 1];
             
-            // Check if this position has been calculated (0,0 is valid, but unlikely)
+            // Check if this position has been calculated
             if (x > 0 || y > 0) {
                 return new int[] {x, y};
             }
@@ -209,6 +350,9 @@ public class FolderLayoutManager {
         nameYOffset = rows * FOLDER_SPACING_Y;
         calculatedNameY = PADDING_Y + nameYOffset + 5;
         calculatedBookmarkDisplayY = calculatedNameY + 10;
+        
+        // Update the bookmark display positions in the unified manager
+        folderManager.setBookmarkDisplayPositions(calculatedNameY, calculatedBookmarkDisplayY);
         
         // Invalidate caches that depend on these positions
         deleteButtonCacheValid = false;
@@ -332,87 +476,118 @@ public class FolderLayoutManager {
             // Use cached rows if available
             int rows = calculateRows(folderCount);
             
-            // Height should include icon height + text height + padding
-            int folderWithNameHeight = ICON_HEIGHT + 10 + 5;
-            exclusionHeight = rows * FOLDER_SPACING_Y;
+            // Height should include the rows of buttons
+            int buttonsHeight = rows * FOLDER_SPACING_Y;
             
-            // If we have only one row, just use the folder height + name height + padding
-            if (rows == 1) {
-                exclusionHeight = folderWithNameHeight;
+            // Add the height for active folder name and optionally the bookmark display
+            if (hasActiveFolder) {
+                exclusionHeight = buttonsHeight + 20; // For folder name
+                
+                // Add bookmark display height if it exists
+                if (bookmarkDisplayHeight > 0) {
+                    exclusionHeight += bookmarkDisplayHeight + 10; // Add padding
+                }
+            } else {
+                exclusionHeight = buttonsHeight + 10; // Just add some padding
             }
-            
-            exclusionHeight += 10;
         } else {
-            // If no folders visible, just include the add button height
-            exclusionHeight = ICON_HEIGHT + (EXCLUSION_PADDING * 2);
+            // If folders aren't visible or there are no folders, minimal height
+            exclusionHeight = ICON_HEIGHT + (2 * EXCLUSION_PADDING);
         }
-
-        // Extend for bookmark display if active
-        if (hasActiveFolder && bookmarkDisplayHeight > 0) {
-            int totalHeight = calculatedBookmarkDisplayY - PADDING_Y + bookmarkDisplayHeight + 5;
-            exclusionHeight = Math.max(exclusionHeight, totalHeight);
-        }
-
-        int exclusionX = 5;
-        int exclusionY = Math.max(0, PADDING_Y - EXCLUSION_PADDING);
-
-        exclusionZone = new Rect2i(exclusionX, exclusionY, exclusionWidth, exclusionHeight);
+        
+        // Create the exclusion zone
+        exclusionZone = new Rect2i(0, 0, exclusionWidth, exclusionHeight);
+        
+        // Update the ExclusionHandler
+        updateExclusionHandler(exclusionZone);
+        
         exclusionZoneCacheValid = true;
         return exclusionZone;
     }
     
     /**
-     * Invalidates position cache when window resizes or other major changes occur
+     * Gets the current exclusion zone
+     * 
+     * @return The current exclusion zone as a Rect2i
      */
-    public void invalidateCache() {
-        invalidateAllCaches();
-        cachedScreenWidth = -1; 
-        cachedScreenHeight = -1;
+    public Rect2i getExclusionZone() {
+        return exclusionZone;
     }
     
-    // Getters and setters
-    
-    public int getPaddingX() {
-        return PADDING_X;
+    /**
+     * Updates the exclusion handler with the current exclusion zone
+     * 
+     * @param zone The exclusion zone to update
+     */
+    private void updateExclusionHandler(Rect2i zone) {
+        if (zone.getWidth() <= 0 || zone.getHeight() <= 0) {
+            exclusionHandler.clearExclusionAreas();
+            return;
+        }
+        
+        exclusionHandler.clearExclusionAreas();
+        Rectangle2i rect = new Rectangle2i(zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());
+        exclusionHandler.addExclusionArea(rect);
     }
     
-    public int getPaddingY() {
-        return PADDING_Y;
+    /**
+     * Gets the exclusion handler for JEI integration
+     */
+    public ExclusionHandler getExclusionHandler() {
+        return exclusionHandler;
     }
     
-    public int getIconWidth() {
-        return ICON_WIDTH;
+    /**
+     * Creates and positions folder buttons based on the data from folder manager
+     * 
+     * @return List of created and positioned folder buttons
+     */
+    public List<FolderButton> createAndPositionFolderButtons() {
+        List<FolderButton> buttons = new ArrayList<>();
+        
+        // Get all folders from the folder manager
+        List<FolderDataRepresentation> folders = folderManager.loadAllFolders();
+        
+        // Create an "Add Folder" button at index 0
+        int[] addPos = calculateAddButtonPosition();
+        FolderButton addButton = new FolderButton(addPos[0], addPos[1], FolderButton.ButtonType.ADD);
+        addButton.setClickHandler(folderManager::handleAddFolderButtonClick);
+        buttons.add(addButton);
+        
+        // Create and position normal folder buttons
+        int buttonIndex = 1;
+        for (FolderDataRepresentation folder : folders) {
+            int[] pos = calculateFolderPosition(buttonIndex);
+            FolderButton button = new FolderButton(pos[0], pos[1], folder);
+            button.setClickHandler(folderManager::fireFolderClickedEvent);
+            buttons.add(button);
+            buttonIndex++;
+        }
+        
+        // Update layout positions based on folder count
+        updateLayoutPositions(folders.size());
+        
+        // Update the unified folder manager with the new buttons
+        folderManager.setFolderButtons(buttons);
+        
+        return buttons;
     }
     
-    public int getIconHeight() {
-        return ICON_HEIGHT;
-    }
-    
-    public int getFolderSpacingX() {
-        return FOLDER_SPACING_X;
-    }
-    
-    public int getFolderSpacingY() {
-        return FOLDER_SPACING_Y;
-    }
-    
-    public int getExclusionPadding() {
-        return EXCLUSION_PADDING;
-    }
-    
-    public int getFoldersPerRow() {
-        return foldersPerRow;
-    }
-    
-    public int getCalculatedNameY() {
+    /**
+     * Gets the position for the folder name display
+     * 
+     * @return The Y coordinate for the folder name
+     */
+    public int getFolderNameY() {
         return calculatedNameY;
     }
     
-    public int getCalculatedBookmarkDisplayY() {
+    /**
+     * Gets the position for the bookmark display
+     * 
+     * @return The Y coordinate for the bookmark display
+     */
+    public int getBookmarkDisplayY() {
         return calculatedBookmarkDisplayY;
-    }
-    
-    public Rect2i getExclusionZone() {
-        return exclusionZone;
     }
 }

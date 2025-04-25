@@ -133,7 +133,17 @@ public class JEIBookmarkManager {
         
         @Override
         public List<IElement<?>> getElements() {
-            return convertToElementList(bookmarkList.getAllBookmarks());
+            // Convert BookmarkIngredient list to typed ingredients before calling convertToElementList
+            List<Object> ingredientObjects = new ArrayList<>();
+            for (BookmarkIngredient bookmark : bookmarkList.getAllBookmarks()) {
+                if (bookmark != null) {
+                    ITypedIngredient<?> typedIngredient = bookmark.getTypedIngredient();
+                    if (typedIngredient != null) {
+                        ingredientObjects.add(typedIngredient);
+                    }
+                }
+            }
+            return convertToElementList(ingredientObjects);
         }
         
         @Override

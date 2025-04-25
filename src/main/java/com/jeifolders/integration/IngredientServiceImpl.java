@@ -1,5 +1,6 @@
 package com.jeifolders.integration;
 
+import com.jeifolders.data.FolderDataService;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.ingredients.IIngredientHelper;
 import mezz.jei.api.ingredients.IIngredientType;
@@ -298,8 +299,8 @@ public class IngredientServiceImpl implements IngredientService {
         }
         
         // Otherwise, process and cache them
-        com.jeifolders.data.FolderDataManager folderManager = com.jeifolders.data.FolderDataManager.getInstance();
-        Optional<com.jeifolders.data.FolderDataRepresentation> folder = folderManager.getFolder(folderId);
+        FolderDataService folderService = FolderDataService.getInstance();
+        Optional<com.jeifolders.data.FolderDataRepresentation> folder = folderService.getFolder(folderId);
         if (folder.isEmpty()) {
             return Collections.emptyList();
         }

@@ -16,36 +16,142 @@ public class FolderButton extends AbstractWidget {
     private static final int ICON_HEIGHT = FolderButtonTextures.ICON_HEIGHT;
     private static final int TEXT_MAX_LENGTH = 3;
     private static final int SUCCESS_ANIMATION_DURATION = 10;
+    
+    /**
+     * Enum to define the different types of folder buttons
+     */
+    public enum ButtonType {
+        NORMAL, // Standard folder button
+        ADD     // Add folder button
+    }
 
     private final FolderDataRepresentation folder;
     private boolean isHovered = false;
     private boolean isActive = false;
     private boolean showSuccessAnimation = false;
     private int successAnimationTicksRemaining = 0;
-    private final Consumer<FolderDataRepresentation> clickHandler;
+    private Consumer<FolderDataRepresentation> clickHandler;
+    private ButtonType buttonType = ButtonType.NORMAL;
     
     // Pre-computed values for rendering optimization
     private final String displayName;
+    private final String fullName; // Store the full name for tooltip
     private final int textWidth;
     private int textX;
+    private boolean needsTooltip;
+    
+    // Cache tooltip component for performance
+    private Component tooltipComponent;
+    
+    // Cache for position updates
+    private int lastX = -1;
+    private int lastY = -1;
+    private int lastWidth = -1;
+    
+    /**
+     * Constructor for "Add Folder" button
+     */
+    public FolderButton(int x, int y, ButtonType buttonType) {
+        super(x, y, ICON_WIDTH, ICON_HEIGHT, Component.literal("Add"));
+        this.buttonType = buttonType;
+        this.folder = null; // Add button doesn't have an associated folder
+        this.clickHandler = null; // Will be set later through setClickHandler
+        this.fullName = "Add Folder";
+        this.displayName = "+";
+        this.needsTooltip = true;
+        this.tooltipComponent = Component.literal(fullName);
+        this.textWidth = Minecraft.getInstance().font.width(displayName);
+        updateTextPosition();
+    }
+
+    /**
+     * Constructor for regular folder button (clickHandler set separately)
+     */
+    public FolderButton(int x, int y, FolderDataRepresentation folder) {
+        this(x, y, folder, null);
+    }
 
     public FolderButton(int x, int y, FolderDataRepresentation folder, Consumer<FolderDataRepresentation> clickHandler) {
         super(x, y, ICON_WIDTH, ICON_HEIGHT, Component.literal(folder.getName()));
         this.folder = folder;
         this.clickHandler = clickHandler;
+        this.fullName = folder.getName();
         
-        if (folder.getName().length() > TEXT_MAX_LENGTH) {
-            this.displayName = folder.getName().substring(0, TEXT_MAX_LENGTH);
+        // Pre-compute display name
+        if (fullName.length() > TEXT_MAX_LENGTH) {
+            this.displayName = fullName.substring(0, TEXT_MAX_LENGTH);
+            this.needsTooltip = true;
         } else {
-            this.displayName = folder.getName();
+            this.displayName = fullName;
+            this.needsTooltip = false;
         }
         
+        // Pre-compute tooltip component
+        this.tooltipComponent = Component.literal(fullName);
+        
+        // Pre-compute text measurements
         this.textWidth = Minecraft.getInstance().font.width(displayName);
+        updateTextPosition();
+    }
+    
+    /**
+     * Sets the click handler for this button
+     */
+    public void setClickHandler(Consumer<FolderDataRepresentation> handler) {
+        this.clickHandler = handler;
+    }
+    
+    /**
+     * Returns the button type
+     */
+    public ButtonType getButtonType() {
+        return buttonType;
+    }
+    
+    /**
+     * Updates the cached text position when button position changes
+     */
+    private void updateTextPosition() {
         this.textX = getX() + (width - textWidth) / 2;
+        
+        // Update cached positions
+        this.lastX = getX();
+        this.lastY = getY();
+        this.lastWidth = width;
+    }
+    
+    @Override
+    public void setX(int x) {
+        super.setX(x);
+        if (lastX != x) {
+            updateTextPosition();
+        }
+    }
+    
+    @Override
+    public void setY(int y) {
+        super.setY(y);
+        if (lastY != y) {
+            // No need to update textX here, but update lastY
+            lastY = y;
+        }
+    }
+    
+    @Override
+    public void setWidth(int width) {
+        super.setWidth(width);
+        if (lastWidth != width) {
+            updateTextPosition();
+        }
     }
     
     @Override
     public void renderWidget(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Check if position has changed since last render (could happen during layout changes)
+        if (getX() != lastX || getY() != lastY || width != lastWidth) {
+            updateTextPosition();
+        }
+        
         // Update hover state
         isHovered = mouseX >= getX() && mouseY >= getY() && 
                    mouseX < getX() + width && mouseY < getY() + height;
@@ -63,39 +169,46 @@ public class FolderButton extends AbstractWidget {
             true
         );
         
-        // Display tooltip when hovering
-        if (isHovered) {
+        // Display tooltip when hovering, but only if we need one
+        if (isHovered && (needsTooltip || showSuccessAnimation)) {
             graphics.renderTooltip(
                 Minecraft.getInstance().font,
-                Component.literal(folder.getName()),
+                tooltipComponent,
                 mouseX, mouseY
             );
         }
 
         // Draw success animation if active using tick-based animation, constrain to folder area
         if (showSuccessAnimation && successAnimationTicksRemaining > 0) {
-            // Calculate the bounds of the safe highlight zone
-            int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
-            int guiWidth = 176; // Standard GUI width
-            int guiLeft = (screenWidth - guiWidth) / 2;
-            
-            // Constrain highlight to not go past the left GUI edge
-            int maxHighlightX = Math.max(0, Math.min(guiLeft - 5, getX() + getWidth() + 2));
-            
-            // Apply highlight with constrained boundaries
-            float progress = successAnimationTicksRemaining / (float)SUCCESS_ANIMATION_DURATION;
-            int alpha = (int)(progress * 255);
-            int color = (alpha << 24) | 0x00FF00; // Green color with fading alpha
-            
-            // Constrained fill - only highlight up to the safe limit
-            graphics.fill(
-                Math.max(0, getX() - 2), 
-                getY() - 2, 
-                Math.min(maxHighlightX, getX() + getWidth() + 2), 
-                getY() + getHeight() + 2, 
-                color
-            );
+            renderSuccessAnimation(graphics);
         }
+    }
+    
+    /**
+     * Renders the success animation with proper constraints
+     */
+    private void renderSuccessAnimation(GuiGraphics graphics) {
+        // Calculate the bounds of the safe highlight zone
+        int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        int guiWidth = 176; // Standard GUI width
+        int guiLeft = (screenWidth - guiWidth) / 2;
+        
+        // Constrain highlight to not go past the left GUI edge
+        int maxHighlightX = Math.max(0, Math.min(guiLeft - 5, getX() + getWidth() + 2));
+        
+        // Apply highlight with constrained boundaries
+        float progress = successAnimationTicksRemaining / (float)SUCCESS_ANIMATION_DURATION;
+        int alpha = (int)(progress * 255);
+        int color = (alpha << 24) | 0x00FF00; // Green color with fading alpha
+        
+        // Constrained fill - only highlight up to the safe limit
+        graphics.fill(
+            Math.max(0, getX() - 2), 
+            getY() - 2, 
+            Math.min(maxHighlightX, getX() + getWidth() + 2), 
+            getY() + getHeight() + 2, 
+            color
+        );
     }
     
     /**
@@ -150,4 +263,14 @@ public class FolderButton extends AbstractWidget {
         return isActive;
     }
     
+    /**
+     * Update the button's position without triggering a full recalculation
+     */
+    public void updatePosition(int x, int y) {
+        boolean changed = x != getX() || y != getY();
+        setPosition(x, y);
+        if (changed) {
+            updateTextPosition();
+        }
+    }
 }

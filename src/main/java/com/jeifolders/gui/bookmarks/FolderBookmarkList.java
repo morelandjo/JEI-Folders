@@ -1,36 +1,45 @@
 package com.jeifolders.gui.bookmarks;
 
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.events.BookmarkEvents;
+import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.BookmarkService;
 import com.jeifolders.integration.IngredientService;
-import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.util.ModLogger;
+import mezz.jei.api.ingredients.ITypedIngredient;
+import mezz.jei.gui.overlay.IIngredientGridSource;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Map;
+import java.util.Optional;
 
 /**
- * Bookmark list for folders with optimized ingredient handling
+ * Stores and manages the list of bookmarks for the active folder.
  */
 public class FolderBookmarkList {
     private FolderDataRepresentation folder;
-    private final List<Object> bookmarks = new ArrayList<>();
-    private final List<Object> listeners = new CopyOnWriteArrayList<>();
-    
+    private List<BookmarkIngredient> ingredients = new ArrayList<>();
+    private final Map<String, BookmarkIngredient> ingredientMap = new HashMap<>();
+    private final UnifiedFolderManager eventManager;
+
     // Access services
     private final BookmarkService bookmarkService = JEIIntegrationFactory.getBookmarkService();
     private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-    private final BookmarkEvents eventSystem = BookmarkEvents.getInstance();
-    
+
     // Performance optimizations
     private boolean batchUpdateMode = false;
     private boolean pendingNotification = false;
+
+    // JEI integration - source list changed listeners
+    private final List<IIngredientGridSource.SourceListChangedListener> sourceListChangedListeners = new ArrayList<>();
+
+    public FolderBookmarkList() {
+        this.eventManager = UnifiedFolderManager.getInstance();
+    }
 
     /**
      * Sets the current folder and refreshes bookmarks
@@ -44,27 +53,37 @@ public class FolderBookmarkList {
      * Refreshes the bookmarks based on the current folder
      */
     private void refreshBookmarks() {
-        bookmarks.clear();
-        
+        ingredients.clear();
+        ingredientMap.clear();
+
         if (folder != null) {
             List<String> keys = folder.getBookmarkKeys();
             if (!keys.isEmpty()) {
                 ModLogger.info("Refreshing bookmarks for folder {} with {} keys", folder.getName(), keys.size());
-                
+
                 // Use ingredient service to get ingredients for bookmark keys
                 try {
                     startBatchUpdate();
-                    bookmarks.addAll(ingredientService.getIngredientsForKeys(keys));
+                    for (String key : keys) {
+                        // Handle Optional return type properly
+                        Optional<ITypedIngredient<?>> ingredientOpt = ingredientService.getIngredientForKey(key);
+                        if (ingredientOpt.isPresent()) {
+                            BookmarkIngredient ingredient = new BookmarkIngredient(ingredientOpt.get());
+                            ingredients.add(ingredient);
+                            ingredientMap.put(key, ingredient);
+                        }
+                    }
                     finishBatchUpdate();
                 } catch (Exception e) {
                     ModLogger.error("Error while refreshing bookmarks: {}", e.getMessage());
-                    bookmarks.clear();
+                    ingredients.clear();
+                    ingredientMap.clear();
                 }
             } else {
                 ModLogger.info("Folder {} has no bookmarks", folder.getName());
             }
         }
-        
+
         notifyListenersOfChange();
     }
 
@@ -75,7 +94,7 @@ public class FolderBookmarkList {
         batchUpdateMode = true;
         pendingNotification = false;
     }
-    
+
     /**
      * Finishes a batch update and sends a notification if needed
      */
@@ -88,22 +107,6 @@ public class FolderBookmarkList {
     }
 
     /**
-     * Add a listener that will be notified when the source list changes
-     */
-    public void addSourceListChangedListener(Object listener) {
-        if (!listeners.contains(listener)) {
-            listeners.add(listener);
-        }
-    }
-    
-    /**
-     * Remove a listener
-     */
-    public void removeSourceListChangedListener(Object listener) {
-        listeners.remove(listener);
-    }
-
-    /**
      * Notify listeners that the bookmark list has changed
      */
     public void notifyListenersOfChange() {
@@ -111,238 +114,200 @@ public class FolderBookmarkList {
             pendingNotification = true;
             return;
         }
-        
-        // Use the bookmark service for legacy notification
-        bookmarkService.notifySourceListChanged(listeners);
-        
+
         // Fire an event through our new event system if we have a folder
         if (folder != null) {
-            eventSystem.fireFolderContentsChanged(folder);
+            eventManager.fireFolderContentsChangedEvent(folder);
+        }
+
+        // Also notify JEI source list changed listeners
+        notifySourceListChangedListeners();
+    }
+
+    /**
+     * Notify all source list changed listeners
+     * Should be called when the bookmark list changes
+     */
+    private void notifySourceListChangedListeners() {
+        if (sourceListChangedListeners.isEmpty()) {
+            return;
+        }
+
+        for (IIngredientGridSource.SourceListChangedListener listener : new ArrayList<>(sourceListChangedListeners)) {
+            try {
+                listener.onSourceListChanged();
+            } catch (Exception e) {
+                ModLogger.error("Error notifying source list changed listener: {}", e.getMessage(), e);
+            }
+        }
+
+        ModLogger.debug("Notified {} source list changed listeners", sourceListChangedListeners.size());
+    }
+
+    /**
+     * Adds a JEI source list changed listener
+     * This method is required for integration with JEI's ingredient grid system
+     */
+    public void addSourceListChangedListener(IIngredientGridSource.SourceListChangedListener listener) {
+        if (listener != null && !sourceListChangedListeners.contains(listener)) {
+            sourceListChangedListeners.add(listener);
+            ModLogger.debug("Added source list changed listener to FolderBookmarkList");
         }
     }
 
     /**
      * Gets all bookmarks in this list
      */
-    public List<Object> getAllBookmarks() {
-        return Collections.unmodifiableList(bookmarks);
+    public List<BookmarkIngredient> getAllBookmarks() {
+        return Collections.unmodifiableList(ingredients);
     }
 
     /**
-     * Adds a bookmark directly
+     * Adds a bookmark ingredient to this list
+     * @param ingredient The ingredient to add
+     * @param key The key for the ingredient
+     * @return true if the ingredient was added
      */
-    public void addBookmark(Object ingredient) {
-        // Skip if null or already exists
-        if (ingredient == null || containsIngredient(ingredient)) {
-            return;
+    public boolean addBookmark(BookmarkIngredient ingredient, String key) {
+        if (folder == null) {
+            return false;
         }
-        
-        bookmarks.add(ingredient);
-        
-        // Also add to folder if we have one
-        if (folder != null) {
-            // Use TypedIngredientHelper to get the key
-            String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
-            if (key != null && !key.isEmpty() && !folder.containsBookmark(key)) {
-                folder.addBookmarkKey(key);
-                
-                // Fire bookmark added event with our new event system
-                if (ingredient instanceof BookmarkIngredient) {
-                    eventSystem.fireBookmarkAdded(folder, (BookmarkIngredient)ingredient, key);
-                }
-            }
+
+        if (key == null || key.isEmpty()) {
+            ModLogger.warn("Cannot add bookmark: invalid key");
+            return false;
         }
-        
-        // Notify listeners of the change
-        notifyListenersOfChange();
+
+        if (ingredientMap.containsKey(key)) {
+            ModLogger.debug("Bookmark already exists with key: {}", key);
+            return false;
+        }
+
+        ingredientMap.put(key, ingredient);
+        ingredients.add(ingredient);
+        folder.addBookmarkKey(key);
+
+        // Fire the event notification
+        eventManager.fireBookmarkAddedEvent(folder, ingredient, key);
+
+        return true;
     }
-    
+
     /**
-     * Add multiple bookmarks at once
+     * Removes a bookmark by key
+     * @param key The key of the bookmark to remove
+     * @return true if the bookmark was removed
      */
-    public void addBookmarks(List<?> ingredients) {
-        if (ingredients == null || ingredients.isEmpty()) {
-            return;
+    public boolean removeBookmarkByKey(String key) {
+        if (folder == null || key == null || key.isEmpty()) {
+            return false;
         }
-        
-        boolean anyAdded = false;
-        startBatchUpdate();
-        
-        try {
-            for (Object ingredient : ingredients) {
-                if (ingredient != null && !containsIngredient(ingredient)) {
-                    bookmarks.add(ingredient);
-                    
-                    // Also add to folder if we have one
-                    if (folder != null) {
-                        String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
-                        if (key != null && !key.isEmpty() && !folder.containsBookmark(key)) {
-                            folder.addBookmarkKey(key);
-                            anyAdded = true;
-                        }
-                    }
-                }
-            }
-        } finally {
-            finishBatchUpdate();
+
+        BookmarkIngredient ingredient = ingredientMap.remove(key);
+        if (ingredient != null) {
+            ingredients.remove(ingredient);
+            folder.removeBookmark(key);
+
+            // Fire the event notification
+            eventManager.fireBookmarkRemovedEvent(folder, ingredient, key);
+
+            return true;
         }
-        
-        // Fire event for folder contents changed if we actually added anything
-        if (anyAdded && folder != null) {
-            eventSystem.fireFolderContentsChanged(folder);
-        }
+        return false;
     }
-    
+
     /**
-     * Removes a bookmark directly
+     * Removes a bookmark
+     * @param ingredient The ingredient to remove
+     * @return true if the bookmark was removed
      */
-    public void removeBookmark(Object ingredient) {
-        boolean removed = false;
-        
-        // Try to remove by direct equality first
-        removed = bookmarks.remove(ingredient);
-        
-        // If not found, try to find by ingredient key
-        if (!removed) {
-            String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
-            if (key != null && !key.isEmpty()) {
-                for (int i = bookmarks.size() - 1; i >= 0; i--) {
-                    Object current = bookmarks.get(i);
-                    String currentKey = TypedIngredientHelper.getKeyForIngredient(current);
-                    if (Objects.equals(key, currentKey)) {
-                        bookmarks.remove(i);
-                        removed = true;
-                        break;
-                    }
-                }
+    public boolean removeBookmark(BookmarkIngredient ingredient) {
+        if (folder == null || ingredient == null) {
+            return false;
+        }
+
+        // Find the key for this ingredient
+        String keyToRemove = null;
+        for (Map.Entry<String, BookmarkIngredient> entry : ingredientMap.entrySet()) {
+            if (entry.getValue().equals(ingredient)) {
+                keyToRemove = entry.getKey();
+                break;
             }
         }
-        
-        if (removed) {
-            // Also remove from folder if we have one
-            if (folder != null) {
-                String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
-                if (key != null && !key.isEmpty()) {
-                    folder.removeBookmark(key);
-                    
-                    // Fire event for bookmark removed
-                    if (ingredient instanceof BookmarkIngredient) {
-                        eventSystem.fireBookmarkRemoved(folder, (BookmarkIngredient)ingredient, key);
-                    }
-                }
-            }
-            
-            // Notify listeners of the change
-            notifyListenersOfChange();
+
+        if (keyToRemove != null) {
+            return removeBookmarkByKey(keyToRemove);
         }
+        return false;
     }
 
     /**
      * Clears all bookmarks
      */
-    public void clearBookmarks() {
-        if (bookmarks.isEmpty()) {
-            return;
-        }
-        
-        bookmarks.clear();
-        
-        // Also clear folder bookmarks if we have a folder
+    public void clear() {
+        ingredients.clear();
+        ingredientMap.clear();
+
         if (folder != null) {
             folder.clearBookmarks();
-            
-            // Fire event for bookmarks cleared
-            eventSystem.fireBookmarksCleared(folder);
+
+            // Fire the event notification
+            eventManager.fireBookmarksClearedEvent(folder);
         }
-        
-        notifyListenersOfChange();
     }
-    
-    /**
-     * Gets all bookmarks and casts them to BookmarkIngredients
-     */
-    public List<BookmarkIngredient> getIngredients() {
-        // Use TypedIngredientHelper to convert generic objects to BookmarkIngredients
-        return TypedIngredientHelper.convertObjectsToBookmarkIngredients(bookmarks);
-    }
-    
-    /**
-     * Sets all ingredients in the bookmark list
-     */
-    public void setIngredients(List<BookmarkIngredient> ingredients) {
-        bookmarks.clear();
-        
-        if (ingredients == null || ingredients.isEmpty()) {
-            notifyListenersOfChange();
-            return;
-        }
-        
-        bookmarks.addAll(ingredients);
-        
-        // Update folder bookmarks if we have a folder
-        if (folder != null) {
-            startBatchUpdate();
-            
-            try {
-                // Clear existing bookmarks
-                folder.clearBookmarks();
-                
-                // Add new bookmarks
-                for (Object ingredient : ingredients) {
-                    // Use TypedIngredientHelper to get the key
-                    String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
-                    if (key != null && !key.isEmpty()) {
-                        folder.addBookmarkKey(key);
-                    }
-                }
-                
-                // Fire event for folder contents changed
-                eventSystem.fireFolderContentsChanged(folder);
-            } finally {
-                finishBatchUpdate();
-            }
-        }
-        
-        // Notify listeners of the change
-        notifyListenersOfChange();
-    }
-    
-    /**
-     * Checks if this list contains an ingredient with the same key
-     */
-    public boolean containsIngredient(Object ingredient) {
-        if (ingredient == null || bookmarks.isEmpty()) {
-            return false;
-        }
-        
-        // First check by reference equality (faster)
-        if (bookmarks.contains(ingredient)) {
-            return true;
-        }
-        
-        // Then check by ingredient key (slower but more accurate)
-        return bookmarks.stream()
-            .anyMatch(bookmark -> TypedIngredientHelper.areIngredientsEqual(bookmark, ingredient));
-    }
-    
+
     /**
      * Gets the number of bookmarks in this list
      */
     public int size() {
-        return bookmarks.size();
+        return ingredients.size();
     }
-    
+
     /**
      * Checks if this list is empty
      */
     public boolean isEmpty() {
-        return bookmarks.isEmpty();
+        return ingredients.isEmpty();
     }
-    
+
     /**
      * Gets the current folder
      */
     public FolderDataRepresentation getFolder() {
         return folder;
+    }
+    
+    /**
+     * Sets the ingredients for this bookmark list
+     * @param bookmarkIngredients The list of bookmark ingredients to set
+     */
+    public void setIngredients(List<BookmarkIngredient> bookmarkIngredients) {
+        if (bookmarkIngredients == null) {
+            bookmarkIngredients = new ArrayList<>();
+        }
+        
+        // Clear current ingredients first
+        ingredients.clear();
+        ingredientMap.clear();
+        
+        // Add all new ingredients in batch mode
+        try {
+            startBatchUpdate();
+            for (BookmarkIngredient ingredient : bookmarkIngredients) {
+                // Try to get a key for this ingredient
+                String key = ingredientService.getKeyForIngredient(ingredient.getWrappedIngredient());
+                if (key != null && !key.isEmpty() && !ingredientMap.containsKey(key)) {
+                    ingredients.add(ingredient);
+                    ingredientMap.put(key, ingredient);
+                }
+            }
+            finishBatchUpdate();
+            
+            ModLogger.debug("Set {} ingredients on bookmark list", ingredients.size());
+        } catch (Exception e) {
+            ModLogger.error("Error setting ingredients: {}", e.getMessage(), e);
+        }
+        
+        notifyListenersOfChange();
     }
 }
