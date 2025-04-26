@@ -2,11 +2,13 @@ package com.jeifolders.gui.controller;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.gui.common.FolderNameInputScreen;
+import com.jeifolders.gui.input.FolderInputHandler;
 import com.jeifolders.gui.interaction.IngredientDropTarget;
+import com.jeifolders.gui.screen.FolderScreenManager;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.buttons.FolderButtonTextures;
 import com.jeifolders.gui.view.layout.FolderRenderingManager;
+import com.jeifolders.gui.view.render.FolderRenderer;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
@@ -28,16 +30,11 @@ import java.util.List;
 
 /**
  * Main entry point for the folder button system.
- * Responsible for rendering, event handling, mouse interactions,
- * and overall UI state management.
+ * Coordinates between rendering, input handling, and screen management components.
  */
 public class FolderUIController extends AbstractWidget implements IngredientDropTarget {
     // Singleton instance for static access
     private static FolderUIController instance;
-    
-    // UI State
-    private int currentDeleteButtonX = -1;
-    private boolean deleteHovered = false;
     
     // Window size tracking
     private int lastWindowWidth = -1;
@@ -46,10 +43,15 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     // Exclusion zone
     public static Rect2i lastDrawnArea = new Rect2i(0, 0, 0, 0);
     
-    // Consolidated managers
+    // Component managers
     private final FolderStateManager folderManager;
     private final FolderRenderingManager renderingManager;
     private final BookmarkManager bookmarkManager;
+    
+    // Newly refactored components
+    private final FolderRenderer renderer;
+    private final FolderInputHandler inputHandler;
+    private final FolderScreenManager screenManager;
     
     // Static initialization tracking
     private static boolean isInitialized = false;
@@ -99,15 +101,17 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         super(10, 10, FolderButtonTextures.ICON_WIDTH, FolderButtonTextures.ICON_HEIGHT, 
               Component.translatable("gui.jeifolders.folder"));
         
-        ModLogger.debug("Initializing FolderButton with consolidated components");
+        ModLogger.debug("Initializing FolderButton with refactored components");
         
         // Initialize the component classes
         this.folderManager = FolderStateManager.getInstance();
         this.renderingManager = FolderRenderingManager.getInstance();
         this.bookmarkManager = new BookmarkManager(folderManager);
         
-        // Register the dialog handler with the folder manager
-        folderManager.setAddFolderDialogHandler(this::showFolderNameInputScreen);
+        // Create the specialized components
+        this.renderer = new FolderRenderer(folderManager, renderingManager, bookmarkManager);
+        this.screenManager = new FolderScreenManager(folderManager, this::createFolder);
+        this.inputHandler = new FolderInputHandler(folderManager, bookmarkManager, renderer, this::createFolder);
         
         // Initialize window size tracking
         Minecraft minecraft = Minecraft.getInstance();
@@ -204,7 +208,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * Called when a folder is clicked
      */
     private void onFolderClicked(Folder folder) {
-        // Delegate folder click handling to UnifiedFolderManager
+        // Delegate folder click handling to FolderStateManager
         folderManager.handleFolderClick(folder);
     }
     
@@ -213,128 +217,11 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Reset first time loading flag since we're rendering now
         firstTimeLoaded = false;
         
-        // We no longer need to render the Add button directly here
-        // as it will be rendered along with other folder buttons
-
-        if (folderManager.areFoldersVisible()) {
-            for (FolderButton button : folderManager.getFolderButtons()) {
-                button.render(graphics, mouseX, mouseY, partialTick);
-            }
-        }
-
-        if (folderManager.hasActiveFolder()) {
-            renderActiveFolderDetails(graphics, mouseX, mouseY);
-        } else {
-            currentDeleteButtonX = -1;
-            deleteHovered = false;
-        }
-
-        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
-            bookmarkManager.getBookmarkDisplay().render(graphics, mouseX, mouseY, partialTick);
-        }
-
-        updateExclusionZone();
-    }
-    
-    /**
-     * Renders details for the active folder, including name and delete button
-     */
-    private void renderActiveFolderDetails(GuiGraphics graphics, int mouseX, int mouseY) {
-        FolderButton activeFolder = folderManager.getActiveFolder();
-        if (activeFolder == null) {
-            ModLogger.debug("[NAME-DEBUG] No active folder to render name for");
-            return;
-        }
-
-        String fullName = activeFolder.getFolder().getName();
-        String displayName = fullName;
-        // Limit the display name to 12 characters, adding "..." if it's longer
-        if (fullName.length() > 12) {
-            displayName = fullName.substring(0, 12) + "...";
-        }
-
-        // Use the correct Y position from renderingManager for the folder name
-        int nameY = renderingManager.getFolderNameY();
-        ModLogger.debug("[NAME-DEBUG] Drawing folder name '{}' at Y={}", displayName, nameY);
+        // Delegate rendering to the FolderRenderer
+        renderer.renderWidget(graphics, mouseX, mouseY, partialTick);
         
-        // Changed back to white color (0xFFFFFF) for the folder name
-        graphics.drawString(
-            Minecraft.getInstance().font,
-            displayName,
-            10,
-            nameY,
-            0xFFFFFF, // White color
-            true
-        );
-        
-        // Log font metrics to ensure name is within visible area
-        int fontHeight = Minecraft.getInstance().font.lineHeight;
-        int stringWidth = Minecraft.getInstance().font.width(displayName);
-        ModLogger.debug("[NAME-DEBUG] Font metrics: width={}, height={}, screen dimensions: {}x{}", 
-                      stringWidth, fontHeight,
-                      Minecraft.getInstance().getWindow().getGuiScaledWidth(),
-                      Minecraft.getInstance().getWindow().getGuiScaledHeight());
-
-        // Show tooltip with the full name when hovering over a truncated name
-        if (!displayName.equals(fullName) && mouseX >= 10 && mouseX < 10 + Minecraft.getInstance().font.width(displayName) &&
-            mouseY >= nameY - 4 && mouseY < nameY + 10) {
-            graphics.renderTooltip(
-                Minecraft.getInstance().font,
-                Component.literal(fullName),
-                mouseX, mouseY
-            );
-        }
-
-        // Calculate and position the delete button using the layout manager
-        int[] deleteButtonPos = renderingManager.calculateDeleteButtonPosition();
-        int deleteX = deleteButtonPos[0];
-        int deleteY = deleteButtonPos[1];
-        
-        // Render the delete button using the sprite sheet
-        FolderButtonTextures.renderDeleteFolderIcon(graphics, deleteX, deleteY);
-        ModLogger.debug("[NAME-DEBUG] Delete button rendered at X={}, Y={}", deleteX, deleteY);
-
-        deleteHovered = mouseX >= deleteX && mouseX < deleteX + 16 &&
-                      mouseY >= deleteY && mouseY < deleteY + 16;
-
-        if (deleteHovered) {
-            graphics.renderTooltip(
-                Minecraft.getInstance().font,
-                Component.translatable("tooltip.jeifolders.delete_folder"),
-                mouseX, mouseY
-            );
-        }
-
-        currentDeleteButtonX = deleteX;
-    }
-    
-    /**
-     * Updates the exclusion zone for other UI elements
-     */
-    private void updateExclusionZone() {
-        int bookmarkDisplayHeight = 0;
-        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
-            bookmarkDisplayHeight = bookmarkManager.getBookmarkDisplay().getHeight();
-        }
-        
-        lastDrawnArea = renderingManager.updateExclusionZone(
-            folderManager.getFolderButtons().size(), 
-            folderManager.areFoldersVisible(), 
-            folderManager.hasActiveFolder(),
-            bookmarkDisplayHeight
-        );
-        
-        // Update bookmark display bounds if active
-        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
-            Rect2i zone = renderingManager.getExclusionZone();
-            int bookmarkDisplayWidth = zone.getWidth() + 10;
-            bookmarkManager.getBookmarkDisplay().updateBounds(
-                0, 
-                renderingManager.getBookmarkDisplayY(), 
-                bookmarkDisplayWidth,
-                bookmarkManager.getBookmarkDisplay().getHeight()
-            );
-        }
+        // Update the exclusion zone
+        lastDrawnArea = renderer.updateExclusionZone();
     }
     
     /** 
@@ -413,8 +300,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     }
     
     /**
-     * Gets the unified folder manager instance
-     * @return The unified folder manager
+     * Gets the folder state manager instance
+     * @return The folder state manager
      */
     public FolderStateManager getFolderManager() {
         return folderManager;
@@ -430,31 +317,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (currentDeleteButtonX >= 0 && button == 0 && deleteHovered) {
-            // Fire delete button clicked event before deleting
-            if (folderManager.hasActiveFolder()) {
-                folderManager.fireDeleteButtonClickedEvent(folderManager.getActiveFolder().getFolder().getId());
-            }
-            
-            folderManager.deleteActiveFolder();
-            loadFolders();
-            return true;
-        }
-
-        if (folderManager.areFoldersVisible()) {
-            for (FolderButton folderButton : folderManager.getFolderButtons()) {
-                if (folderButton.mouseClicked(mouseX, mouseY, button)) {
-                    return true;
-                }
-            }
-        }
-
-        // Handle bookmark display click
-        if (bookmarkManager.handleBookmarkDisplayClick(mouseX, mouseY, button)) {
-            return true;
-        }
-
-        return false;
+        // Delegate mouse click handling to the FolderInputHandler
+        return inputHandler.mouseClicked(mouseX, mouseY, button);
     }
     
     /**
@@ -463,7 +327,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * @return The newly created folder
      */
     public Folder createFolder(String name) {
-        // Delegate folder creation to the UnifiedFolderManager
+        // Delegate folder creation to the FolderStateManager
         Folder folder = folderManager.createFolder(name);
         
         // Handle UI updates after folder creation
@@ -476,19 +340,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         return folder;
     }
     
-    /**
-     * Shows the folder name input screen for creating a new folder
-     */
-    private void showFolderNameInputScreen() {
-        ModLogger.debug("Add folder button clicked");
-        Minecraft.getInstance().setScreen(new FolderNameInputScreen(
-            Minecraft.getInstance().screen,
-            folderName -> {
-                createFolder(folderName);
-            }
-        ));
-    }
-    
     @Override
     protected void updateWidgetNarration(@Nonnull NarrationElementOutput narrationOutput) {
         this.defaultButtonNarrationText(narrationOutput);
@@ -496,34 +347,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     @Override
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
-        // Add detailed logging about the incoming ingredient
-        ModLogger.info("[DROP-DEBUG] handleIngredientDrop called with ingredient type: {}", 
-            ingredient != null ? ingredient.getClass().getName() : "null");
-        
-        // First check if the ingredient is dropped on a folder button
-        FolderButton targetFolder = folderManager.getFolderButtonAt(mouseX, mouseY);
-        
-        if (targetFolder != null) {
-            // If dropped on a folder button, activate it and handle the ingredient drop
-            ModLogger.info("[DROP-DEBUG] Target folder found: {}", targetFolder.getFolder().getName());
-            folderManager.setActiveFolder(targetFolder);
-            
-            // Delegate ingredient drop handling to UnifiedFolderManager
-            boolean result = folderManager.handleIngredientDropOnFolder(targetFolder.getFolder(), ingredient);
-            ModLogger.info("[DROP-DEBUG] Folder drop result: {}", result);
-            return result;
-        }
-        
-        // If no specific folder was targeted, check if it's a drop on the bookmark display area
-        if (folderManager.hasActiveFolder()) {
-            ModLogger.info("[DROP-DEBUG] No target folder, checking bookmark display area");
-            boolean result = folderManager.handleIngredientDropOnDisplay(mouseX, mouseY, ingredient);
-            ModLogger.info("[DROP-DEBUG] Bookmark display drop result: {}", result);
-            return result;
-        }
-        
-        ModLogger.info("[DROP-DEBUG] No active folder or target folder, drop failed");
-        return false;
+        // Delegate ingredient drop handling to the FolderInputHandler
+        return inputHandler.handleIngredientDrop(mouseX, mouseY, ingredient);
     }
     
     /**
@@ -596,24 +421,40 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     @Override
     public List<FolderButton> getFolderButtons() {
-        return folderManager.getFolderButtons();
+        return inputHandler.getFolderButtons();
     }
 
     @Override
     public boolean isBookmarkAreaAvailable() {
-        return folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null;
+        return inputHandler.isBookmarkAreaAvailable();
     }
 
     @Override
     public Rect2i getBookmarkDisplayArea() {
-        if (bookmarkManager.getBookmarkDisplay() != null) {
-            return new Rect2i(
-                bookmarkManager.getBookmarkDisplay().getX(),
-                bookmarkManager.getBookmarkDisplay().getY(),
-                bookmarkManager.getBookmarkDisplay().getWidth(),
-                bookmarkManager.getBookmarkDisplay().getHeight()
-            );
-        }
-        return new Rect2i(0, 0, 0, 0);
+        return inputHandler.getBookmarkDisplayArea();
+    }
+    
+    /**
+     * Gets the folder renderer instance
+     * @return The folder renderer
+     */
+    public FolderRenderer getRenderer() {
+        return renderer;
+    }
+    
+    /**
+     * Gets the input handler instance
+     * @return The input handler
+     */
+    public FolderInputHandler getInputHandler() {
+        return inputHandler;
+    }
+    
+    /**
+     * Gets the screen manager instance
+     * @return The screen manager
+     */
+    public FolderScreenManager getScreenManager() {
+        return screenManager;
     }
 }
