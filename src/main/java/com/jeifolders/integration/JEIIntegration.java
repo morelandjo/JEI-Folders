@@ -15,6 +15,7 @@ import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
@@ -85,6 +86,14 @@ public class JEIIntegration implements IModPlugin {
         
         // Request data to be loaded now that JEI is available
         FolderDataService.getInstance().loadData();
+        
+        // Force a UI refresh to make folders visible immediately
+        Minecraft.getInstance().execute(() -> {
+            if (FolderButtonSystem.isInitialized()) {
+                ModLogger.info("JEI runtime available - forcing folder UI refresh");
+                FolderButtonSystem.getInstance().rebuildFolders();
+            }
+        });
     }
 
     /**
@@ -300,10 +309,13 @@ public class JEIIntegration implements IModPlugin {
                 @Override
                 public void accept(I ingredientObj) {
                     ModLogger.debug("[HOVER-FIX] Ingredient dropped on bookmark display");
+                    
+                    // We need to pass the ingredientObj (which is the actual Minecraft item)
+                    // instead of the ITypedIngredient wrapper
                     folderButton.handleIngredientDrop(
                             bookmarkArea.getX() + bookmarkArea.getWidth() / 2,
                             bookmarkArea.getY() + bookmarkArea.getHeight() / 2,
-                            ingredient
+                            ingredientObj
                     );
                 }
             };

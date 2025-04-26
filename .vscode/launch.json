@@ -6,17 +6,17 @@
       "request": "launch",
       "name": "Client",
       "presentation": {
-        "group": "Mod Development - JEI-Folders-Old",
+        "group": "Mod Development - JEI-Folders",
         "order": 0
       },
-      "projectName": "JEI-Folders-Old",
+      "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\clientRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\clientRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\clientRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Old\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -28,17 +28,17 @@
       "request": "launch",
       "name": "Data",
       "presentation": {
-        "group": "Mod Development - JEI-Folders-Old",
+        "group": "Mod Development - JEI-Folders",
         "order": 1
       },
-      "projectName": "JEI-Folders-Old",
+      "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\dataRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\dataRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\dataRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Old\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\dataRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -50,17 +50,17 @@
       "request": "launch",
       "name": "GameTestServer",
       "presentation": {
-        "group": "Mod Development - JEI-Folders-Old",
+        "group": "Mod Development - JEI-Folders",
         "order": 2
       },
-      "projectName": "JEI-Folders-Old",
+      "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\gameTestServerRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\gameTestServerRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\gameTestServerRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Old\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\gameTestServerRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -72,17 +72,17 @@
       "request": "launch",
       "name": "Server",
       "presentation": {
-        "group": "Mod Development - JEI-Folders-Old",
+        "group": "Mod Development - JEI-Folders",
         "order": 3
       },
-      "projectName": "JEI-Folders-Old",
+      "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\serverRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\serverRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Old\\build\\moddev\\serverRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Old\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},

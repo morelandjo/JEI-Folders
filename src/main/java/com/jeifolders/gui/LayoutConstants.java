@@ -20,6 +20,18 @@ public final class LayoutConstants {
     public static final int SAFETY_MARGIN = 10;
     
     /**
+     * Extended margin for drag and drop operations (horizontal).
+     * Makes it easier to drop items onto folders.
+     */
+    public static final int DRAG_DROP_HORIZONTAL_MARGIN = 15;
+    
+    /**
+     * Extended margin for drag and drop operations (vertical).
+     * Makes it easier to drop items onto folders.
+     */
+    public static final int DRAG_DROP_VERTICAL_MARGIN = 25;
+    
+    /**
      * Calculates the left position of a standard GUI.
      * 
      * @param screenWidth The current screen width in pixels

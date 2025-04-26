@@ -483,22 +483,33 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     
     @Override
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
+        // Add detailed logging about the incoming ingredient
+        ModLogger.info("[DROP-DEBUG] handleIngredientDrop called with ingredient type: {}", 
+            ingredient != null ? ingredient.getClass().getName() : "null");
+        
         // First check if the ingredient is dropped on a folder button
         FolderButton targetFolder = folderManager.getFolderButtonAt(mouseX, mouseY);
         
         if (targetFolder != null) {
             // If dropped on a folder button, activate it and handle the ingredient drop
+            ModLogger.info("[DROP-DEBUG] Target folder found: {}", targetFolder.getFolder().getName());
             folderManager.setActiveFolder(targetFolder);
             
             // Delegate ingredient drop handling to UnifiedFolderManager
-            return folderManager.handleIngredientDropOnFolder(targetFolder.getFolder(), ingredient);
+            boolean result = folderManager.handleIngredientDropOnFolder(targetFolder.getFolder(), ingredient);
+            ModLogger.info("[DROP-DEBUG] Folder drop result: {}", result);
+            return result;
         }
         
         // If no specific folder was targeted, check if it's a drop on the bookmark display area
         if (folderManager.hasActiveFolder()) {
-            return folderManager.handleIngredientDropOnDisplay(mouseX, mouseY, ingredient);
+            ModLogger.info("[DROP-DEBUG] No target folder, checking bookmark display area");
+            boolean result = folderManager.handleIngredientDropOnDisplay(mouseX, mouseY, ingredient);
+            ModLogger.info("[DROP-DEBUG] Bookmark display drop result: {}", result);
+            return result;
         }
         
+        ModLogger.info("[DROP-DEBUG] No active folder or target folder, drop failed");
         return false;
     }
     
@@ -508,6 +519,18 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      */
     public void setJeiRuntime(Object runtime) {
         JEIIntegrationFactory.getJEIService().setJeiRuntime(runtime);
+        
+        // Force a UI refresh now that JEI is available
+        ModLogger.info("JEI runtime set, forcing folder UI refresh");
+        
+        // Schedule refresh on the main thread to ensure it happens after current operations
+        Minecraft.getInstance().execute(() -> {
+            // Force a complete refresh of the folders
+            rebuildFolders();
+            
+            // Make sure the bookmark display is refreshed
+            refreshBookmarkDisplay();
+        });
     }
 
     public void initializeJeiRuntime() {

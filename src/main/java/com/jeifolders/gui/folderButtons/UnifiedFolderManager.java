@@ -750,13 +750,21 @@ public class UnifiedFolderManager {
      * @return true if the drop was handled, false otherwise
      */
     public boolean handleIngredientDropOnDisplay(double mouseX, double mouseY, Object ingredient) {
+        ModLogger.info("[DROP-DEBUG] handleIngredientDropOnDisplay called with ingredient type: {}", 
+            ingredient != null ? ingredient.getClass().getName() : "null");
+        
+        // Create the bookmark display on-demand if it doesn't exist
         if (bookmarkDisplay == null) {
-            return false;
+            ModLogger.info("[DROP-DEBUG] Bookmark display is null, creating one now");
+            if (!createBookmarkDisplay(true)) {
+                ModLogger.error("[DROP-DEBUG] Failed to create bookmark display");
+                return false;
+            }
         }
         
         // Check if the bookmark display can handle this drop
         boolean isInBounds = bookmarkDisplay.isMouseOver(mouseX, mouseY);
-        ModLogger.debug("Is drop within display bounds: {}", isInBounds);
+        ModLogger.info("[DROP-DEBUG] Is drop within display bounds: {}", isInBounds);
         
         if (!isInBounds) {
             return false;
@@ -764,25 +772,30 @@ public class UnifiedFolderManager {
         
         // Make sure we have an active folder
         if (!hasActiveFolder() && lastActiveFolderId != null) {
-            ModLogger.info("No active folder detected but found lastActiveFolderId: {}", lastActiveFolderId);
+            ModLogger.info("[DROP-DEBUG] No active folder detected but found lastActiveFolderId: {}", lastActiveFolderId);
             
             Optional<FolderDataRepresentation> folderDataOpt = folderService.getFolder(lastActiveFolderId);
             if (folderDataOpt.isPresent()) {
                 FolderDataRepresentation folderData = folderDataOpt.get();
                 bookmarkDisplay.setActiveFolder(folderData);
-                ModLogger.info("Recovered active folder state for drop operation: {}", folderData.getName());
+                ModLogger.info("[DROP-DEBUG] Recovered active folder state for drop operation: {}", folderData.getName());
             } else {
-                ModLogger.warn("Could not recover folder data for ID: {}", lastActiveFolderId);
+                ModLogger.warn("[DROP-DEBUG] Could not recover folder data for ID: {}", lastActiveFolderId);
                 return false;
             }
+        } else if (!hasActiveFolder()) {
+            // If we don't have an active folder and can't recover one, we can't handle the drop
+            ModLogger.warn("[DROP-DEBUG] No active folder and no lastActiveFolderId, cannot handle drop");
+            return false;
         }
         
         // Delegate to the bookmark display
+        ModLogger.info("[DROP-DEBUG] Delegating to bookmarkDisplay.handleIngredientDrop");
         boolean handled = bookmarkDisplay.handleIngredientDrop(mouseX, mouseY, ingredient);
         
         if (handled) {
             safeUpdateBookmarkContents();
-            ModLogger.info("Bookmark display handled ingredient drop successfully");
+            ModLogger.info("[DROP-DEBUG] Bookmark display handled ingredient drop successfully");
             
             // Fire event with the active folder ID
             if (hasActiveFolder()) {
@@ -791,7 +804,7 @@ public class UnifiedFolderManager {
                 fireIngredientDroppedEvent(ingredient, null);
             }
         } else {
-            ModLogger.warn("Bookmark display failed to handle ingredient drop");
+            ModLogger.warn("[DROP-DEBUG] Bookmark display failed to handle ingredient drop");
         }
         
         return handled;

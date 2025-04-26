@@ -357,23 +357,25 @@ public class UnifiedFolderContentsDisplay {
             return true;
         }
         
-        // For drag operations, check against a more generous area
+        // For drag operations, check against the background area if available
         if (backgroundArea != null && !backgroundArea.isEmpty()) {
-            boolean overBackground = mouseX >= backgroundArea.getX() && 
-                   mouseX <= backgroundArea.getX() + backgroundArea.getWidth() &&
-                   mouseY >= backgroundArea.getY() && 
-                   mouseY <= backgroundArea.getY() + backgroundArea.getHeight();
+            // Add extended margins to the background area for easier drag and drop
+            boolean overBackground = mouseX >= (backgroundArea.getX() - LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN) && 
+                   mouseX <= (backgroundArea.getX() + backgroundArea.getWidth() + LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN) &&
+                   mouseY >= (backgroundArea.getY() - LayoutConstants.DRAG_DROP_VERTICAL_MARGIN) && 
+                   mouseY <= (backgroundArea.getY() + backgroundArea.getHeight() + LayoutConstants.DRAG_DROP_VERTICAL_MARGIN);
                    
             if (overBackground) {
+                ModLogger.debug("Mouse in extended background hit area for drag and drop");
                 return true;
             }
         }
         
-        // For drag and drop, be even more lenient
-        // Check entire vertical column under the display X position
-        if (mouseX >= x && mouseX < x + width) {
-            // Give a 20 pixel margin above and below the display
-            boolean inVerticalRegion = mouseY >= y - 20 && mouseY <= y + height + 20;
+        // For drag and drop, be even more lenient with the main display bounds
+        if (mouseX >= (x - LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN) && 
+            mouseX < (x + width + LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN)) {
+            boolean inVerticalRegion = mouseY >= (y - LayoutConstants.DRAG_DROP_VERTICAL_MARGIN) && 
+                                      mouseY <= (y + height + LayoutConstants.DRAG_DROP_VERTICAL_MARGIN);
             if (inVerticalRegion) {
                 ModLogger.debug("Mouse in extended drag-and-drop hit area");
                 return true;
@@ -471,40 +473,44 @@ public class UnifiedFolderContentsDisplay {
      * @return true if the drop was handled
      */
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
+        ModLogger.info("[DROP-DEBUG] UnifiedFolderContentsDisplay.handleIngredientDrop called with ingredient type: {}", 
+            ingredient != null ? ingredient.getClass().getName() : "null");
+
         if (ingredient == null) {
-            ModLogger.debug("Ingredient drop rejected: null ingredient");
+            ModLogger.info("[DROP-DEBUG] Ingredient drop rejected: null ingredient");
             return false;
         }
 
         // Only process drops that are over this display
         if (!isMouseOver(mouseX, mouseY)) {
-            ModLogger.debug("Ingredient drop not over display area: ({}, {}) not in ({}, {}, {}, {})", 
+            ModLogger.info("[DROP-DEBUG] Ingredient drop not over display area: ({}, {}) not in ({}, {}, {}, {})", 
                           mouseX, mouseY, x, y, width, height);
             return false;
         }
         
-        ModLogger.debug("Processing ingredient drop on display - ingredient type: {}", 
-                      ingredient != null ? ingredient.getClass().getName() : "null");
+        ModLogger.info("[DROP-DEBUG] Processing ingredient drop - ingredient: {} ({})", 
+                      ingredient, ingredient.getClass().getName());
         
         try {
             // Try to get the ingredient key
             String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
+            ModLogger.info("[DROP-DEBUG] Generated ingredient key: {}", key);
             
             if (key == null || key.isEmpty()) {
-                ModLogger.warn("Failed to generate key for dropped ingredient of type: {}", 
+                ModLogger.warn("[DROP-DEBUG] Failed to generate key for dropped ingredient of type: {}", 
                               ingredient.getClass().getName());
                 return false;
             }
             
-            ModLogger.debug("Generated ingredient key: {}", key);
-            
             // Check if the folder already has this bookmark
             if (activeFolder.containsBookmark(key)) {
+                ModLogger.info("[DROP-DEBUG] Folder already contains bookmark with key: {}", key);
                 return true;
             }
             
             // Add the ingredient to the folder
             int folderId = activeFolder.getId();
+            ModLogger.info("[DROP-DEBUG] Adding bookmark to folder {} with key: {}", folderId, key);
             folderService.addBookmark(folderId, key);
             
             // Log the success
@@ -512,12 +518,13 @@ public class UnifiedFolderContentsDisplay {
             if (folderOpt.isPresent()) {
                 FolderDataRepresentation folder = folderOpt.get();
                 List<String> bookmarkKeys = folder.getBookmarkKeys();
-                ModLogger.debug("Folder '{}' now has {} bookmarks, added key: {}", 
+                ModLogger.info("[DROP-DEBUG] Folder '{}' now has {} bookmarks, added key: {}", 
                               activeFolder.getName(), bookmarkKeys.size(), key);
             }
             
             // Fire bookmark added event with the EventBuilder pattern
             if (ingredient instanceof BookmarkIngredient) {
+                ModLogger.info("[DROP-DEBUG] Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
                 eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.BOOKMARK_ADDED)
                     .withFolder(activeFolder)
                     .withIngredient(ingredient)
@@ -525,20 +532,24 @@ public class UnifiedFolderContentsDisplay {
                     .build());
             } else {
                 // For non-BookmarkIngredient, just fire a folder contents changed event
+                ModLogger.info("[DROP-DEBUG] Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
                 eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED)
                     .withFolderId(folderId)
                     .build());
             }
             
             // Refresh the display
+            ModLogger.info("[DROP-DEBUG] Refreshing bookmark display after adding ingredient");
             refreshBookmarks();
             
             // Save the changes
             folderService.saveData();
             
+            ModLogger.info("[DROP-DEBUG] Successfully handled ingredient drop");
             return true;
         } catch (Exception e) {
-            ModLogger.error("Error processing ingredient drop: {}", e.getMessage(), e);
+            ModLogger.error("[DROP-DEBUG] Error processing ingredient drop: {}", e.getMessage(), e);
+            e.printStackTrace();
             return false;
         }
     }
