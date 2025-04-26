@@ -1,7 +1,7 @@
-package com.jeifolders.gui.bookmarks;
+package com.jeifolders.gui.view.contents;
 
-import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
+import com.jeifolders.data.Folder;
+import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.IngredientService;
@@ -20,10 +20,10 @@ import java.util.Optional;
  * Stores and manages the list of bookmarks for the active folder.
  */
 public class FolderBookmarkList {
-    private FolderDataRepresentation folder;
+    private Folder folder;
     private List<BookmarkIngredient> ingredients = new ArrayList<>();
     private final Map<String, BookmarkIngredient> ingredientMap = new HashMap<>();
-    private final UnifiedFolderManager eventManager;
+    private final FolderStateManager eventManager;
 
     // Access services
     private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
@@ -38,13 +38,13 @@ public class FolderBookmarkList {
     private final List<IIngredientGridSource.SourceListChangedListener> sourceListChangedListeners = new ArrayList<>();
 
     public FolderBookmarkList() {
-        this.eventManager = UnifiedFolderManager.getInstance();
+        this.eventManager = FolderStateManager.getInstance();
     }
 
     /**
      * Sets the current folder and refreshes bookmarks
      */
-    public void setFolder(FolderDataRepresentation folder) {
+    public void setFolder(Folder folder) {
         this.folder = folder;
         refreshBookmarks();
     }
@@ -275,7 +275,7 @@ public class FolderBookmarkList {
     /**
      * Gets the current folder
      */
-    public FolderDataRepresentation getFolder() {
+    public Folder getFolder() {
         return folder;
     }
     

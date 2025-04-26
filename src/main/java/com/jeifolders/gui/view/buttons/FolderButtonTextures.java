@@ -1,4 +1,4 @@
-package com.jeifolders.gui.folderButtons;
+package com.jeifolders.gui.view.buttons;
 
 import com.jeifolders.JEIFolders;
 import net.minecraft.client.gui.GuiGraphics;

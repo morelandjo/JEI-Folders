@@ -1,6 +1,6 @@
 package com.jeifolders.data;
 
-import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
+import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.util.SnbtFormat;
@@ -29,12 +29,12 @@ import java.util.*;
  * Central service for managing folder data and persistence.
  * Handles loading, saving, and CRUD operations for folders.
  */
-public class FolderDataService {
+public class FolderStorageService {
     // Singleton instance
-    private static FolderDataService instance;
+    private static FolderStorageService instance;
 
     // Data collections
-    private final Map<Integer, FolderDataRepresentation> folders = new HashMap<>();
+    private final Map<Integer, Folder> folders = new HashMap<>();
     private final Map<String, Object> ingredientCache = new HashMap<>();
 
     // Runtime state
@@ -53,7 +53,7 @@ public class FolderDataService {
     private static final String CONFIG_ROOT = "./config/jeifolders/";
     private static final int MIN_SAVE_INTERVAL_MS = 5000; // Minimum time between saves
     private long lastSaveTime = 0;
-    private UnifiedFolderManager callbackManager;
+    private FolderStateManager callbackManager;
 
     // NBT Keys
     private static final String FOLDERS_KEY = "folders";
@@ -62,16 +62,16 @@ public class FolderDataService {
     /**
      * Private constructor for singleton pattern
      */
-    private FolderDataService() {
+    private FolderStorageService() {
         setupConfigDir();
     }
 
     /**
      * Get the singleton instance
      */
-    public static synchronized FolderDataService getInstance() {
+    public static synchronized FolderStorageService getInstance() {
         if (instance == null) {
-            instance = new FolderDataService();
+            instance = new FolderStorageService();
         }
         return instance;
     }
@@ -293,7 +293,7 @@ public class FolderDataService {
                     CompoundTag folderTag = foldersList.getCompound(i);
                     
                     // Parse folder from NBT
-                    FolderDataRepresentation folder = FolderDataRepresentation.fromNbt(folderTag);
+                    Folder folder = Folder.fromNbt(folderTag);
                     
                     if (folder != null) {
                         folders.put(folder.getId(), folder);
@@ -313,7 +313,7 @@ public class FolderDataService {
             }
 
             // Load cached ingredients (for each folder's bookmarks)
-            for (FolderDataRepresentation folder : folders.values()) {
+            for (Folder folder : folders.values()) {
                 loadIngredientsForFolder(folder);
             }
 
@@ -361,7 +361,7 @@ public class FolderDataService {
             
             // Save folders
             ListTag foldersList = new ListTag();
-            for (FolderDataRepresentation folder : folders.values()) {
+            for (Folder folder : folders.values()) {
                 CompoundTag folderTag = folder.toNbt();
                 foldersList.add(folderTag);
             }
@@ -394,7 +394,7 @@ public class FolderDataService {
      * 
      * @param manager The folder manager to notify of changes
      */
-    public void registerCallback(UnifiedFolderManager manager) {
+    public void registerCallback(FolderStateManager manager) {
         this.callbackManager = manager;
         ModLogger.debug("Callback manager registered with FolderDataService");
     }
@@ -404,7 +404,7 @@ public class FolderDataService {
      * 
      * @param folder The folder to load ingredients for
      */
-    private void loadIngredientsForFolder(FolderDataRepresentation folder) {
+    private void loadIngredientsForFolder(Folder folder) {
         if (folder == null) {
             return;
         }
@@ -444,7 +444,7 @@ public class FolderDataService {
      * 
      * @return List of all folders
      */
-    public List<FolderDataRepresentation> getAllFolders() {
+    public List<Folder> getAllFolders() {
         // Make sure data is loaded
         if (!isLoaded) {
             loadData();
@@ -458,7 +458,7 @@ public class FolderDataService {
      * @param id The folder ID
      * @return Optional containing the folder, or empty if not found
      */
-    public Optional<FolderDataRepresentation> getFolder(int id) {
+    public Optional<Folder> getFolder(int id) {
         // Make sure data is loaded
         if (!isLoaded) {
             loadData();
@@ -496,7 +496,7 @@ public class FolderDataService {
      * @param name The name of the folder
      * @return The newly created folder
      */
-    public FolderDataRepresentation createFolder(String name) {
+    public Folder createFolder(String name) {
         // Make sure data is loaded
         if (!isLoaded) {
             loadData();
@@ -509,7 +509,7 @@ public class FolderDataService {
         }
         
         // Create the new folder
-        FolderDataRepresentation folder = new FolderDataRepresentation(nextId, name);
+        Folder folder = new Folder(nextId, name);
         folders.put(nextId, folder);
         
         // Mark as dirty and save
@@ -533,7 +533,7 @@ public class FolderDataService {
         }
         
         // Remove the folder
-        FolderDataRepresentation removed = folders.remove(id);
+        Folder removed = folders.remove(id);
         if (removed != null) {
             // If this was the active folder, clear it
             if (lastActiveFolderId != null && lastActiveFolderId == id) {
@@ -565,7 +565,7 @@ public class FolderDataService {
         }
         
         // Get the folder
-        FolderDataRepresentation folder = folders.get(id);
+        Folder folder = folders.get(id);
         if (folder != null) {
             // Update the name
             folder.setName(newName);
@@ -595,7 +595,7 @@ public class FolderDataService {
         }
         
         // Get the folder
-        FolderDataRepresentation folder = folders.get(folderId);
+        Folder folder = folders.get(folderId);
         if (folder != null) {
             // Add the bookmark
             if (folder.addBookmarkKey(bookmarkKey)) {
@@ -625,7 +625,7 @@ public class FolderDataService {
         }
         
         // Get the folder
-        FolderDataRepresentation folder = folders.get(folderId);
+        Folder folder = folders.get(folderId);
         if (folder != null) {
             // Remove the bookmark
             if (folder.removeBookmarkKey(bookmarkKey)) {

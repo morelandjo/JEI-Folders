@@ -1,8 +1,8 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.common;
 
 import com.jeifolders.util.ModLogger;
-import com.jeifolders.gui.folderButtons.FolderButtonInterface;
-import com.jeifolders.gui.folderButtons.FolderButtonSystem;
+import com.jeifolders.gui.controller.FolderUIController;
+import com.jeifolders.gui.interaction.IngredientDropTarget;
 import com.jeifolders.integration.IngredientDragHandler;
 import com.jeifolders.integration.TypedIngredient;
 import net.minecraft.client.Minecraft;
@@ -71,8 +71,8 @@ public class IngredientDragManager {
 
         if (event.getButton() == 0 && isDragging) { // Left mouse button
             // Get the currently active folder button interface from FolderButtonSystem
-            FolderButtonInterface folderButton = FolderButtonSystem.isInitialized() ? 
-                                                FolderButtonSystem.getInstance() : null;
+            IngredientDropTarget folderButton = FolderUIController.isInitialized() ? 
+                                                FolderUIController.getInstance() : null;
             
             if (folderButton == null) {
                 ModLogger.debug("No active folder button found for drop processing");

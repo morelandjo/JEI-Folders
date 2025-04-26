@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.common;
 
 import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.util.ModLogger;

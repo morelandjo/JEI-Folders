@@ -1,8 +1,8 @@
 package com.jeifolders;
 
 import com.jeifolders.integration.JEIIntegration;
-import com.jeifolders.data.FolderDataService;
-import com.jeifolders.gui.folderButtons.FolderButtonSystem;
+import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.gui.controller.FolderUIController;
 import com.jeifolders.util.ModLogger;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -41,13 +41,13 @@ public class JEIFolders {
         ModLogger.info("Setting up JEI Folders client");
         
         // Initialize the folder button system (which internally initializes the rendering manager)
-        FolderButtonSystem.init();
+        FolderUIController.init();
         
         // Initialize JEI integration
         JEIIntegration.registerRuntimeAvailableCallback(jeiRuntime -> {
             ModLogger.info("JEI Runtime available, initializing JEI-Folders integration");
             // Pass the JEI runtime to our main controller
-            FolderButtonSystem.getInstance().setJeiRuntime(jeiRuntime);
+            FolderUIController.getInstance().setJeiRuntime(jeiRuntime);
         });
         
         ModLogger.info("Client setup complete");
@@ -56,12 +56,12 @@ public class JEIFolders {
     private void onWorldLoad(LevelEvent.Load event) {
         if (event.getLevel().isClientSide() && !dataLoaded) {
             ModLogger.debug("Loading folder data on world load");
-            FolderDataService.getInstance().loadData();
+            FolderStorageService.getInstance().loadData();
             dataLoaded = true;
             
             // Refresh UI after data load if system is initialized
-            if (FolderButtonSystem.isInitialized()) {
-                FolderButtonSystem.getInstance().refreshBookmarkDisplay();
+            if (FolderUIController.isInitialized()) {
+                FolderUIController.getInstance().refreshBookmarkDisplay();
             }
         }
     }
@@ -69,7 +69,7 @@ public class JEIFolders {
     private void onWorldUnload(LevelEvent.Unload event) {
         if (event.getLevel().isClientSide()) {
             ModLogger.debug("Saving folder data on world unload");
-            FolderDataService.getInstance().saveData();
+            FolderStorageService.getInstance().saveData();
             dataLoaded = false;
         }
     }
@@ -77,12 +77,12 @@ public class JEIFolders {
     private void onPlayerLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
         if (!dataLoaded) {
             ModLogger.debug("Loading folder data on player login");
-            FolderDataService.getInstance().loadData();
+            FolderStorageService.getInstance().loadData();
             dataLoaded = true;
             
             // Refresh UI after data load if system is initialized
-            if (FolderButtonSystem.isInitialized()) {
-                FolderButtonSystem.getInstance().refreshBookmarkDisplay();
+            if (FolderUIController.isInitialized()) {
+                FolderUIController.getInstance().refreshBookmarkDisplay();
             }
         }
     }

@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.common;
 
 /**
  * Centralized constants for UI layout calculations.

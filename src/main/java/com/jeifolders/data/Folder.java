@@ -12,12 +12,12 @@ import net.minecraft.nbt.Tag;
 /**
  * Represents a JEI folder with a unique ID and name.
  */
-public class FolderDataRepresentation {
+public class Folder {
     private final int id;
     private String name;
     private final List<String> bookmarkKeys = new ArrayList<>();
     
-    public FolderDataRepresentation(int id, String name) {
+    public Folder(int id, String name) {
         this.id = id;
         this.name = name;
     }
@@ -117,10 +117,10 @@ public class FolderDataRepresentation {
     /**
      * Creates a Folder object from an NBT tag.
      */
-    public static FolderDataRepresentation fromNbt(CompoundTag tag) {
+    public static Folder fromNbt(CompoundTag tag) {
         int id = tag.getInt("id");
         String name = tag.getString("name");
-        FolderDataRepresentation folder = new FolderDataRepresentation(id, name);
+        Folder folder = new Folder(id, name);
 
         if (tag.contains("bookmarks")) {
             ListTag bookmarksTag = tag.getList("bookmarks", Tag.TAG_STRING);

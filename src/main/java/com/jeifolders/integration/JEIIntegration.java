@@ -1,12 +1,12 @@
 package com.jeifolders.integration;
 
 import com.jeifolders.JEIFolders;
-import com.jeifolders.data.FolderDataService;
-import com.jeifolders.gui.ExclusionHandler;
-import com.jeifolders.gui.IngredientDragManager;
-import com.jeifolders.gui.folderButtons.FolderButtonInterface;
-import com.jeifolders.gui.folderButtons.FolderButtonSystem;
-import com.jeifolders.gui.folderButtons.FolderRenderingManager;
+import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.gui.common.ExclusionHandler;
+import com.jeifolders.gui.common.IngredientDragManager;
+import com.jeifolders.gui.controller.FolderUIController;
+import com.jeifolders.gui.interaction.IngredientDropTarget;
+import com.jeifolders.gui.view.layout.FolderRenderingManager;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -85,13 +85,13 @@ public class JEIIntegration implements IModPlugin {
         jeiService.setJeiRuntime(runtime);
         
         // Request data to be loaded now that JEI is available
-        FolderDataService.getInstance().loadData();
+        FolderStorageService.getInstance().loadData();
         
         // Force a UI refresh to make folders visible immediately
         Minecraft.getInstance().execute(() -> {
-            if (FolderButtonSystem.isInitialized()) {
+            if (FolderUIController.isInitialized()) {
                 ModLogger.info("JEI runtime available - forcing folder UI refresh");
-                FolderButtonSystem.getInstance().rebuildFolders();
+                FolderUIController.getInstance().rebuildFolders();
             }
         });
     }
@@ -107,8 +107,8 @@ public class JEIIntegration implements IModPlugin {
 
     private void initializeFolderButton(IJeiRuntime runtime) {
         // Get the folder button interface from FolderButtonSystem
-        if (FolderButtonSystem.isInitialized()) {
-            FolderButtonSystem folderButton = FolderButtonSystem.getInstance();
+        if (FolderUIController.isInitialized()) {
+            FolderUIController folderButton = FolderUIController.getInstance();
             folderButton.setJeiRuntime(runtime);
             ModLogger.debug("JEI runtime provided to folder button");
         } else {
@@ -199,8 +199,8 @@ public class JEIIntegration implements IModPlugin {
             List<Rect2i> areas = new ArrayList<>();
 
             // Add the folder button exclusion zone if available
-            if (FolderButtonSystem.lastDrawnArea.getWidth() > 0 && FolderButtonSystem.lastDrawnArea.getHeight() > 0) {
-                areas.add(FolderButtonSystem.lastDrawnArea);
+            if (FolderUIController.lastDrawnArea.getWidth() > 0 && FolderUIController.lastDrawnArea.getHeight() > 0) {
+                areas.add(FolderUIController.lastDrawnArea);
             }
 
             return areas;
@@ -239,8 +239,8 @@ public class JEIIntegration implements IModPlugin {
                 JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
                 
                 // Now add the targets since this is an actual drag
-                if (FolderButtonSystem.isInitialized()) {
-                    FolderButtonSystem folderButton = FolderButtonSystem.getInstance();
+                if (FolderUIController.isInitialized()) {
+                    FolderUIController folderButton = FolderUIController.getInstance();
                     
                     // Add targets for folder buttons
                     folderButton.getFolderButtons().forEach(folderRowButton -> {
@@ -268,8 +268,8 @@ public class JEIIntegration implements IModPlugin {
         }
 
         private <I> Target<I> createFolderTarget(
-                com.jeifolders.gui.folderButtons.FolderButton folderRowButton,
-                FolderButtonSystem folderButton,
+                com.jeifolders.gui.view.buttons.FolderButton folderRowButton,
+                FolderUIController folderButton,
                 ITypedIngredient<I> ingredient) {
 
             return new Target<I>() {
@@ -297,7 +297,7 @@ public class JEIIntegration implements IModPlugin {
 
         private <I> Target<I> createBookmarkAreaTarget(
                 Rect2i bookmarkArea,
-                FolderButtonSystem folderButton,
+                FolderUIController folderButton,
                 ITypedIngredient<I> ingredient) {
 
             return new Target<I>() {

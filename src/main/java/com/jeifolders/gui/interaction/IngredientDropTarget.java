@@ -1,11 +1,11 @@
-package com.jeifolders.gui.folderButtons;
+package com.jeifolders.gui.interaction;
 
 import java.util.List;
 
 /**
  * Interface for a button that can handle ingredient drops
  */
-public interface FolderButtonInterface {
+public interface IngredientDropTarget {
     /**
      * Handle an ingredient being dropped on this button
      * @param mouseX The x position of the mouse

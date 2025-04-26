@@ -1,13 +1,13 @@
 package com.jeifolders.integration;
 
-import com.jeifolders.gui.ExclusionHandler;
-
 import mezz.jei.api.gui.handlers.IGlobalGuiHandler;
 import mezz.jei.api.runtime.IClickableIngredient;
 import net.minecraft.client.renderer.Rect2i;
 
 import java.util.Collection;
 import java.util.Optional;
+
+import com.jeifolders.gui.common.ExclusionHandler;
 
 /**
  * JEI-specific implementation of the ExclusionHandlerInterface.

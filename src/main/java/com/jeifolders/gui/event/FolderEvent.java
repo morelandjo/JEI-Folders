@@ -1,6 +1,7 @@
-package com.jeifolders.gui.folderButtons;
+package com.jeifolders.gui.event;
 
-import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.data.Folder;
+import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 
@@ -114,8 +115,8 @@ public class FolderEvent extends EventObject {
      * 
      * @return the folder, or null if not present
      */
-    public FolderDataRepresentation getFolder() {
-        return getData("folder", FolderDataRepresentation.class);
+    public Folder getFolder() {
+        return getData("folder", Folder.class);
     }
     
     /**
@@ -125,7 +126,7 @@ public class FolderEvent extends EventObject {
      * @param folder the clicked folder
      * @return the created event
      */
-    public static FolderEvent createFolderClickedEvent(Object source, FolderDataRepresentation folder) {
+    public static FolderEvent createFolderClickedEvent(Object source, Folder folder) {
         return new FolderEvent(source, Type.FOLDER_CLICKED)
             .withData("folder", folder)
             .withData("folderId", folder != null ? folder.getId() : null);
@@ -167,7 +168,7 @@ public class FolderEvent extends EventObject {
      * @param folder the created folder
      * @return the created event
      */
-    public static FolderEvent createFolderCreatedEvent(Object source, FolderDataRepresentation folder) {
+    public static FolderEvent createFolderCreatedEvent(Object source, Folder folder) {
         return new FolderEvent(source, Type.FOLDER_CREATED)
             .withData("folder", folder)
             .withData("folderId", folder != null ? folder.getId() : null);
@@ -249,7 +250,7 @@ public class FolderEvent extends EventObject {
      * @param key the bookmark key
      * @return the created event
      */
-    public static FolderEvent createBookmarkAddedEvent(Object source, FolderDataRepresentation folder, 
+    public static FolderEvent createBookmarkAddedEvent(Object source, Folder folder, 
                                                       BookmarkIngredient ingredient, String key) {
         return new FolderEvent(source, Type.BOOKMARK_ADDED)
             .withData("folder", folder)
@@ -267,7 +268,7 @@ public class FolderEvent extends EventObject {
      * @param key the bookmark key
      * @return the created event
      */
-    public static FolderEvent createBookmarkRemovedEvent(Object source, FolderDataRepresentation folder, 
+    public static FolderEvent createBookmarkRemovedEvent(Object source, Folder folder, 
                                                         BookmarkIngredient ingredient, String key) {
         return new FolderEvent(source, Type.BOOKMARK_REMOVED)
             .withData("folder", folder)
@@ -283,7 +284,7 @@ public class FolderEvent extends EventObject {
      * @param folder the folder whose bookmarks were cleared
      * @return the created event
      */
-    public static FolderEvent createBookmarksClearedEvent(Object source, FolderDataRepresentation folder) {
+    public static FolderEvent createBookmarksClearedEvent(Object source, Folder folder) {
         return new FolderEvent(source, Type.BOOKMARKS_CLEARED)
             .withData("folder", folder)
             .withData("folderId", folder != null ? folder.getId() : null);
@@ -296,7 +297,7 @@ public class FolderEvent extends EventObject {
      * @param folder the folder whose contents changed
      * @return the created event
      */
-    public static FolderEvent createFolderContentsChangedEvent(Object source, FolderDataRepresentation folder) {
+    public static FolderEvent createFolderContentsChangedEvent(Object source, Folder folder) {
         return new FolderEvent(source, Type.FOLDER_CONTENTS_CHANGED)
             .withData("folder", folder)
             .withData("folderId", folder != null ? folder.getId() : null);
@@ -321,7 +322,7 @@ public class FolderEvent extends EventObject {
      * @param folder the folder whose display was refreshed
      * @return the created event
      */
-    public static FolderEvent createDisplayRefreshedEvent(Object source, FolderDataRepresentation folder) {
+    public static FolderEvent createDisplayRefreshedEvent(Object source, Folder folder) {
         return new FolderEvent(source, Type.DISPLAY_REFRESHED)
             .withData("folder", folder)
             .withData("folderId", folder != null ? folder.getId() : null);

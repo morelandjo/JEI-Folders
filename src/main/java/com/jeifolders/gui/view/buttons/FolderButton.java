@@ -1,6 +1,6 @@
-package com.jeifolders.gui.folderButtons;
+package com.jeifolders.gui.view.buttons;
 
-import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.data.Folder;
 import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.Minecraft;
@@ -21,7 +21,7 @@ public class FolderButton {
     
     // State
     private final ButtonType buttonType;
-    private FolderDataRepresentation folder;
+    private Folder folder;
     private boolean isActive = false;
     
     // Animation state
@@ -30,7 +30,7 @@ public class FolderButton {
     private static final float HOVER_ANIMATION_SPEED = 0.1f;
     
     // Click handler
-    private Consumer<FolderDataRepresentation> clickHandler;
+    private Consumer<Folder> clickHandler;
     
     /**
      * Button types, either a normal folder or a special button like "Add Folder"
@@ -48,7 +48,7 @@ public class FolderButton {
      * @param y Y position
      * @param folder The folder data this button represents
      */
-    public FolderButton(int x, int y, FolderDataRepresentation folder) {
+    public FolderButton(int x, int y, Folder folder) {
         this.x = x;
         this.y = y;
         this.width = FolderButtonTextures.ICON_WIDTH;
@@ -65,8 +65,8 @@ public class FolderButton {
      * @param folder The folder data this button represents
      * @param clickHandler The handler for click events
      */
-    public FolderButton(int x, int y, FolderDataRepresentation folder, 
-                      Consumer<FolderDataRepresentation> clickHandler) {
+    public FolderButton(int x, int y, Folder folder, 
+                      Consumer<Folder> clickHandler) {
         this(x, y, folder);
         this.clickHandler = clickHandler;
     }
@@ -237,7 +237,7 @@ public class FolderButton {
      * 
      * @param handler The consumer that will handle clicks
      */
-    public void setClickHandler(Consumer<FolderDataRepresentation> handler) {
+    public void setClickHandler(Consumer<Folder> handler) {
         this.clickHandler = handler;
     }
     
@@ -257,7 +257,7 @@ public class FolderButton {
     public int getY() { return y; }
     public int getWidth() { return width; }
     public int getHeight() { return height; }
-    public FolderDataRepresentation getFolder() { return folder; }
+    public Folder getFolder() { return folder; }
     public boolean isActive() { return isActive; }
     public ButtonType getButtonType() { return buttonType; }
     public boolean isHovered() { return isHovered; }

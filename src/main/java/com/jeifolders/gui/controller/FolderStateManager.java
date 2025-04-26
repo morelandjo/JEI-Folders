@@ -1,8 +1,12 @@
-package com.jeifolders.gui.folderButtons;
+package com.jeifolders.gui.controller;
 
-import com.jeifolders.data.FolderDataService;
-import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.bookmarks.UnifiedFolderContentsDisplay;
+import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.data.Folder;
+import com.jeifolders.gui.event.FolderEvent;
+import com.jeifolders.gui.event.FolderEventListener;
+import com.jeifolders.gui.view.buttons.FolderButton;
+import com.jeifolders.gui.view.contents.FolderContentsView;
+import com.jeifolders.gui.view.layout.FolderRenderingManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
@@ -23,9 +27,9 @@ import java.util.function.Consumer;
  * 
  * This consolidation reduces the number of manager classes and clarifies responsibilities.
  */
-public class UnifiedFolderManager {
+public class FolderStateManager {
     // Singleton instance
-    private static UnifiedFolderManager instance;
+    private static FolderStateManager instance;
     
     // ----- Event Types -----
     public enum EventType {
@@ -56,15 +60,15 @@ public class UnifiedFolderManager {
     
     // ----- UI State (instance specific) -----
     private FolderButton activeFolder = null;
-    private FolderDataRepresentation lastActiveFolder = null;
+    private Folder lastActiveFolder = null;
     private final List<FolderButton> folderButtons = new ArrayList<>();
     private boolean foldersVisible = true;
     
     // ----- Bookmark Display -----
-    private UnifiedFolderContentsDisplay bookmarkDisplay;
+    private FolderContentsView bookmarkDisplay;
     
     // ----- Persistent Storage (saved to disk) -----
-    private final FolderDataService folderService;
+    private final FolderStorageService folderService;
     
     // ----- Event listeners -----
     private final Map<EventType, List<FolderEventListener>> listeners = new HashMap<>();
@@ -75,8 +79,8 @@ public class UnifiedFolderManager {
     /**
      * Private constructor for singleton pattern
      */
-    private UnifiedFolderManager() {
-        this.folderService = FolderDataService.getInstance();
+    private FolderStateManager() {
+        this.folderService = FolderStorageService.getInstance();
         
         // Initialize event listeners map
         for (EventType type : EventType.values()) {
@@ -95,9 +99,9 @@ public class UnifiedFolderManager {
     /**
      * Get the singleton instance
      */
-    public static synchronized UnifiedFolderManager getInstance() {
+    public static synchronized FolderStateManager getInstance() {
         if (instance == null) {
-            instance = new UnifiedFolderManager();
+            instance = new FolderStateManager();
         }
         return instance;
     }
@@ -299,7 +303,7 @@ public class UnifiedFolderManager {
     
     // ----- Helper methods for firing folder UI events -----
     
-    public void fireFolderClickedEvent(FolderDataRepresentation folder) {
+    public void fireFolderClickedEvent(Folder folder) {
         fireEvent(FolderEvent.createFolderClickedEvent(this, folder));
     }
     
@@ -311,7 +315,7 @@ public class UnifiedFolderManager {
         fireEvent(FolderEvent.createFolderDeactivatedEvent(this));
     }
     
-    public void fireFolderCreatedEvent(FolderDataRepresentation folder) {
+    public void fireFolderCreatedEvent(Folder folder) {
         fireEvent(FolderEvent.createFolderCreatedEvent(this, folder));
     }
     
@@ -335,23 +339,23 @@ public class UnifiedFolderManager {
         fireEvent(FolderEvent.createIngredientDroppedEvent(this, ingredient, folderId));
     }
     
-    public void fireBookmarkAddedEvent(FolderDataRepresentation folder, 
+    public void fireBookmarkAddedEvent(Folder folder, 
                                       BookmarkIngredient ingredient, 
                                       String key) {
         fireEvent(FolderEvent.createBookmarkAddedEvent(this, folder, ingredient, key));
     }
     
-    public void fireBookmarkRemovedEvent(FolderDataRepresentation folder, 
+    public void fireBookmarkRemovedEvent(Folder folder, 
                                         BookmarkIngredient ingredient, 
                                         String key) {
         fireEvent(FolderEvent.createBookmarkRemovedEvent(this, folder, ingredient, key));
     }
     
-    public void fireBookmarksClearedEvent(FolderDataRepresentation folder) {
+    public void fireBookmarksClearedEvent(Folder folder) {
         fireEvent(FolderEvent.createBookmarksClearedEvent(this, folder));
     }
     
-    public void fireFolderContentsChangedEvent(FolderDataRepresentation folder) {
+    public void fireFolderContentsChangedEvent(Folder folder) {
         fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folder));
     }
     
@@ -359,7 +363,7 @@ public class UnifiedFolderManager {
         fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folderId));
     }
     
-    public void fireDisplayRefreshedEvent(FolderDataRepresentation folder) {
+    public void fireDisplayRefreshedEvent(Folder folder) {
         fireEvent(FolderEvent.createDisplayRefreshedEvent(this, folder));
     }
     
@@ -371,8 +375,8 @@ public class UnifiedFolderManager {
      * @param folderName Name for the new folder
      * @return The newly created folder representation
      */
-    public FolderDataRepresentation createFolder(String folderName) {
-        FolderDataRepresentation folder = folderService.createFolder(folderName);
+    public Folder createFolder(String folderName) {
+        Folder folder = folderService.createFolder(folderName);
         ModLogger.debug("Created folder: {} (ID: {})", folder.getName(), folder.getId());
         
         // Fire folder created event
@@ -405,7 +409,7 @@ public class UnifiedFolderManager {
     /**
      * Loads all folders from persistent storage
      */
-    public List<FolderDataRepresentation> loadAllFolders() {
+    public List<Folder> loadAllFolders() {
         folderService.loadData();
         return folderService.getAllFolders();
     }
@@ -447,7 +451,7 @@ public class UnifiedFolderManager {
         }
         
         // Create the unified display
-        Optional<UnifiedFolderContentsDisplay> displayOpt = UnifiedFolderContentsDisplay.create(folderService);
+        Optional<FolderContentsView> displayOpt = FolderContentsView.create(folderService);
         
         if (displayOpt.isPresent()) {
             bookmarkDisplay = displayOpt.get();
@@ -496,7 +500,7 @@ public class UnifiedFolderManager {
     /**
      * Gets the folder data service instance
      */
-    public FolderDataService getFolderService() {
+    public FolderStorageService getFolderService() {
         return folderService;
     }
     
@@ -505,7 +509,7 @@ public class UnifiedFolderManager {
      * @deprecated Use getFolderService() instead
      */
     @Deprecated
-    public FolderDataService getFolderManager() {
+    public FolderStorageService getFolderManager() {
         return folderService;
     }
     
@@ -529,15 +533,15 @@ public class UnifiedFolderManager {
         return lastBookmarkContents;
     }
     
-    public FolderDataRepresentation getLastActiveFolder() {
+    public Folder getLastActiveFolder() {
         return lastActiveFolder;
     }
     
-    public void setLastActiveFolder(FolderDataRepresentation folder) {
+    public void setLastActiveFolder(Folder folder) {
         this.lastActiveFolder = folder;
     }
     
-    public UnifiedFolderContentsDisplay getBookmarkDisplay() {
+    public FolderContentsView getBookmarkDisplay() {
         if (bookmarkDisplay == null) {
             createBookmarkDisplay(true);
         }
@@ -551,7 +555,7 @@ public class UnifiedFolderManager {
      * 
      * @param ignored This parameter is ignored since the Add button has no folder
      */
-    public void handleAddFolderButtonClick(FolderDataRepresentation ignored) {
+    public void handleAddFolderButtonClick(Folder ignored) {
         // Fire event for other listeners
         fireAddButtonClickedEvent();
         
@@ -580,7 +584,7 @@ public class UnifiedFolderManager {
      * @param clickHandler The handler for folder clicks
      * @return The button to activate (if any)
      */
-    public FolderButton initializeFolderButtons(FolderRenderingManager renderingManager, Consumer<FolderDataRepresentation> clickHandler) {
+    public FolderButton initializeFolderButtons(FolderRenderingManager renderingManager, Consumer<Folder> clickHandler) {
         FolderButton buttonToActivate = null;
         
         // Create and position the folder buttons
@@ -613,7 +617,7 @@ public class UnifiedFolderManager {
      * 
      * @param folder The folder that was clicked
      */
-    public void handleFolderClick(FolderDataRepresentation folder) {
+    public void handleFolderClick(Folder folder) {
         if (folder == null) {
             return;
         }
@@ -643,7 +647,7 @@ public class UnifiedFolderManager {
      * @param ingredient The ingredient that was dropped
      * @return true if the drop was handled
      */
-    public boolean handleIngredientDropOnFolder(FolderDataRepresentation folder, Object ingredient) {
+    public boolean handleIngredientDropOnFolder(Folder folder, Object ingredient) {
         if (folder == null || ingredient == null) {
             ModLogger.debug("Cannot handle ingredient drop: folder or ingredient is null");
             return false;

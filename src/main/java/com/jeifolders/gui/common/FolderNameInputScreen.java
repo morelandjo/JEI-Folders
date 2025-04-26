@@ -1,4 +1,4 @@
-package com.jeifolders.gui;
+package com.jeifolders.gui.common;
 
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.gui.GuiGraphics;

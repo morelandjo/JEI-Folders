@@ -1,8 +1,8 @@
 package com.jeifolders.integration;
 
-import com.jeifolders.data.FolderDataService;
-import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.bookmarks.UnifiedFolderContentsDisplay;
+import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.gui.view.contents.FolderContentsView;
+import com.jeifolders.data.Folder;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.ingredients.ITypedIngredient;
 
@@ -142,7 +142,7 @@ public class TypedIngredientHelper {
      * @param invalidateCache Whether to invalidate the cache before loading
      * @return A list of TypedIngredient objects representing the folder's bookmarks
      */
-    public static List<TypedIngredient> loadBookmarksFromFolder(FolderDataService folderService, int folderId, boolean invalidateCache) {
+    public static List<TypedIngredient> loadBookmarksFromFolder(FolderStorageService folderService, int folderId, boolean invalidateCache) {
         try {
             // First invalidate the cache if requested
             if (invalidateCache) {
@@ -151,13 +151,13 @@ public class TypedIngredientHelper {
             }
             
             // Get the folder to access its bookmark keys
-            Optional<FolderDataRepresentation> folderOpt = folderService.getFolder(folderId);
+            Optional<Folder> folderOpt = folderService.getFolder(folderId);
             if (!folderOpt.isPresent()) {
                 ModLogger.warn("Folder with ID {} not found", folderId);
                 return new ArrayList<>();
             }
             
-            FolderDataRepresentation folder = folderOpt.get();
+            Folder folder = folderOpt.get();
             
             // Get bookmark keys to log the count
             List<String> bookmarkKeys = folder.getBookmarkKeys();
@@ -186,9 +186,9 @@ public class TypedIngredientHelper {
      * @return The list of TypedIngredient objects that were loaded and set
      */
     public static List<TypedIngredient> refreshBookmarkDisplay(
-            UnifiedFolderContentsDisplay bookmarkDisplay,
-            FolderDataRepresentation folder,
-            FolderDataService folderService) {
+            FolderContentsView bookmarkDisplay,
+            Folder folder,
+            FolderStorageService folderService) {
         
         if (bookmarkDisplay == null || folder == null) {
             return new ArrayList<>();
@@ -220,7 +220,7 @@ public class TypedIngredientHelper {
      * @param ingredients The TypedIngredient objects to set
      * @return true if successful, false otherwise
      */
-    public static boolean setIngredientsOnDisplay(UnifiedFolderContentsDisplay display, List<TypedIngredient> ingredients) {
+    public static boolean setIngredientsOnDisplay(FolderContentsView display, List<TypedIngredient> ingredients) {
         if (display == null) {
             return false;
         }
@@ -242,7 +242,7 @@ public class TypedIngredientHelper {
      * @param display The display to get ingredients from
      * @return The ingredients as TypedIngredient objects
      */
-    public static List<TypedIngredient> getIngredientsFromDisplay(UnifiedFolderContentsDisplay display) {
+    public static List<TypedIngredient> getIngredientsFromDisplay(FolderContentsView display) {
         if (display == null) {
             return new ArrayList<>();
         }

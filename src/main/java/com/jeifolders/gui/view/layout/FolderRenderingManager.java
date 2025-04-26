@@ -1,10 +1,13 @@
-package com.jeifolders.gui.folderButtons;
+package com.jeifolders.gui.view.layout;
 
-import com.jeifolders.gui.ExclusionHandler;
-import com.jeifolders.gui.LayoutConstants;
+import com.jeifolders.gui.common.ExclusionHandler;
+import com.jeifolders.gui.common.LayoutConstants;
+import com.jeifolders.gui.controller.FolderStateManager;
+import com.jeifolders.gui.view.buttons.FolderButton;
+import com.jeifolders.gui.view.buttons.FolderButtonTextures;
 import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.util.ModLogger;
-import com.jeifolders.data.FolderDataRepresentation;
+import com.jeifolders.data.Folder;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.Rect2i;
@@ -62,13 +65,13 @@ public class FolderRenderingManager {
     private boolean needsRebuild = true;
     
     // ----- Reference to the unified folder manager -----
-    private final UnifiedFolderManager folderManager;
+    private final FolderStateManager folderManager;
     
     /**
      * Private constructor for singleton pattern
      */
     private FolderRenderingManager() {
-        this.folderManager = UnifiedFolderManager.getInstance();
+        this.folderManager = FolderStateManager.getInstance();
         calculateInitialLayout();
     }
     
@@ -469,7 +472,7 @@ public class FolderRenderingManager {
         List<FolderButton> buttons = new ArrayList<>();
         
         // Get all folders from the folder manager
-        List<FolderDataRepresentation> folders = folderManager.loadAllFolders();
+        List<Folder> folders = folderManager.loadAllFolders();
         
         // Create an "Add Folder" button at index 0
         int[] addPos = calculateAddButtonPosition();
@@ -479,7 +482,7 @@ public class FolderRenderingManager {
         
         // Create and position normal folder buttons
         int buttonIndex = 1;
-        for (FolderDataRepresentation folder : folders) {
+        for (Folder folder : folders) {
             int[] pos = calculateFolderPosition(buttonIndex);
             FolderButton button = new FolderButton(pos[0], pos[1], folder);
             button.setClickHandler(folderManager::fireFolderClickedEvent);

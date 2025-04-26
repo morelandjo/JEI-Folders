@@ -1,11 +1,11 @@
-package com.jeifolders.gui.bookmarks;
+package com.jeifolders.gui.view.contents;
 
-import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.data.FolderDataService;
-import com.jeifolders.gui.LayoutConstants;
-import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
-import com.jeifolders.gui.folderButtons.FolderEvent;
-import com.jeifolders.gui.folderButtons.FolderEventListener;
+import com.jeifolders.data.Folder;
+import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.gui.common.LayoutConstants;
+import com.jeifolders.gui.controller.FolderStateManager;
+import com.jeifolders.gui.event.FolderEvent;
+import com.jeifolders.gui.event.FolderEventListener;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.Rectangle2i;
@@ -24,7 +24,7 @@ import java.util.Optional;
 /**
  * Display for folder bookmarks that handles both display management and rendering.
  */
-public class UnifiedFolderContentsDisplay {
+public class FolderContentsView {
     // Constants
     private static final int MIN_CONTENT_HEIGHT = 40;
     private static final int MIN_CONTENT_WIDTH = 80;
@@ -32,12 +32,12 @@ public class UnifiedFolderContentsDisplay {
     private static final int DEFAULT_DISPLAY_HEIGHT = 100;
 
     // Core components
-    private final FolderDataService folderService;
+    private final FolderStorageService folderService;
     private final FolderBookmarkList bookmarkList;
     private final JeiContentsImpl contentsImpl;
     
     // State tracking
-    private FolderDataRepresentation activeFolder;
+    private Folder activeFolder;
     private Rectangle2i backgroundArea = Rectangle2i.EMPTY;
     private boolean updatingBounds = false;
     private boolean needsRefresh = false;
@@ -55,14 +55,14 @@ public class UnifiedFolderContentsDisplay {
     private int calculatedDisplayY = -1;
     
     // Event system
-    private final UnifiedFolderManager eventManager = UnifiedFolderManager.getInstance();
+    private final FolderStateManager eventManager = FolderStateManager.getInstance();
     private final FolderEventListener folderChangedListener;
 
     /**
      * Creates a new unified folder contents display
      */
-    private UnifiedFolderContentsDisplay(
-        FolderDataService folderService, 
+    private FolderContentsView(
+        FolderStorageService folderService, 
         FolderBookmarkList bookmarkList,
         JeiBookmarkAdapter bookmarkAdapter, 
         JeiContentsImpl contentsImpl
@@ -80,7 +80,7 @@ public class UnifiedFolderContentsDisplay {
         };
         
         // Register with event system
-        eventManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
+        eventManager.addEventListener(FolderStateManager.EventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
     }
 
     /**
@@ -88,7 +88,7 @@ public class UnifiedFolderContentsDisplay {
      * @param folderService The folder data service
      * @return An optional containing the new display if creation was successful
      */
-    public static Optional<UnifiedFolderContentsDisplay> create(FolderDataService folderService) {
+    public static Optional<FolderContentsView> create(FolderStorageService folderService) {
         try {
             // Get the JEI service and runtime directly
             var jeiService = JEIIntegrationFactory.getJEIService();
@@ -105,7 +105,7 @@ public class UnifiedFolderContentsDisplay {
             var contentsImpl = new JeiContentsImpl(bookmarkAdapter, jeiRuntimeOpt.get());
             
             // Create the display with the JEI components
-            var display = new UnifiedFolderContentsDisplay(
+            var display = new FolderContentsView(
                 folderService,
                 bookmarkList,
                 bookmarkAdapter,
@@ -125,9 +125,9 @@ public class UnifiedFolderContentsDisplay {
      * @param folder The folder to display
      * @return An optional containing the new display if creation was successful
      */
-    public static Optional<UnifiedFolderContentsDisplay> createForFolder(
-        FolderDataService folderService,
-        FolderDataRepresentation folder
+    public static Optional<FolderContentsView> createForFolder(
+        FolderStorageService folderService,
+        Folder folder
     ) {
         var displayOpt = create(folderService);
         
@@ -141,7 +141,7 @@ public class UnifiedFolderContentsDisplay {
     /**
      * Sets the active folder and ensures bookmarks are properly loaded
      */
-    public void setActiveFolder(FolderDataRepresentation folder) {
+    public void setActiveFolder(Folder folder) {
         // Early return if the folder hasn't changed
         if (this.activeFolder == folder) {
             ModLogger.debug("setActiveFolder called with same folder - skipping update");
@@ -165,7 +165,7 @@ public class UnifiedFolderContentsDisplay {
      * Gets the active folder
      * @return The active folder or null if none is active
      */
-    public FolderDataRepresentation getActiveFolder() {
+    public Folder getActiveFolder() {
         return activeFolder;
     }
 
@@ -524,9 +524,9 @@ public class UnifiedFolderContentsDisplay {
             folderService.addBookmark(folderId, key);
             
             // Log the success
-            Optional<FolderDataRepresentation> folderOpt = folderService.getFolder(folderId);
+            Optional<Folder> folderOpt = folderService.getFolder(folderId);
             if (folderOpt.isPresent()) {
-                FolderDataRepresentation folder = folderOpt.get();
+                Folder folder = folderOpt.get();
                 List<String> bookmarkKeys = folder.getBookmarkKeys();
                 ModLogger.info("[DROP-DEBUG] Folder '{}' now has {} bookmarks, added key: {}", 
                               activeFolder.getName(), bookmarkKeys.size(), key);

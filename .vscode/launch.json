@@ -12,11 +12,11 @@
       "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\clientRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\clientRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\clientRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -34,11 +34,11 @@
       "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\dataRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\dataRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\dataRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\dataRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -56,11 +56,11 @@
       "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\gameTestServerRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\gameTestServerRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\gameTestServerRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\gameTestServerRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -78,11 +78,11 @@
       "projectName": "JEI-Folders",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\serverRunProgramArgs.txt"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\serverRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\build\\moddev\\serverRunVmArgs.txt",
-        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders-Latest\\JEI-Folders\\bin\\main"
+        "@D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003djeifolders%%D:\\MinecraftMods\\JEI-Folders\\JEI-Folders\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},

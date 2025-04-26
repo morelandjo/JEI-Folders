@@ -1,6 +1,6 @@
 package com.jeifolders.integration.impl;
 
-import com.jeifolders.data.FolderDataService;
+import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.util.ModLogger;
 
@@ -29,7 +29,7 @@ public class JEIIngredientService implements IngredientService {
     private final Map<String, ITypedIngredient<?>> keyToIngredientCache = new ConcurrentHashMap<>();
     
     // Reference to the folder service to access bookmark keys - initialized lazily to avoid circular dependency
-    private FolderDataService folderService;
+    private FolderStorageService folderService;
     
     // JEI's ingredient manager (set when JEI runtime is available)
     private IIngredientManager ingredientManager;
@@ -45,9 +45,9 @@ public class JEIIngredientService implements IngredientService {
     }
     
     // Get folder service lazily to avoid circular dependency
-    private FolderDataService getFolderService() {
+    private FolderStorageService getFolderService() {
         if (folderService == null) {
-            folderService = FolderDataService.getInstance();
+            folderService = FolderStorageService.getInstance();
         }
         return folderService;
     }

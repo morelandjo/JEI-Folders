@@ -1,14 +1,14 @@
-package com.jeifolders.gui.bookmarks;
+package com.jeifolders.gui.controller;
 
-import com.jeifolders.data.FolderDataService;
-import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.folderButtons.FolderButton;
-import com.jeifolders.gui.folderButtons.FolderEvent;
-import com.jeifolders.gui.folderButtons.FolderEventListener;
-import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
+import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.data.Folder;
+import com.jeifolders.gui.event.FolderEvent;
+import com.jeifolders.gui.event.FolderEventListener;
+import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.util.ModLogger;
+import com.jeifolders.gui.view.contents.FolderContentsView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,9 +18,9 @@ import java.util.Optional;
  * Handles high-level bookmark operations and display management.
  */
 public class BookmarkManager {
-    private final FolderDataService folderService;
-    private UnifiedFolderContentsDisplay bookmarkDisplay;
-    private final UnifiedFolderManager folderManager;
+    private final FolderStorageService folderService;
+    private FolderContentsView bookmarkDisplay;
+    private final FolderStateManager folderManager;
 
     // Track last refresh time for performance optimization
     private long lastRefreshTime = 0;
@@ -29,7 +29,7 @@ public class BookmarkManager {
     // Add recursion guard to prevent stack overflow
     private static boolean updatingBookmarkContents = false;
 
-    public BookmarkManager(UnifiedFolderManager folderManager) {
+    public BookmarkManager(FolderStateManager folderManager) {
         this.folderManager = folderManager;
         // Use the folder service directly from the folder manager
         this.folderService = folderManager.getFolderService();
@@ -46,7 +46,7 @@ public class BookmarkManager {
      */
     private void setupEventListeners() {
         // Listen for folder activation/deactivation
-        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_ACTIVATED, new FolderEventListener() {
+        folderManager.addEventListener(FolderStateManager.EventType.FOLDER_ACTIVATED, new FolderEventListener() {
             @Override
             public void onFolderEvent(FolderEvent event) {
                 FolderButton folderButton = event.getData("folderButton", FolderButton.class);
@@ -54,7 +54,7 @@ public class BookmarkManager {
             }
         });
 
-        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_DEACTIVATED, new FolderEventListener() {
+        folderManager.addEventListener(FolderStateManager.EventType.FOLDER_DEACTIVATED, new FolderEventListener() {
             @Override
             public void onFolderEvent(FolderEvent event) {
                 onFolderActivationChanged(null);
@@ -62,7 +62,7 @@ public class BookmarkManager {
         });
 
         // Listen for display refresh events to update the cache
-        folderManager.addEventListener(UnifiedFolderManager.EventType.DISPLAY_REFRESHED, new FolderEventListener() {
+        folderManager.addEventListener(FolderStateManager.EventType.DISPLAY_REFRESHED, new FolderEventListener() {
             @Override
             public void onFolderEvent(FolderEvent event) {
                 safeUpdateBookmarkContents();
@@ -70,7 +70,7 @@ public class BookmarkManager {
         });
 
         // Listen for bookmark added events
-        folderManager.addEventListener(UnifiedFolderManager.EventType.BOOKMARK_ADDED, new FolderEventListener() {
+        folderManager.addEventListener(FolderStateManager.EventType.BOOKMARK_ADDED, new FolderEventListener() {
             @Override
             public void onFolderEvent(FolderEvent event) {
                 // If this is for our active folder, make sure we update the cache
@@ -84,7 +84,7 @@ public class BookmarkManager {
         });
         
         // Listen for folder contents changed events
-        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED, new FolderEventListener() {
+        folderManager.addEventListener(FolderStateManager.EventType.FOLDER_CONTENTS_CHANGED, new FolderEventListener() {
             @Override
             public void onFolderEvent(FolderEvent event) {
                 onFolderContentsChanged(event);
@@ -149,7 +149,7 @@ public class BookmarkManager {
         }
 
         // Create the unified display
-        Optional<UnifiedFolderContentsDisplay> displayOpt = UnifiedFolderContentsDisplay.create(folderService);
+        Optional<FolderContentsView> displayOpt = FolderContentsView.create(folderService);
 
         if (displayOpt.isPresent()) {
             bookmarkDisplay = displayOpt.get();
@@ -213,7 +213,7 @@ public class BookmarkManager {
             }
             // Otherwise just refresh the current display
             else {
-                FolderDataRepresentation currentFolder = activeFolder.getFolder();
+                Folder currentFolder = activeFolder.getFolder();
                 TypedIngredientHelper.refreshBookmarkDisplay(bookmarkDisplay, currentFolder, folderService);
                 bookmarkDisplay.updateBoundsFromCalculatedPositions();
             }
@@ -313,9 +313,9 @@ public class BookmarkManager {
                     Integer lastActiveFolderId = folderManager.getLastActiveFolderId();
                     if (lastActiveFolderId != null) {
                         // Get the folder data - properly handle the Optional return type
-                        Optional<FolderDataRepresentation> folderDataOpt = folderService.getFolder(lastActiveFolderId);
+                        Optional<Folder> folderDataOpt = folderService.getFolder(lastActiveFolderId);
                         if (folderDataOpt.isPresent()) {
-                            FolderDataRepresentation folderData = folderDataOpt.get();
+                            Folder folderData = folderDataOpt.get();
                             // Set this folder as active in the bookmark display
                             bookmarkDisplay.setActiveFolder(folderData);
 
@@ -392,7 +392,7 @@ public class BookmarkManager {
     /**
      * Gets the bookmark display, creating it if needed (lazy initialization)
      */
-    public UnifiedFolderContentsDisplay getBookmarkDisplay() {
+    public FolderContentsView getBookmarkDisplay() {
         if (bookmarkDisplay == null) {
             createBookmarkDisplay(true);
         }
@@ -415,9 +415,9 @@ public class BookmarkManager {
             folderManager.getActiveFolder().getFolder().getId() == folderId) {
             
             // Get the folder data
-            Optional<FolderDataRepresentation> folderOpt = folderService.getFolder(folderId);
+            Optional<Folder> folderOpt = folderService.getFolder(folderId);
             if (folderOpt.isPresent() && bookmarkDisplay != null) {
-                FolderDataRepresentation folder = folderOpt.get();
+                Folder folder = folderOpt.get();
                 // Refresh the bookmark display with the updated folder contents
                 TypedIngredientHelper.refreshBookmarkDisplay(bookmarkDisplay, folder, folderService);
                 

@@ -1,9 +1,12 @@
-package com.jeifolders.gui.folderButtons;
+package com.jeifolders.gui.controller;
 
-import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.data.FolderDataService;
-import com.jeifolders.gui.FolderNameInputScreen;
-import com.jeifolders.gui.bookmarks.BookmarkManager;
+import com.jeifolders.data.Folder;
+import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.gui.common.FolderNameInputScreen;
+import com.jeifolders.gui.interaction.IngredientDropTarget;
+import com.jeifolders.gui.view.buttons.FolderButton;
+import com.jeifolders.gui.view.buttons.FolderButtonTextures;
+import com.jeifolders.gui.view.layout.FolderRenderingManager;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
@@ -28,9 +31,9 @@ import java.util.List;
  * Responsible for rendering, event handling, mouse interactions,
  * and overall UI state management.
  */
-public class FolderButtonSystem extends AbstractWidget implements FolderButtonInterface {
+public class FolderUIController extends AbstractWidget implements IngredientDropTarget {
     // Singleton instance for static access
-    private static FolderButtonSystem instance;
+    private static FolderUIController instance;
     
     // UI State
     private int currentDeleteButtonX = -1;
@@ -44,7 +47,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     public static Rect2i lastDrawnArea = new Rect2i(0, 0, 0, 0);
     
     // Consolidated managers
-    private final UnifiedFolderManager folderManager;
+    private final FolderStateManager folderManager;
     private final FolderRenderingManager renderingManager;
     private final BookmarkManager bookmarkManager;
     
@@ -59,9 +62,9 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     /**
      * Get the singleton instance
      */
-    public static synchronized FolderButtonSystem getInstance() {
+    public static synchronized FolderUIController getInstance() {
         if (instance == null) {
-            instance = new FolderButtonSystem();
+            instance = new FolderUIController();
         }
         return instance;
     }
@@ -72,7 +75,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     public static void init() {
         if (!isInitialized) {
             // Register event handlers
-            NeoForge.EVENT_BUS.register(FolderButtonSystem.class);
+            NeoForge.EVENT_BUS.register(FolderUIController.class);
             
             // Initialize the singleton instance
             getInstance();
@@ -92,14 +95,14 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     /**
      * Private constructor for singleton pattern
      */
-    private FolderButtonSystem() {
+    private FolderUIController() {
         super(10, 10, FolderButtonTextures.ICON_WIDTH, FolderButtonTextures.ICON_HEIGHT, 
               Component.translatable("gui.jeifolders.folder"));
         
         ModLogger.debug("Initializing FolderButton with consolidated components");
         
         // Initialize the component classes
-        this.folderManager = UnifiedFolderManager.getInstance();
+        this.folderManager = FolderStateManager.getInstance();
         this.renderingManager = FolderRenderingManager.getInstance();
         this.bookmarkManager = new BookmarkManager(folderManager);
         
@@ -161,7 +164,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         
         try {
             // Always reset data paths first to ensure we're reading from the correct location
-            FolderDataService.getInstance().resetDataPaths();
+            FolderStorageService.getInstance().resetDataPaths();
             
             // Clear existing folder buttons
             folderManager.getFolderButtons().clear();
@@ -200,7 +203,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     /**
      * Called when a folder is clicked
      */
-    private void onFolderClicked(FolderDataRepresentation folder) {
+    private void onFolderClicked(Folder folder) {
         // Delegate folder click handling to UnifiedFolderManager
         folderManager.handleFolderClick(folder);
     }
@@ -413,7 +416,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      * Gets the unified folder manager instance
      * @return The unified folder manager
      */
-    public UnifiedFolderManager getFolderManager() {
+    public FolderStateManager getFolderManager() {
         return folderManager;
     }
     
@@ -459,9 +462,9 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
      * @param name The name of the folder
      * @return The newly created folder
      */
-    public FolderDataRepresentation createFolder(String name) {
+    public Folder createFolder(String name) {
         // Delegate folder creation to the UnifiedFolderManager
-        FolderDataRepresentation folder = folderManager.createFolder(name);
+        Folder folder = folderManager.createFolder(name);
         
         // Handle UI updates after folder creation
         folderManager.setFoldersVisible(true);
@@ -559,7 +562,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
             ModLogger.debug("Adding folder button to GUI: {}", screen.getClass().getSimpleName());
             
             // Get or create the singleton instance
-            FolderButtonSystem folderButton = getInstance();
+            FolderUIController folderButton = getInstance();
             
             // Add the button to the screen's listeners
             event.addListener(folderButton);
