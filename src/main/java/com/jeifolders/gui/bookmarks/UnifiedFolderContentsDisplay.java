@@ -4,8 +4,9 @@ import com.jeifolders.data.FolderDataRepresentation;
 import com.jeifolders.data.FolderDataService;
 import com.jeifolders.gui.LayoutConstants;
 import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
+import com.jeifolders.gui.folderButtons.FolderEvent;
+import com.jeifolders.gui.folderButtons.FolderEventListener;
 import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.integration.TypedIngredientHelper;
@@ -19,7 +20,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
 
 /**
  * Display for folder bookmarks that handles both display management and rendering.
@@ -33,9 +33,7 @@ public class UnifiedFolderContentsDisplay {
 
     // Core components
     private final FolderDataService folderService;
-    private final IngredientService ingredientService;
     private final FolderBookmarkList bookmarkList;
-    private final JeiBookmarkAdapter bookmarkAdapter;
     private final JeiContentsImpl contentsImpl;
     
     // State tracking
@@ -44,6 +42,7 @@ public class UnifiedFolderContentsDisplay {
     private boolean updatingBounds = false;
     private boolean needsRefresh = false;
     private List<BookmarkIngredient> ingredients = new ArrayList<>();
+    private boolean refreshingBookmarks = false; // Add a refreshing state guard to prevent recursion
     
     // Layout properties
     private int x;
@@ -55,11 +54,9 @@ public class UnifiedFolderContentsDisplay {
     private int calculatedNameY = -1;
     private int calculatedDisplayY = -1;
     
-    private Rectangle2i lastCalculatedArea = Rectangle2i.EMPTY;
-    
     // Event system
     private final UnifiedFolderManager eventManager = UnifiedFolderManager.getInstance();
-    private final Consumer<UnifiedFolderManager.FolderEvent> folderChangedListener;
+    private final FolderEventListener folderChangedListener;
 
     /**
      * Creates a new unified folder contents display
@@ -71,9 +68,7 @@ public class UnifiedFolderContentsDisplay {
         JeiContentsImpl contentsImpl
     ) {
         this.folderService = folderService;
-        this.ingredientService = JEIIntegrationFactory.getIngredientService();
         this.bookmarkList = bookmarkList;
-        this.bookmarkAdapter = bookmarkAdapter;
         this.contentsImpl = contentsImpl;
         
         // Folder changed listener
@@ -167,6 +162,14 @@ public class UnifiedFolderContentsDisplay {
     }
 
     /**
+     * Gets the active folder
+     * @return The active folder or null if none is active
+     */
+    public FolderDataRepresentation getActiveFolder() {
+        return activeFolder;
+    }
+
+    /**
      * Refreshes bookmarks from the active folder.
      */
     public void refreshBookmarks() {
@@ -174,8 +177,16 @@ public class UnifiedFolderContentsDisplay {
             ModLogger.debug("Cannot refresh bookmarks - no active folder");
             return;
         }
+        
+        // Prevent recursion
+        if (refreshingBookmarks) {
+            ModLogger.debug("Preventing recursive bookmark refresh");
+            return;
+        }
 
         try {
+            refreshingBookmarks = true;
+            
             // Store the current page number before refreshing
             int currentPageNumber = getCurrentPageNumber();
             
@@ -201,12 +212,12 @@ public class UnifiedFolderContentsDisplay {
             }
             
             // Fire a display refreshed event
-            eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.DISPLAY_REFRESHED)
-                .withFolder(activeFolder)
-                .build());
+            eventManager.fireEvent(FolderEvent.createDisplayRefreshedEvent(this, activeFolder));
             
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
+        } finally {
+            refreshingBookmarks = false;
         }
     }
 
@@ -297,7 +308,6 @@ public class UnifiedFolderContentsDisplay {
                 this.backgroundArea = newBounds;
             }
             
-            lastCalculatedArea = newBounds;
         } finally {
             updatingBounds = false;
         }
@@ -522,20 +532,15 @@ public class UnifiedFolderContentsDisplay {
                               activeFolder.getName(), bookmarkKeys.size(), key);
             }
             
-            // Fire bookmark added event with the EventBuilder pattern
+            // Fire bookmark added event
             if (ingredient instanceof BookmarkIngredient) {
                 ModLogger.info("[DROP-DEBUG] Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
-                eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.BOOKMARK_ADDED)
-                    .withFolder(activeFolder)
-                    .withIngredient(ingredient)
-                    .withBookmarkKey(key)
-                    .build());
+                eventManager.fireEvent(FolderEvent.createBookmarkAddedEvent(this, activeFolder, 
+                                      (BookmarkIngredient)ingredient, key));
             } else {
                 // For non-BookmarkIngredient, just fire a folder contents changed event
                 ModLogger.info("[DROP-DEBUG] Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
-                eventManager.fireEvent(UnifiedFolderManager.EventBuilder.create(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED)
-                    .withFolderId(folderId)
-                    .build());
+                eventManager.fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folderId));
             }
             
             // Refresh the display

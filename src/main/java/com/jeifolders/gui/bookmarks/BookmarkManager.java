@@ -3,6 +3,8 @@ package com.jeifolders.gui.bookmarks;
 import com.jeifolders.data.FolderDataService;
 import com.jeifolders.data.FolderDataRepresentation;
 import com.jeifolders.gui.folderButtons.FolderButton;
+import com.jeifolders.gui.folderButtons.FolderEvent;
+import com.jeifolders.gui.folderButtons.FolderEventListener;
 import com.jeifolders.gui.folderButtons.UnifiedFolderManager;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
@@ -23,6 +25,9 @@ public class BookmarkManager {
     // Track last refresh time for performance optimization
     private long lastRefreshTime = 0;
     private static final long MIN_REFRESH_INTERVAL_MS = 100; // Prevent too frequent refreshes
+    
+    // Add recursion guard to prevent stack overflow
+    private static boolean updatingBookmarkContents = false;
 
     public BookmarkManager(UnifiedFolderManager folderManager) {
         this.folderManager = folderManager;
@@ -41,28 +46,48 @@ public class BookmarkManager {
      */
     private void setupEventListeners() {
         // Listen for folder activation/deactivation
-        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_ACTIVATED, event -> {
-            FolderButton folderButton = event.getData("folderButton", FolderButton.class);
-            onFolderActivationChanged(folderButton);
+        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_ACTIVATED, new FolderEventListener() {
+            @Override
+            public void onFolderEvent(FolderEvent event) {
+                FolderButton folderButton = event.getData("folderButton", FolderButton.class);
+                onFolderActivationChanged(folderButton);
+            }
         });
 
-        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_DEACTIVATED, event -> {
-            onFolderActivationChanged(null);
+        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_DEACTIVATED, new FolderEventListener() {
+            @Override
+            public void onFolderEvent(FolderEvent event) {
+                onFolderActivationChanged(null);
+            }
         });
 
         // Listen for display refresh events to update the cache
-        folderManager.addEventListener(UnifiedFolderManager.EventType.DISPLAY_REFRESHED, event -> {
-            safeUpdateBookmarkContents();
+        folderManager.addEventListener(UnifiedFolderManager.EventType.DISPLAY_REFRESHED, new FolderEventListener() {
+            @Override
+            public void onFolderEvent(FolderEvent event) {
+                safeUpdateBookmarkContents();
+            }
         });
 
         // Listen for bookmark added events
-        folderManager.addEventListener(UnifiedFolderManager.EventType.BOOKMARK_ADDED, event -> {
-            // If this is for our active folder, make sure we update the cache
-            Integer folderId = event.getFolderId();
-            if (folderManager.hasActiveFolder() && folderId != null &&
-                folderManager.getActiveFolder().getFolder().getId() == folderId) {
-                ModLogger.debug("BookmarkManager received BOOKMARK_ADDED event, updating cache");
-                safeUpdateBookmarkContents();
+        folderManager.addEventListener(UnifiedFolderManager.EventType.BOOKMARK_ADDED, new FolderEventListener() {
+            @Override
+            public void onFolderEvent(FolderEvent event) {
+                // If this is for our active folder, make sure we update the cache
+                Integer folderId = event.getFolderId();
+                if (folderManager.hasActiveFolder() && folderId != null &&
+                    folderManager.getActiveFolder().getFolder().getId() == folderId) {
+                    ModLogger.debug("BookmarkManager received BOOKMARK_ADDED event, updating cache");
+                    safeUpdateBookmarkContents();
+                }
+            }
+        });
+        
+        // Listen for folder contents changed events
+        folderManager.addEventListener(UnifiedFolderManager.EventType.FOLDER_CONTENTS_CHANGED, new FolderEventListener() {
+            @Override
+            public void onFolderEvent(FolderEvent event) {
+                onFolderContentsChanged(event);
             }
         });
     }
@@ -92,12 +117,22 @@ public class BookmarkManager {
      * Updates the static state cache for GUI rebuilds
      */
     private void safeUpdateBookmarkContents() {
-        if (bookmarkDisplay != null) {
-            // Use the helper to get ingredients from the display
-            List<TypedIngredient> bookmarkContents = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
+        // Prevent recursion
+        if (updatingBookmarkContents) {
+            return;
+        }
+        
+        try {
+            updatingBookmarkContents = true;
+            if (bookmarkDisplay != null) {
+                // Use the helper to get ingredients from the display
+                List<TypedIngredient> bookmarkContents = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
 
-            // Update the folder manager's cache
-            folderManager.updateBookmarkContentsCache(bookmarkContents);
+                // Update the folder manager's cache
+                folderManager.updateBookmarkContentsCache(bookmarkContents);
+            }
+        } finally {
+            updatingBookmarkContents = false;
         }
     }
 
@@ -373,10 +408,10 @@ public class BookmarkManager {
         }
     }
 
-    public void onFolderContentsChanged(UnifiedFolderManager.FolderEvent event) {
+    public void onFolderContentsChanged(FolderEvent event) {
         // Update bookmarks if the active folder was changed
-        int folderId = event.getFolderId();
-        if (folderId != -1 && folderManager.hasActiveFolder() && 
+        Integer folderId = event.getFolderId();
+        if (folderId != null && folderManager.hasActiveFolder() && 
             folderManager.getActiveFolder().getFolder().getId() == folderId) {
             
             // Get the folder data

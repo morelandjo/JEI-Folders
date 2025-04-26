@@ -21,7 +21,6 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import javax.annotation.Nonnull;
-import java.util.Collection;
 import java.util.List;
 
 /**
@@ -34,9 +33,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     private static FolderButtonSystem instance;
     
     // UI State
-    private boolean isHovered = false;
     private int currentDeleteButtonX = -1;
-    private int currentDeleteButtonY = -1;
     private boolean deleteHovered = false;
     
     // Window size tracking
@@ -226,7 +223,6 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
             renderActiveFolderDetails(graphics, mouseX, mouseY);
         } else {
             currentDeleteButtonX = -1;
-            currentDeleteButtonY = -1;
             deleteHovered = false;
         }
 
@@ -243,6 +239,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
     private void renderActiveFolderDetails(GuiGraphics graphics, int mouseX, int mouseY) {
         FolderButton activeFolder = folderManager.getActiveFolder();
         if (activeFolder == null) {
+            ModLogger.debug("[NAME-DEBUG] No active folder to render name for");
             return;
         }
 
@@ -253,18 +250,31 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
             displayName = fullName.substring(0, 12) + "...";
         }
 
+        // Use the correct Y position from renderingManager for the folder name
+        int nameY = renderingManager.getFolderNameY();
+        ModLogger.debug("[NAME-DEBUG] Drawing folder name '{}' at Y={}", displayName, nameY);
+        
+        // Changed back to white color (0xFFFFFF) for the folder name
         graphics.drawString(
             Minecraft.getInstance().font,
             displayName,
             10,
-            renderingManager.getFolderNameY(),
-            0xFFFFFF,
+            nameY,
+            0xFFFFFF, // White color
             true
         );
+        
+        // Log font metrics to ensure name is within visible area
+        int fontHeight = Minecraft.getInstance().font.lineHeight;
+        int stringWidth = Minecraft.getInstance().font.width(displayName);
+        ModLogger.debug("[NAME-DEBUG] Font metrics: width={}, height={}, screen dimensions: {}x{}", 
+                      stringWidth, fontHeight,
+                      Minecraft.getInstance().getWindow().getGuiScaledWidth(),
+                      Minecraft.getInstance().getWindow().getGuiScaledHeight());
 
         // Show tooltip with the full name when hovering over a truncated name
         if (!displayName.equals(fullName) && mouseX >= 10 && mouseX < 10 + Minecraft.getInstance().font.width(displayName) &&
-            mouseY >= renderingManager.getFolderNameY() - 4 && mouseY < renderingManager.getFolderNameY() + 10) {
+            mouseY >= nameY - 4 && mouseY < nameY + 10) {
             graphics.renderTooltip(
                 Minecraft.getInstance().font,
                 Component.literal(fullName),
@@ -279,6 +289,7 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         
         // Render the delete button using the sprite sheet
         FolderButtonTextures.renderDeleteFolderIcon(graphics, deleteX, deleteY);
+        ModLogger.debug("[NAME-DEBUG] Delete button rendered at X={}, Y={}", deleteX, deleteY);
 
         deleteHovered = mouseX >= deleteX && mouseX < deleteX + 16 &&
                       mouseY >= deleteY && mouseY < deleteY + 16;
@@ -292,7 +303,6 @@ public class FolderButtonSystem extends AbstractWidget implements FolderButtonIn
         }
 
         currentDeleteButtonX = deleteX;
-        currentDeleteButtonY = deleteY;
     }
     
     /**

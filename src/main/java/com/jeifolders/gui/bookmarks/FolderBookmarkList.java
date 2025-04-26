@@ -31,6 +31,9 @@ public class FolderBookmarkList {
     private boolean batchUpdateMode = false;
     private boolean pendingNotification = false;
 
+    // Add a notification state tracking variable
+    private boolean notifyingListeners = false;
+
     // JEI integration - source list changed listeners
     private final List<IIngredientGridSource.SourceListChangedListener> sourceListChangedListeners = new ArrayList<>();
 
@@ -107,13 +110,25 @@ public class FolderBookmarkList {
             pendingNotification = true;
             return;
         }
-
-        if (folder != null) {
-            eventManager.fireFolderContentsChangedEvent(folder);
+        
+        // Prevent recursive notifications
+        if (notifyingListeners) {
+            ModLogger.debug("Preventing recursive listener notification in FolderBookmarkList");
+            return;
         }
 
-        // Notify JEI source list changed listeners
-        notifySourceListChangedListeners();
+        try {
+            notifyingListeners = true;
+            
+            if (folder != null) {
+                eventManager.fireFolderContentsChangedEvent(folder);
+            }
+
+            // Notify JEI source list changed listeners
+            notifySourceListChangedListeners();
+        } finally {
+            notifyingListeners = false;
+        }
     }
 
     /**

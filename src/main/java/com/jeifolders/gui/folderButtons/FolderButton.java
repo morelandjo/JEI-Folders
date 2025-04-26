@@ -1,279 +1,264 @@
 package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.LayoutConstants;
+import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 
-import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 
-public class FolderButton extends AbstractWidget {
-    private static final int ICON_WIDTH = FolderButtonTextures.ICON_WIDTH;
-    private static final int ICON_HEIGHT = FolderButtonTextures.ICON_HEIGHT;
-    private static final int TEXT_MAX_LENGTH = 3;
-    private static final int SUCCESS_ANIMATION_DURATION = 10;
+/**
+ * A button that represents a folder in the UI.
+ */
+public class FolderButton {
+    // Position and dimensions
+    private int x;
+    private int y;
+    private final int width;
+    private final int height;
+    
+    // State
+    private final ButtonType buttonType;
+    private FolderDataRepresentation folder;
+    private boolean isActive = false;
+    
+    // Animation state
+    private boolean isHovered = false;
+    private float hoverProgress = 0.0f;
+    private static final float HOVER_ANIMATION_SPEED = 0.1f;
+    
+    // Click handler
+    private Consumer<FolderDataRepresentation> clickHandler;
     
     /**
-     * Enum to define the different types of folder buttons
+     * Button types, either a normal folder or a special button like "Add Folder"
      */
     public enum ButtonType {
-        NORMAL, // Standard folder button
-        ADD     // Add folder button
+        NORMAL,
+        ADD,
+        DELETE
     }
-
-    private final FolderDataRepresentation folder;
-    private boolean isHovered = false;
-    private boolean isActive = false;
-    private boolean showSuccessAnimation = false;
-    private int successAnimationTicksRemaining = 0;
-    private Consumer<FolderDataRepresentation> clickHandler;
-    private ButtonType buttonType = ButtonType.NORMAL;
-    
-    private final String displayName;
-    private final String fullName;
-    private final int textWidth;
-    private int textX;
-    private boolean needsTooltip;
-    
-    // Cache tooltip
-    private Component tooltipComponent;
-    
-    // Cache for position updates
-    private int lastX = -1;
-    private int lastY = -1;
-    private int lastWidth = -1;
     
     /**
-     * Constructor for "Add Folder" button
-     */
-    public FolderButton(int x, int y, ButtonType buttonType) {
-        super(x, y, ICON_WIDTH, ICON_HEIGHT, Component.literal("Add"));
-        this.buttonType = buttonType;
-        this.folder = null; 
-        this.clickHandler = null;
-        this.fullName = "Add Folder";
-        this.displayName = ""; // Empty string instead of "+" to not show text
-        this.needsTooltip = true;
-        this.tooltipComponent = Component.literal(fullName);
-        this.textWidth = 0; // Set to 0 since we don't want text
-        updateTextPosition();
-    }
-
-    /**
-     * Constructor for regular folder button (clickHandler set separately)
+     * Creates a new normal folder button.
+     * 
+     * @param x X position
+     * @param y Y position
+     * @param folder The folder data this button represents
      */
     public FolderButton(int x, int y, FolderDataRepresentation folder) {
-        this(x, y, folder, null);
-    }
-
-    public FolderButton(int x, int y, FolderDataRepresentation folder, Consumer<FolderDataRepresentation> clickHandler) {
-        super(x, y, ICON_WIDTH, ICON_HEIGHT, Component.literal(folder.getName()));
+        this.x = x;
+        this.y = y;
+        this.width = FolderButtonTextures.ICON_WIDTH;
+        this.height = FolderButtonTextures.ICON_HEIGHT;
+        this.buttonType = ButtonType.NORMAL;
         this.folder = folder;
-        this.clickHandler = clickHandler;
-        this.fullName = folder.getName();
-        
-        // Pre-compute display name
-        if (fullName.length() > TEXT_MAX_LENGTH) {
-            this.displayName = fullName.substring(0, TEXT_MAX_LENGTH);
-            this.needsTooltip = true;
-        } else {
-            this.displayName = fullName;
-            this.needsTooltip = false;
-        }
-        
-        // Pre-compute tooltip component
-        this.tooltipComponent = Component.literal(fullName);
-        
-        // Pre-compute text measurements
-        this.textWidth = Minecraft.getInstance().font.width(displayName);
-        updateTextPosition();
     }
     
     /**
-     * Sets the click handler for this button
+     * Creates a normal folder button with a click handler.
+     * 
+     * @param x X position
+     * @param y Y position
+     * @param folder The folder data this button represents
+     * @param clickHandler The handler for click events
+     */
+    public FolderButton(int x, int y, FolderDataRepresentation folder, 
+                      Consumer<FolderDataRepresentation> clickHandler) {
+        this(x, y, folder);
+        this.clickHandler = clickHandler;
+    }
+    
+    /**
+     * Creates a special button like "Add Folder".
+     * 
+     * @param x X position
+     * @param y Y position
+     * @param buttonType The type of button
+     */
+    public FolderButton(int x, int y, ButtonType buttonType) {
+        this.x = x;
+        this.y = y;
+        this.width = FolderButtonTextures.ICON_WIDTH;
+        this.height = FolderButtonTextures.ICON_HEIGHT;
+        this.buttonType = buttonType;
+        this.folder = null; // Special buttons don't have a folder
+    }
+    
+    /**
+     * Renders the button.
+     * 
+     * @param graphics The GUI graphics context
+     * @param mouseX Mouse X position
+     * @param mouseY Mouse Y position
+     * @param partialTicks Partial ticks for smooth animation
+     */
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+        // Update hover state
+        boolean wasHovered = isHovered;
+        isHovered = mouseX >= x && mouseX < x + width && 
+                   mouseY >= y && mouseY < y + height;
+        
+        // Handle hover state change for logging
+        if (isHovered != wasHovered) {
+            if (isHovered) {
+                String folderName = (folder != null) ? folder.getName() : buttonType.name();
+                ModLogger.debug("Hovering over folder button: {}", folderName);
+            }
+        }
+        
+        // Render the button based on its type and state
+        switch (buttonType) {
+            case NORMAL:
+                // Use renderFolderRowIcon instead, and convert hover progress to boolean
+                FolderButtonTextures.renderFolderRowIcon(graphics, x, y, isActive, hoverProgress > 0.5f);
+                
+                // Render the shortened name under the folder icon for normal folders
+                if (folder != null) {
+                    renderFolderName(graphics);
+                }
+                break;
+            case ADD:
+                // Convert hover progress to boolean
+                FolderButtonTextures.renderAddFolderIcon(graphics, x, y, hoverProgress > 0.5f);
+                break;
+            case DELETE:
+                FolderButtonTextures.renderDeleteFolderIcon(graphics, x, y);
+                break;
+            default:
+                // Use renderFolderRowIcon for default case too
+                FolderButtonTextures.renderFolderRowIcon(graphics, x, y, isActive, hoverProgress > 0.5f);
+                break;
+        }
+        
+        // Show tooltip when hovering
+        if (isHovered) {
+            String tooltipText;
+            if (buttonType == ButtonType.ADD) {
+                tooltipText = "tooltip.jeifolders.add_folder";
+            } else if (folder != null) {
+                tooltipText = folder.getName();
+            } else {
+                tooltipText = buttonType.name().toLowerCase();
+            }
+            
+            graphics.renderTooltip(
+                Minecraft.getInstance().font,
+                Component.literal(tooltipText),
+                mouseX, mouseY
+            );
+        }
+    }
+    
+    /**
+     * Renders the shortened folder name under the folder icon.
+     * 
+     * @param graphics The GUI graphics context
+     */
+    private void renderFolderName(GuiGraphics graphics) {
+        if (folder == null) return;
+        
+        // Get the folder name
+        String folderName = folder.getName();
+        
+        // Get the first 3 characters, or the entire name if it's shorter
+        String shortName = folderName.length() > 3 ? folderName.substring(0, 3) : folderName;
+        
+        // Calculate the position to center the text under the folder icon
+        int textWidth = Minecraft.getInstance().font.width(shortName);
+        int textX = x + (width - textWidth) / 2;
+        int textY = y + height + 2; // Position right below the folder icon
+        
+        // Draw the name with a shadow to make it more readable
+        graphics.drawString(
+            Minecraft.getInstance().font,
+            shortName,
+            textX,
+            textY,
+            0xFFFFFF, // White color
+            true // Draw with shadow
+        );
+        
+        ModLogger.debug("[NAME-DEBUG] Drawing short name '{}' at X={}, Y={}", shortName, textX, textY);
+    }
+    
+    /**
+     * Update animation state.
+     */
+    public void tick() {
+        // Update hover animation
+        if (isHovered && hoverProgress < 1.0f) {
+            hoverProgress = Math.min(1.0f, hoverProgress + HOVER_ANIMATION_SPEED);
+        } else if (!isHovered && hoverProgress > 0.0f) {
+            hoverProgress = Math.max(0.0f, hoverProgress - HOVER_ANIMATION_SPEED);
+        }
+    }
+    
+    /**
+     * Handle a mouse click.
+     * 
+     * @param mouseX Mouse X position
+     * @param mouseY Mouse Y position
+     * @param button Mouse button (0 = left, 1 = right)
+     * @return true if the click was processed
+     */
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height) {
+            // Only respond to left clicks (button == 0)
+            if (button == 0 && clickHandler != null) {
+                ModLogger.debug("Folder button clicked: {}", 
+                    folder != null ? folder.getName() : buttonType.name());
+                
+                // Call the click handler with the folder
+                clickHandler.accept(folder);
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Sets whether this folder button is active.
+     * 
+     * @param active Whether the button should be active
+     */
+    public void setActive(boolean active) {
+        if (this.isActive != active) {
+            this.isActive = active;
+            ModLogger.debug("Folder button {} set active: {}", 
+                folder != null ? folder.getName() : buttonType.name(), active);
+        }
+    }
+    
+    /**
+     * Sets the click handler for this button.
+     * 
+     * @param handler The consumer that will handle clicks
      */
     public void setClickHandler(Consumer<FolderDataRepresentation> handler) {
         this.clickHandler = handler;
     }
     
     /**
-     * Returns the button type
+     * Sets a new position for this button.
+     * 
+     * @param x New X position
+     * @param y New Y position
      */
-    public ButtonType getButtonType() {
-        return buttonType;
+    public void setPosition(int x, int y) {
+        this.x = x;
+        this.y = y;
     }
     
-    /**
-     * Updates the cached text position when button position changes
-     */
-    private void updateTextPosition() {
-        this.textX = getX() + (width - textWidth) / 2;
-        
-        // Update cached positions
-        this.lastX = getX();
-        this.lastY = getY();
-        this.lastWidth = width;
-    }
-    
-    @Override
-    public void setX(int x) {
-        super.setX(x);
-        if (lastX != x) {
-            updateTextPosition();
-        }
-    }
-    
-    @Override
-    public void setY(int y) {
-        super.setY(y);
-        if (lastY != y) {
-            lastY = y;
-        }
-    }
-    
-    @Override
-    public void setWidth(int width) {
-        super.setWidth(width);
-        if (lastWidth != width) {
-            updateTextPosition();
-        }
-    }
-    
-    @Override
-    public void renderWidget(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Check if position has changed since last render (could happen during layout changes)
-        if (getX() != lastX || getY() != lastY || width != lastWidth) {
-            updateTextPosition();
-        }
-        
-        // Update hover state
-        isHovered = mouseX >= getX() && mouseY >= getY() && 
-                   mouseX < getX() + width && mouseY < getY() + height;
-        
-        // Different rendering based on button type
-        if (buttonType == ButtonType.ADD) {
-            // Use the special Add button icon for the Add button
-            FolderButtonTextures.renderAddFolderIcon(graphics, getX(), getY(), isHovered);
-        } else {
-            // Regular folder icon for normal folder buttons
-            FolderButtonTextures.renderFolderRowIcon(graphics, getX(), getY(), isActive, isHovered);
-            
-            // Draw folder name below the icon
-            graphics.drawString(
-                Minecraft.getInstance().font, 
-                displayName, 
-                textX, 
-                getY() + ICON_HEIGHT + 2, 
-                0xFFFFFF,
-                true
-            );
-        }
-        
-        // Display tooltip when hovering
-        if (isHovered && (needsTooltip || showSuccessAnimation)) {
-            graphics.renderTooltip(
-                Minecraft.getInstance().font,
-                tooltipComponent,
-                mouseX, mouseY
-            );
-        }
-
-        // Draw success animation if active using tick-based animation, constrain to folder area
-        if (showSuccessAnimation && successAnimationTicksRemaining > 0) {
-            renderSuccessAnimation(graphics);
-        }
-    }
-    
-    /**
-     * Renders the success animation with proper constraints
-     */
-    private void renderSuccessAnimation(GuiGraphics graphics) {
-        // Calculate the bounds of the safe highlight zone using LayoutConstants
-        int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int guiLeft = LayoutConstants.calculateGuiLeft(screenWidth);
-        
-        // Constrain highlight to not go past the left GUI edge
-        int maxHighlightX = Math.max(0, Math.min(guiLeft - 5, getX() + getWidth() + 2));
-        
-        // Apply highlight with constrained boundaries
-        float progress = successAnimationTicksRemaining / (float)SUCCESS_ANIMATION_DURATION;
-        int alpha = (int)(progress * 255);
-        int color = (alpha << 24) | 0x00FF00; // Green color with fading alpha
-        
-        graphics.fill(
-            Math.max(0, getX() - 2), 
-            getY() - 2, 
-            Math.min(maxHighlightX, getX() + getWidth() + 2), 
-            getY() + getHeight() + 2, 
-            color
-        );
-    }
-    
-    /**
-     * Update animation state - should be called each game tick
-     */
-    public void tick() {
-        if (showSuccessAnimation && successAnimationTicksRemaining > 0) {
-            successAnimationTicksRemaining--;
-            if (successAnimationTicksRemaining <= 0) {
-                showSuccessAnimation = false;
-            }
-        }
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (isHovered && button == 0) {
-            this.onClick();
-            return true;
-        }
-        return false;
-    }
-    
-    private void onClick() {
-        if (clickHandler != null) {
-            clickHandler.accept(folder);
-        }
-    }
-
-    /**
-     * Plays a success animation on this folder button.
-     */
-    public void playSuccessAnimation() {
-        showSuccessAnimation = true;
-        successAnimationTicksRemaining = SUCCESS_ANIMATION_DURATION;
-    }
-
-    @Override
-    protected void updateWidgetNarration(@Nonnull NarrationElementOutput narrationOutput) {
-        this.defaultButtonNarrationText(narrationOutput);
-    }
-    
-    public FolderDataRepresentation getFolder() {
-        return folder;
-    }
-    
-    public void setActive(boolean active) {
-        this.isActive = active;
-    }
-    
-    public boolean isActive() {
-        return isActive;
-    }
-    
-    /**
-     * Update the button's position without triggering a full recalculation
-     */
-    public void updatePosition(int x, int y) {
-        boolean changed = x != getX() || y != getY();
-        setPosition(x, y);
-        if (changed) {
-            updateTextPosition();
-        }
-    }
+    // Getters
+    public int getX() { return x; }
+    public int getY() { return y; }
+    public int getWidth() { return width; }
+    public int getHeight() { return height; }
+    public FolderDataRepresentation getFolder() { return folder; }
+    public boolean isActive() { return isActive; }
+    public ButtonType getButtonType() { return buttonType; }
+    public boolean isHovered() { return isHovered; }
 }

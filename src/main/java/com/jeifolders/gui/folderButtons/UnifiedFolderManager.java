@@ -2,16 +2,13 @@ package com.jeifolders.gui.folderButtons;
 
 import com.jeifolders.data.FolderDataService;
 import com.jeifolders.data.FolderDataRepresentation;
-import com.jeifolders.gui.FolderNameInputScreen;
 import com.jeifolders.gui.bookmarks.UnifiedFolderContentsDisplay;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.util.ModLogger;
-import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,104 +48,6 @@ public class UnifiedFolderManager {
         DISPLAY_REFRESHED
     }
     
-    // ----- Event class -----
-    public static class FolderEvent {
-        private final EventType type;
-        private final Map<String, Object> data = new HashMap<>();
-        
-        private FolderEvent(EventType type) {
-            this.type = type;
-        }
-        
-        public EventType getType() {
-            return type;
-        }
-        
-        public FolderEvent withData(String key, Object value) {
-            data.put(key, value);
-            return this;
-        }
-        
-        @SuppressWarnings("unchecked")
-        public <T> T getData(String key, Class<T> clazz) {
-            Object value = data.get(key);
-            if (value != null && clazz.isAssignableFrom(value.getClass())) {
-                return (T) value;
-            }
-            return null;
-        }
-        
-        public boolean hasData(String key) {
-            return data.containsKey(key);
-        }
-        
-        public Integer getFolderId() {
-            return getData("folderId", Integer.class);
-        }
-        
-        public FolderDataRepresentation getFolder() {
-            return getData("folder", FolderDataRepresentation.class);
-        }
-    }
-    
-    // Event Builder class to simplify event creation
-    public static class EventBuilder {
-        private final FolderEvent event;
-        
-        private EventBuilder(EventType type) {
-            event = new FolderEvent(type);
-        }
-        
-        public static EventBuilder create(EventType type) {
-            return new EventBuilder(type);
-        }
-        
-        public EventBuilder withFolder(FolderDataRepresentation folder) {
-            event.withData("folder", folder);
-            if (folder != null) {
-                event.withData("folderId", folder.getId());
-            }
-            return this;
-        }
-        
-        public EventBuilder withFolderButton(FolderButton button) {
-            event.withData("folderButton", button);
-            if (button != null) {
-                return withFolder(button.getFolder());
-            }
-            return this;
-        }
-        
-        public EventBuilder withFolderId(int folderId) {
-            event.withData("folderId", folderId);
-            return this;
-        }
-        
-        public EventBuilder withFolderName(String name) {
-            event.withData("folderName", name);
-            return this;
-        }
-        
-        public EventBuilder withIngredient(Object ingredient) {
-            event.withData("ingredient", ingredient);
-            return this;
-        }
-        
-        public EventBuilder withBookmarkKey(String key) {
-            event.withData("bookmarkKey", key);
-            return this;
-        }
-        
-        public EventBuilder with(String key, Object value) {
-            event.withData(key, value);
-            return this;
-        }
-        
-        public FolderEvent build() {
-            return event;
-        }
-    }
-    
     // ----- Transient State (preserved across GUI rebuilds) -----
     private static Integer lastActiveFolderId = null;
     private static List<TypedIngredient> lastBookmarkContents = new ArrayList<>();
@@ -163,14 +62,12 @@ public class UnifiedFolderManager {
     
     // ----- Bookmark Display -----
     private UnifiedFolderContentsDisplay bookmarkDisplay;
-    private long lastRefreshTime = 0;
-    private static final long MIN_REFRESH_INTERVAL_MS = 100; // Prevent too frequent refreshes
     
     // ----- Persistent Storage (saved to disk) -----
     private final FolderDataService folderService;
     
     // ----- Event listeners -----
-    private final Map<EventType, List<Consumer<FolderEvent>>> listeners = new HashMap<>();
+    private final Map<EventType, List<FolderEventListener>> listeners = new HashMap<>();
     
     // Reference to the dialog handler (will be set by FolderButtonSystem)
     private Runnable addFolderDialogHandler = null;
@@ -226,10 +123,8 @@ public class UnifiedFolderManager {
             lastActiveFolderId = button.getFolder().getId();
             lastGuiRebuildTime = System.currentTimeMillis();
             
-            // Fire event using the EventBuilder pattern
-            fireEvent(EventBuilder.create(EventType.FOLDER_ACTIVATED)
-                .withFolderButton(button)
-                .build());
+            // Fire event
+            fireEvent(FolderEvent.createFolderActivatedEvent(this, button));
             
             // Update bookmark display
             if (bookmarkDisplay != null) {
@@ -252,9 +147,8 @@ public class UnifiedFolderManager {
             lastActiveFolderId = null;
             lastBookmarkContents = new ArrayList<>();
             
-            // Fire event using the EventBuilder pattern
-            fireEvent(EventBuilder.create(EventType.FOLDER_DEACTIVATED)
-                .build());
+            // Fire event
+            fireEvent(FolderEvent.createFolderDeactivatedEvent(this));
             
             // Update bookmark display
             if (bookmarkDisplay != null) {
@@ -332,9 +226,9 @@ public class UnifiedFolderManager {
      * Add a listener for a specific event type
      * 
      * @param type Event type to listen for
-     * @param listener Consumer that will be called when event occurs
+     * @param listener Listener that will be called when event occurs
      */
-    public void addEventListener(EventType type, Consumer<FolderEvent> listener) {
+    public void addEventListener(EventType type, FolderEventListener listener) {
         if (listener != null) {
             listeners.get(type).add(listener);
             ModLogger.debug("Added event listener for {}, total: {}", 
@@ -345,9 +239,9 @@ public class UnifiedFolderManager {
     /**
      * Add a listener for all event types
      * 
-     * @param listener Consumer that will be called for all events
+     * @param listener Listener that will be called for all events
      */
-    public void addGlobalEventListener(Consumer<FolderEvent> listener) {
+    public void addGlobalEventListener(FolderEventListener listener) {
         if (listener != null) {
             for (EventType type : EventType.values()) {
                 listeners.get(type).add(listener);
@@ -362,7 +256,7 @@ public class UnifiedFolderManager {
      * @param type Event type to remove listener from
      * @param listener The listener to remove
      */
-    public void removeEventListener(EventType type, Consumer<FolderEvent> listener) {
+    public void removeEventListener(EventType type, FolderEventListener listener) {
         listeners.get(type).remove(listener);
         ModLogger.debug("Removed event listener for {}, remaining: {}", 
                        type, listeners.get(type).size());
@@ -373,7 +267,7 @@ public class UnifiedFolderManager {
      * 
      * @param listener The listener to remove
      */
-    public void removeGlobalEventListener(Consumer<FolderEvent> listener) {
+    public void removeGlobalEventListener(FolderEventListener listener) {
         for (EventType type : EventType.values()) {
             listeners.get(type).remove(listener);
         }
@@ -386,121 +280,87 @@ public class UnifiedFolderManager {
      * @param event The event to fire
      */
     public void fireEvent(FolderEvent event) {
-        List<Consumer<FolderEvent>> typeListeners = listeners.get(event.getType());
+        // Convert from FolderEvent.Type to UnifiedFolderManager.EventType
+        FolderEvent.Type eventType = event.getType();
+        EventType type = EventType.valueOf(eventType.name());
+        
+        List<FolderEventListener> typeListeners = listeners.get(type);
         if (typeListeners != null && !typeListeners.isEmpty()) {
-            for (Consumer<FolderEvent> listener : new ArrayList<>(typeListeners)) {
+            for (FolderEventListener listener : new ArrayList<>(typeListeners)) {
                 try {
-                    listener.accept(event);
+                    listener.onFolderEvent(event);
                 } catch (Exception e) {
                     ModLogger.error("Error in folder event listener: {}", e.getMessage(), e);
                 }
             }
-            ModLogger.debug("Fired {} event to {} listeners", event.getType(), typeListeners.size());
+            ModLogger.debug("Fired {} event to {} listeners", type, typeListeners.size());
         }
     }
     
     // ----- Helper methods for firing folder UI events -----
     
     public void fireFolderClickedEvent(FolderDataRepresentation folder) {
-        fireEvent(EventBuilder.create(EventType.FOLDER_CLICKED)
-            .withFolder(folder)
-            .build());
+        fireEvent(FolderEvent.createFolderClickedEvent(this, folder));
     }
     
     public void fireFolderActivatedEvent(FolderButton folder) {
-        fireEvent(EventBuilder.create(EventType.FOLDER_ACTIVATED)
-            .withFolderButton(folder)
-            .build());
+        fireEvent(FolderEvent.createFolderActivatedEvent(this, folder));
     }
     
     public void fireFolderDeactivatedEvent() {
-        fireEvent(EventBuilder.create(EventType.FOLDER_DEACTIVATED)
-            .build());
+        fireEvent(FolderEvent.createFolderDeactivatedEvent(this));
     }
     
     public void fireFolderCreatedEvent(FolderDataRepresentation folder) {
-        fireEvent(EventBuilder.create(EventType.FOLDER_CREATED)
-            .withFolder(folder)
-            .build());
+        fireEvent(FolderEvent.createFolderCreatedEvent(this, folder));
     }
     
     public void fireFolderDeletedEvent(int folderId, String folderName) {
-        fireEvent(EventBuilder.create(EventType.FOLDER_DELETED)
-            .withFolderId(folderId)
-            .withFolderName(folderName)
-            .build());
+        fireEvent(FolderEvent.createFolderDeletedEvent(this, folderId, folderName));
     }
     
     public void fireAddButtonClickedEvent() {
-        fireEvent(EventBuilder.create(EventType.ADD_BUTTON_CLICKED)
-            .build());
+        fireEvent(FolderEvent.createAddButtonClickedEvent(this));
     }
     
     public void fireDeleteButtonClickedEvent(int folderId) {
-        fireEvent(EventBuilder.create(EventType.DELETE_BUTTON_CLICKED)
-            .withFolderId(folderId)
-            .build());
+        fireEvent(FolderEvent.createDeleteButtonClickedEvent(this, folderId));
     }
     
     public void fireBookmarkClickedEvent(TypedIngredient ingredient) {
-        fireEvent(EventBuilder.create(EventType.BOOKMARK_CLICKED)
-            .withIngredient(ingredient)
-            .build());
+        fireEvent(FolderEvent.createBookmarkClickedEvent(this, ingredient));
     }
     
     public void fireIngredientDroppedEvent(Object ingredient, Integer folderId) {
-        EventBuilder builder = EventBuilder.create(EventType.INGREDIENT_DROPPED)
-            .withIngredient(ingredient);
-            
-        if (folderId != null) {
-            builder.withFolderId(folderId);
-        }
-        
-        fireEvent(builder.build());
+        fireEvent(FolderEvent.createIngredientDroppedEvent(this, ingredient, folderId));
     }
     
     public void fireBookmarkAddedEvent(FolderDataRepresentation folder, 
                                       BookmarkIngredient ingredient, 
                                       String key) {
-        fireEvent(EventBuilder.create(EventType.BOOKMARK_ADDED)
-            .withFolder(folder)
-            .withIngredient(ingredient)
-            .withBookmarkKey(key)
-            .build());
+        fireEvent(FolderEvent.createBookmarkAddedEvent(this, folder, ingredient, key));
     }
     
     public void fireBookmarkRemovedEvent(FolderDataRepresentation folder, 
                                         BookmarkIngredient ingredient, 
                                         String key) {
-        fireEvent(EventBuilder.create(EventType.BOOKMARK_REMOVED)
-            .withFolder(folder)
-            .withIngredient(ingredient)
-            .withBookmarkKey(key)
-            .build());
+        fireEvent(FolderEvent.createBookmarkRemovedEvent(this, folder, ingredient, key));
     }
     
     public void fireBookmarksClearedEvent(FolderDataRepresentation folder) {
-        fireEvent(EventBuilder.create(EventType.BOOKMARKS_CLEARED)
-            .withFolder(folder)
-            .build());
+        fireEvent(FolderEvent.createBookmarksClearedEvent(this, folder));
     }
     
     public void fireFolderContentsChangedEvent(FolderDataRepresentation folder) {
-        fireEvent(EventBuilder.create(EventType.FOLDER_CONTENTS_CHANGED)
-            .withFolder(folder)
-            .build());
+        fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folder));
     }
     
     public void fireFolderContentsChangedEvent(int folderId) {
-        fireEvent(EventBuilder.create(EventType.FOLDER_CONTENTS_CHANGED)
-            .withFolderId(folderId)
-            .build());
+        fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folderId));
     }
     
     public void fireDisplayRefreshedEvent(FolderDataRepresentation folder) {
-        fireEvent(EventBuilder.create(EventType.DISPLAY_REFRESHED)
-            .withFolder(folder)
-            .build());
+        fireEvent(FolderEvent.createDisplayRefreshedEvent(this, folder));
     }
     
     // ----- Persistent Storage Management -----
@@ -515,10 +375,8 @@ public class UnifiedFolderManager {
         FolderDataRepresentation folder = folderService.createFolder(folderName);
         ModLogger.debug("Created folder: {} (ID: {})", folder.getName(), folder.getId());
         
-        // Fire folder created event using the EventBuilder directly
-        fireEvent(EventBuilder.create(EventType.FOLDER_CREATED)
-            .withFolder(folder)
-            .build());
+        // Fire folder created event
+        fireFolderCreatedEvent(folder);
         
         return folder;
     }
@@ -537,11 +395,8 @@ public class UnifiedFolderManager {
 
         folderService.deleteFolder(folderId);
         
-        // Fire folder deleted event using the EventBuilder directly
-        fireEvent(EventBuilder.create(EventType.FOLDER_DELETED)
-            .withFolderId(folderId)
-            .withFolderName(folderName)
-            .build());
+        // Fire folder deleted event
+        fireFolderDeletedEvent(folderId, folderName);
         
         // Clear active folder
         activeFolder = null;
@@ -626,10 +481,10 @@ public class UnifiedFolderManager {
     }
     
     /**
-     * Updates the static state cache for GUI rebuilds
+     * Safely updates the bookmark contents.
      */
     private void safeUpdateBookmarkContents() {
-        if (bookmarkDisplay != null) {
+        if (bookmarkDisplay != null && hasActiveFolder()) {
             // Use the helper to get ingredients from the display
             List<TypedIngredient> bookmarkContents = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
             
@@ -637,358 +492,6 @@ public class UnifiedFolderManager {
             updateBookmarkContentsCache(bookmarkContents);
         }
     }
-    
-    /**
-     * Refreshes the bookmark display with the latest data
-     * 
-     * @return true if the refresh was successful
-     */
-    public boolean refreshBookmarkDisplay() {
-        // Check if we have an active folder
-        if (activeFolder == null) {
-            ModLogger.debug("Cannot refresh bookmark display - no active folder");
-            return false;
-        }
-        
-        // Check if we need to throttle refreshes
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastRefreshTime < MIN_REFRESH_INTERVAL_MS) {
-            ModLogger.debug("Skipping refresh - too soon since last refresh");
-            return false;
-        }
-        lastRefreshTime = currentTime;
-        
-        try {
-            // If the display is null, create a new one
-            if (bookmarkDisplay == null ) {
-                if (!createBookmarkDisplay(true)) {
-                    return false;
-                }
-            }
-            // Otherwise just refresh the current display
-            else {
-                FolderDataRepresentation currentFolder = activeFolder.getFolder();
-                TypedIngredientHelper.refreshBookmarkDisplay(bookmarkDisplay, currentFolder, folderService);
-                bookmarkDisplay.updateBoundsFromCalculatedPositions();
-            }
-            
-            // Update the static state cache for GUI rebuilds
-            safeUpdateBookmarkContents();
-            
-            ModLogger.debug("Bookmark display refresh completed successfully");
-            return true;
-        } catch (Exception e) {
-            ModLogger.error("Error refreshing bookmark display: {}", e.getMessage(), e);
-            return false;
-        }
-    }
-    
-    /**
-     * Handles the dropping of an ingredient on a specific folder.
-     * Manages the state changes and database updates.
-     * 
-     * @param folder The folder to add the ingredient to (null means active folder)
-     * @param ingredient The ingredient that was dropped
-     * @return true if the drop was handled, false otherwise
-     */
-    public boolean handleIngredientDropOnFolder(FolderDataRepresentation folder, Object ingredient) {
-        if (folder == null && activeFolder != null) {
-            folder = activeFolder.getFolder();
-        }
-        
-        if (folder == null) {
-            ModLogger.error("No target folder for ingredient drop");
-            return false;
-        }
-
-        int folderId = folder.getId();
-        String folderName = folder.getName();
-
-        try {
-            // Use TypedIngredientHelper to wrap the ingredient
-            TypedIngredient typedIngredient = TypedIngredientHelper.wrapIngredient(ingredient);
-            if (typedIngredient == null) {
-                ModLogger.error("Failed to wrap ingredient");
-                return false;
-            }
-            
-            // Get ingredient key for the bookmark
-            String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
-            if (key == null || key.isEmpty()) {
-                ModLogger.error("Failed to generate key for ingredient");
-                return false;
-            }
-            
-            ModLogger.info("Adding bookmark {} to folder {}", key, folderName);
-            
-            // Add to folder using folderService's addBookmark method
-            folderService.addBookmark(folderId, key);
-            
-            // Send event notification
-            fireFolderContentsChangedEvent(folderId);
-            fireIngredientDroppedEvent(ingredient, folderId);
-            
-            // If the display is showing, update cache
-            if (bookmarkDisplay != null && hasActiveFolder() && 
-                activeFolder.getFolder().getId() == folderId) {
-                safeUpdateBookmarkContents();
-            }
-            
-            return true;
-        } catch (Exception e) {
-            ModLogger.error("Failed to add bookmark: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Handles ingredient drops on the bookmark display area.
-     * 
-     * @param mouseX X position of the mouse
-     * @param mouseY Y position of the mouse
-     * @param ingredient The ingredient that was dropped
-     * @return true if the drop was handled, false otherwise
-     */
-    public boolean handleIngredientDropOnDisplay(double mouseX, double mouseY, Object ingredient) {
-        ModLogger.info("[DROP-DEBUG] handleIngredientDropOnDisplay called with ingredient type: {}", 
-            ingredient != null ? ingredient.getClass().getName() : "null");
-        
-        // Create the bookmark display on-demand if it doesn't exist
-        if (bookmarkDisplay == null) {
-            ModLogger.info("[DROP-DEBUG] Bookmark display is null, creating one now");
-            if (!createBookmarkDisplay(true)) {
-                ModLogger.error("[DROP-DEBUG] Failed to create bookmark display");
-                return false;
-            }
-        }
-        
-        // Check if the bookmark display can handle this drop
-        boolean isInBounds = bookmarkDisplay.isMouseOver(mouseX, mouseY);
-        ModLogger.info("[DROP-DEBUG] Is drop within display bounds: {}", isInBounds);
-        
-        if (!isInBounds) {
-            return false;
-        }
-        
-        // Make sure we have an active folder
-        if (!hasActiveFolder() && lastActiveFolderId != null) {
-            ModLogger.info("[DROP-DEBUG] No active folder detected but found lastActiveFolderId: {}", lastActiveFolderId);
-            
-            Optional<FolderDataRepresentation> folderDataOpt = folderService.getFolder(lastActiveFolderId);
-            if (folderDataOpt.isPresent()) {
-                FolderDataRepresentation folderData = folderDataOpt.get();
-                bookmarkDisplay.setActiveFolder(folderData);
-                ModLogger.info("[DROP-DEBUG] Recovered active folder state for drop operation: {}", folderData.getName());
-            } else {
-                ModLogger.warn("[DROP-DEBUG] Could not recover folder data for ID: {}", lastActiveFolderId);
-                return false;
-            }
-        } else if (!hasActiveFolder()) {
-            // If we don't have an active folder and can't recover one, we can't handle the drop
-            ModLogger.warn("[DROP-DEBUG] No active folder and no lastActiveFolderId, cannot handle drop");
-            return false;
-        }
-        
-        // Delegate to the bookmark display
-        ModLogger.info("[DROP-DEBUG] Delegating to bookmarkDisplay.handleIngredientDrop");
-        boolean handled = bookmarkDisplay.handleIngredientDrop(mouseX, mouseY, ingredient);
-        
-        if (handled) {
-            safeUpdateBookmarkContents();
-            ModLogger.info("[DROP-DEBUG] Bookmark display handled ingredient drop successfully");
-            
-            // Fire event with the active folder ID
-            if (hasActiveFolder()) {
-                fireIngredientDroppedEvent(ingredient, activeFolder.getFolder().getId());
-            } else {
-                fireIngredientDroppedEvent(ingredient, null);
-            }
-        } else {
-            ModLogger.warn("[DROP-DEBUG] Bookmark display failed to handle ingredient drop");
-        }
-        
-        return handled;
-    }
-    
-    /**
-     * Handles a click on the bookmark display
-     * 
-     * @param mouseX The mouse X position
-     * @param mouseY The mouse Y position
-     * @param button The mouse button
-     * @return true if the click was handled
-     */
-    public boolean handleBookmarkDisplayClick(double mouseX, double mouseY, int button) {
-        if (bookmarkDisplay == null) {
-            return false;
-        }
-        
-        // Let the display handle the click, which includes pagination buttons
-        boolean handled = bookmarkDisplay.handleClick(mouseX, mouseY, button);
-        
-        // If a click was handled, it might have been a pagination button
-        if (handled) {
-            ModLogger.debug("Bookmark display click handled. Current page: {}/{}", 
-                           bookmarkDisplay.getCurrentPageNumber(), 
-                           bookmarkDisplay.getPageCount());
-        }
-        
-        return handled;
-    }
-    
-    /**
-     * Restores the bookmark display from the cached state
-     */
-    public void restoreFromStaticState() {
-        if (lastActiveFolderId == null) return;
-
-        if (activeFolder == null) {
-            ModLogger.warn("Could not find folder with ID {} to restore", lastActiveFolderId);
-            return;
-        }
-
-        if (bookmarkDisplay != null) {
-            bookmarkDisplay.setActiveFolder(activeFolder.getFolder());
-            if (!lastBookmarkContents.isEmpty()) {
-                // Use the helper to set ingredients on the display
-                TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, lastBookmarkContents);
-            }
-            bookmarkDisplay.updateBoundsFromCalculatedPositions();
-        }
-    }
-    
-    /**
-     * Sets the calculated positions for the bookmark display
-     */
-    public void setBookmarkDisplayPositions(int nameY, int bookmarkDisplayY) {
-        if (bookmarkDisplay != null) {
-            bookmarkDisplay.setCalculatedPositions(nameY, bookmarkDisplayY);
-        }
-    }
-    
-    /**
-     * Notifies listeners that folder contents have changed for a specific folder ID.
-     * 
-     * @param folderId The ID of the folder whose contents changed
-     */
-    public void notifyFolderContentsChanged(int folderId) {
-        fireFolderContentsChangedEvent(folderId);
-    }
-    
-    /**
-     * Handles a click on the "Add Folder" button.
-     * This method is used as a click handler for the "Add Folder" button.
-     * Since the button has no associated folder, the parameter is ignored.
-     * 
-     * @param ignored This parameter is ignored since the Add button has no folder
-     */
-    public void handleAddFolderButtonClick(FolderDataRepresentation ignored) {
-        // Fire event for other listeners
-        fireAddButtonClickedEvent();
-        
-        // Delegate dialog handling to the UI system
-        // Note: The actual UI object reference will be passed in during button initialization
-        if (addFolderDialogHandler != null) {
-            addFolderDialogHandler.run();
-        } else {
-            ModLogger.error("Add folder dialog handler is not set");
-        }
-    }
-    
-    /**
-     * Sets the handler for showing the add folder dialog
-     * This should be called by the UI system that manages dialogs
-     * 
-     * @param handler The runnable that will show the add folder dialog
-     */
-    public void setAddFolderDialogHandler(Runnable handler) {
-        this.addFolderDialogHandler = handler;
-    }
-    
-    /**
-     * Creates and initializes folder buttons from data
-     * 
-     * @param renderingManager The rendering manager to use for position calculations
-     * @param clickHandler The click handler to attach to normal folders
-     * @return FolderButton that should be activated, or null if none
-     */
-    public FolderButton initializeFolderButtons(FolderRenderingManager renderingManager, Consumer<FolderDataRepresentation> clickHandler) {
-        // Clear existing folder buttons first
-        folderButtons.clear();
-        
-        // Force fresh load of folder data from storage
-        Collection<FolderDataRepresentation> folders = folderService.getAllFolders();
-        Integer lastActiveFolderId = folderService.getLastActiveFolderId();
-        FolderButton buttonToActivate = null;
-        
-        ModLogger.info("Loading {} folders from data service", folders.size());
-        
-        // Create an "Add Folder" button at index 0
-        int[] addPos = renderingManager.calculateAddButtonPosition();
-        FolderButton addButton = new FolderButton(addPos[0], addPos[1], FolderButton.ButtonType.ADD);
-        addButton.setClickHandler(this::handleAddFolderButtonClick);
-        folderButtons.add(addButton);
-        
-        // Create folder buttons from the loaded data
-        int buttonIndex = 1; // Start at 1 because the add button is at index 0
-        for (FolderDataRepresentation folder : folders) {
-            // Calculate positions using index for proper layout
-            int[] position = renderingManager.calculateFolderPosition(buttonIndex);
-            int x = position[0];
-            int y = position[1];
-
-            FolderButton button = new FolderButton(x, y, folder, clickHandler);
-            folderButtons.add(button);
-
-            if (lastActiveFolderId != null && folder.getId() == lastActiveFolderId) {
-                buttonToActivate = button;
-            }
-            
-            buttonIndex++;
-        }
-        
-        return buttonToActivate;
-    }
-    
-    /**
-     * Handles a folder button click by updating button and folder states
-     * 
-     * @param folder The folder data representation that was clicked
-     * @return The FolderButton that was found and updated, or null if not found
-     */
-    public FolderButton handleFolderClick(FolderDataRepresentation folder) {
-        if (folder == null) {
-            return null;
-        }
-        
-        // Find the button for this folder
-        FolderButton clickedButton = null;
-        for (FolderButton button : folderButtons) {
-            if (button.getFolder() == folder) {
-                clickedButton = button;
-                break;
-            }
-        }
-
-        if (clickedButton == null) {
-            return null;
-        }
-
-        // Fire the folder clicked event
-        fireFolderClickedEvent(folder);
-
-        // Handle toggle behavior (deactivate if already active)
-        if (activeFolder == clickedButton) {
-            deactivateActiveFolder();
-            return clickedButton;
-        }
-
-        // Set as active folder
-        setActiveFolder(clickedButton);
-        return clickedButton;
-    }
-    
-    // ----- Getters -----
     
     /**
      * Gets the folder data service instance
@@ -1039,5 +542,193 @@ public class UnifiedFolderManager {
             createBookmarkDisplay(true);
         }
         return bookmarkDisplay;
+    }
+    
+    /**
+     * Handles a click on the "Add Folder" button.
+     * This method is used as a click handler for the "Add Folder" button.
+     * Since the button has no associated folder, the parameter is ignored.
+     * 
+     * @param ignored This parameter is ignored since the Add button has no folder
+     */
+    public void handleAddFolderButtonClick(FolderDataRepresentation ignored) {
+        // Fire event for other listeners
+        fireAddButtonClickedEvent();
+        
+        // Delegate dialog handling to the UI system
+        if (addFolderDialogHandler != null) {
+            addFolderDialogHandler.run();
+        } else {
+            ModLogger.error("Add folder dialog handler is not set");
+        }
+    }
+    
+    /**
+     * Sets the handler for showing the add folder dialog
+     * This should be called by the UI system that manages dialogs
+     * 
+     * @param handler The runnable that will show the add folder dialog
+     */
+    public void setAddFolderDialogHandler(Runnable handler) {
+        this.addFolderDialogHandler = handler;
+    }
+    
+    /**
+     * Initializes folder buttons based on the data from folder service
+     * 
+     * @param renderingManager The rendering manager to use for positioning
+     * @param clickHandler The handler for folder clicks
+     * @return The button to activate (if any)
+     */
+    public FolderButton initializeFolderButtons(FolderRenderingManager renderingManager, Consumer<FolderDataRepresentation> clickHandler) {
+        FolderButton buttonToActivate = null;
+        
+        // Create and position the folder buttons
+        List<FolderButton> buttons = renderingManager.createAndPositionFolderButtons();
+        
+        // Find button to activate based on the last active folder ID
+        if (lastActiveFolderId != null) {
+            for (FolderButton button : buttons) {
+                if (button.getButtonType() == FolderButton.ButtonType.NORMAL && 
+                    button.getFolder() != null && 
+                    button.getFolder().getId() == lastActiveFolderId) {
+                    buttonToActivate = button;
+                    break;
+                }
+            }
+        }
+        
+        // Update folder button references and click handlers
+        for (FolderButton button : buttons) {
+            if (button.getButtonType() != FolderButton.ButtonType.ADD) {
+                button.setClickHandler(clickHandler);
+            }
+        }
+        
+        return buttonToActivate;
+    }
+    
+    /**
+     * Handles a click on a folder
+     * 
+     * @param folder The folder that was clicked
+     */
+    public void handleFolderClick(FolderDataRepresentation folder) {
+        if (folder == null) {
+            return;
+        }
+        
+        // Find the button for the clicked folder
+        for (FolderButton button : folderButtons) {
+            if (button.getButtonType() == FolderButton.ButtonType.NORMAL && 
+                button.getFolder() != null && 
+                button.getFolder().getId() == folder.getId()) {
+                
+                if (button.isActive()) {
+                    // If clicking the active folder again, deactivate it
+                    deactivateActiveFolder();
+                } else {
+                    // Otherwise activate the clicked folder
+                    setActiveFolder(button);
+                }
+                break;
+            }
+        }
+    }
+    
+    /**
+     * Handles an ingredient being dropped on a specific folder
+     * 
+     * @param folder The folder the ingredient was dropped on
+     * @param ingredient The ingredient that was dropped
+     * @return true if the drop was handled
+     */
+    public boolean handleIngredientDropOnFolder(FolderDataRepresentation folder, Object ingredient) {
+        if (folder == null || ingredient == null) {
+            ModLogger.debug("Cannot handle ingredient drop: folder or ingredient is null");
+            return false;
+        }
+        
+        try {
+            // Generate ingredient key
+            String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
+            if (key == null || key.isEmpty()) {
+                ModLogger.debug("Failed to generate key for ingredient");
+                return false;
+            }
+            
+            // Check if the folder already has this bookmark
+            if (folder.containsBookmark(key)) {
+                ModLogger.debug("Folder already contains bookmark with key: {}", key);
+                return true;
+            }
+            
+            // Add the bookmark to the folder
+            folderService.addBookmark(folder.getId(), key);
+            
+            // Fire folder contents changed event
+            fireFolderContentsChangedEvent(folder);
+            
+            // Save the data
+            folderService.saveData();
+            
+            ModLogger.debug("Successfully added bookmark to folder: {}", folder.getName());
+            return true;
+        } catch (Exception e) {
+            ModLogger.error("Error handling ingredient drop on folder: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+    
+    /**
+     * Handles an ingredient being dropped on the bookmark display
+     * 
+     * @param mouseX The x position of the drop
+     * @param mouseY The y position of the drop
+     * @param ingredient The ingredient that was dropped
+     * @return true if the drop was handled
+     */
+    public boolean handleIngredientDropOnDisplay(double mouseX, double mouseY, Object ingredient) {
+        // Add debug logging
+        ModLogger.debug("[DROP-DEBUG] handleIngredientDropOnDisplay called. activeFolder: {}, bookmarkDisplay: {}",
+                        hasActiveFolder() ? activeFolder.getFolder().getName() : "null",
+                        bookmarkDisplay != null ? "present" : "null");
+
+        if (!hasActiveFolder()) {
+            ModLogger.debug("[DROP-DEBUG] Cannot handle ingredient drop: no active folder");
+            return false;
+        }
+        
+        // Ensure we have a bookmark display
+        if (bookmarkDisplay == null) {
+            ModLogger.debug("[DROP-DEBUG] Bookmark display was null, creating it now");
+            if (!createBookmarkDisplay(true)) {
+                ModLogger.error("[DROP-DEBUG] Failed to create bookmark display");
+                return false;
+            }
+        }
+        
+        // Update the bookmark display with the active folder if needed
+        if (bookmarkDisplay.getActiveFolder() == null && activeFolder != null) {
+            ModLogger.debug("[DROP-DEBUG] Setting active folder on bookmark display");
+            bookmarkDisplay.setActiveFolder(activeFolder.getFolder());
+        }
+        
+        // Delegate to the bookmark display
+        boolean result = bookmarkDisplay.handleIngredientDrop(mouseX, mouseY, ingredient);
+        ModLogger.debug("[DROP-DEBUG] Bookmark display handleIngredientDrop result: {}", result);
+        return result;
+    }
+    
+    /**
+     * Sets the positions for the bookmark display
+     * 
+     * @param nameY The y position for the folder name
+     * @param bookmarkDisplayY The y position for the bookmark display
+     */
+    public void setBookmarkDisplayPositions(int nameY, int bookmarkDisplayY) {
+        if (bookmarkDisplay != null) {
+            bookmarkDisplay.setCalculatedPositions(nameY, bookmarkDisplayY);
+        }
     }
 }
