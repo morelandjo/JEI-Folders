@@ -48,7 +48,8 @@ public class FolderRenderer {
             folderManager.getBookmarkDisplay().render(graphics, mouseX, mouseY, partialTick);
         }
 
-        updateExclusionZone();
+        // Update the exclusion zone through the layout service
+        layoutService.updateExclusionZoneAndUI();
     }
     
     /**
@@ -117,35 +118,10 @@ public class FolderRenderer {
     }
     
     /**
-     * Updates the exclusion zone for other UI elements
+     * Gets the current exclusion zone from the layout service
      */
-    public Rect2i updateExclusionZone() {
-        int bookmarkDisplayHeight = 0;
-        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
-            bookmarkDisplayHeight = folderManager.getBookmarkDisplay().getHeight();
-        }
-        
-        Rect2i lastDrawnArea = layoutService.updateExclusionZone(
-            folderManager.getFolderButtons().size(), 
-            folderManager.areFoldersVisible(), 
-            folderManager.hasActiveFolder(),
-            bookmarkDisplayHeight
-        );
-        
-        // Update bookmark display bounds if active
-        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
-            Rect2i zone = layoutService.getExclusionZone();
-            int bookmarkDisplayWidth = zone.getWidth() + 10;
-            
-            folderManager.getBookmarkDisplay().updateBounds(
-                0, 
-                layoutService.getBookmarkDisplayY(), 
-                bookmarkDisplayWidth,
-                folderManager.getBookmarkDisplay().getHeight()
-            );
-        }
-        
-        return lastDrawnArea;
+    public Rect2i getExclusionZone() {
+        return layoutService.getExclusionZone();
     }
     
     /**

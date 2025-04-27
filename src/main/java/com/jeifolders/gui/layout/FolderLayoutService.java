@@ -436,6 +436,43 @@ public class FolderLayoutService {
     }
     
     /**
+     * Complete update of the exclusion zone and related UI elements.
+     * This consolidates all exclusion zone management in one place.
+     * 
+     * @return The updated exclusion zone
+     */
+    public Rect2i updateExclusionZoneAndUI() {
+        // Calculate bookmark display height
+        int bookmarkDisplayHeight = 0;
+        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
+            bookmarkDisplayHeight = folderManager.getBookmarkDisplay().getHeight();
+        }
+        
+        // Update the exclusion zone
+        Rect2i lastDrawnArea = updateExclusionZone(
+            folderManager.getFolderButtons().size(), 
+            folderManager.areFoldersVisible(), 
+            folderManager.hasActiveFolder(),
+            bookmarkDisplayHeight
+        );
+        
+        // Update bookmark display bounds if active
+        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
+            Rect2i zone = getExclusionZone();
+            int bookmarkDisplayWidth = zone.getWidth() + 10;
+            
+            folderManager.getBookmarkDisplay().updateBounds(
+                0, 
+                getBookmarkDisplayY(), 
+                bookmarkDisplayWidth,
+                folderManager.getBookmarkDisplay().getHeight()
+            );
+        }
+        
+        return lastDrawnArea;
+    }
+    
+    /**
      * Gets the current exclusion zone
      * 
      * @return The current exclusion zone as a Rect2i

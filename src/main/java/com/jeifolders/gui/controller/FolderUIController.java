@@ -209,8 +209,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Delegate rendering to the FolderRenderer
         renderer.renderWidget(graphics, mouseX, mouseY, partialTick);
         
-        // Update the exclusion zone
-        lastDrawnArea = renderer.updateExclusionZone();
+        // Update the exclusion zone via the layout service
+        lastDrawnArea = layoutService.updateExclusionZoneAndUI();
     }
     
     /** 
