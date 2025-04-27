@@ -358,33 +358,14 @@ public class FolderContentsView {
      * For drag operations, we use a more generous hit area.
      */
     public boolean isMouseOver(double mouseX, double mouseY) {
-        // Basic check if mouse is over the current display bounds
-        boolean overCurrentBounds = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
+        boolean result = MouseHitUtil.isMouseOverContentView(
+            mouseX, mouseY, x, y, width, height, backgroundArea);
         
-        // If this is already true, no need for additional checks
-        if (overCurrentBounds) {
-            return true;
+        if (result) {
+            ModLogger.debug("Mouse is over folder contents view");
         }
         
-        // For drag operations, check against the background area if available
-        if (backgroundArea != null && !backgroundArea.isEmpty()) {
-            // Add extended margins to the background area for easier drag and drop
-            boolean overBackground = MouseHitUtil.isMouseOverDragDropArea(mouseX, mouseY, backgroundArea);
-            
-            if (overBackground) {
-                ModLogger.debug("Mouse in extended background hit area for drag and drop");
-                return true;
-            }
-        }
-        
-        // For drag and drop, be even more lenient with the main display bounds
-        boolean inExtendedArea = MouseHitUtil.isMouseOverDragDropArea(mouseX, mouseY, x, y, width, height);
-        if (inExtendedArea) {
-            ModLogger.debug("Mouse in extended drag-and-drop hit area");
-            return true;
-        }
-        
-        return false;
+        return result;
     }
 
     /**

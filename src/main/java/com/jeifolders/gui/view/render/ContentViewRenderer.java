@@ -46,8 +46,7 @@ public class ContentViewRenderer {
     }
     
     /**
-     * Checks if the mouse is over the contents view, using the same logic
-     * as the original isMouseOver method but in our centralized renderer
+     * Checks if the mouse is over the contents view, using the centralized MouseHitUtil
      * 
      * @param contentsView The contents view to check
      * @param mouseX Mouse X position
@@ -55,32 +54,13 @@ public class ContentViewRenderer {
      * @return true if the mouse is over the contents view
      */
     public boolean isMouseOverContentsView(FolderContentsView contentsView, double mouseX, double mouseY) {
-        int x = contentsView.getX();
-        int y = contentsView.getY();
-        int width = contentsView.getWidth();
-        int height = contentsView.getHeight();
-        
-        // Basic check if mouse is over the current display bounds
-        boolean overCurrentBounds = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
-        
-        // If this is already true, no need for additional checks
-        if (overCurrentBounds) {
-            return true;
-        }
-        
-        // For drag operations, check against the background area if available
-        var backgroundArea = contentsView.getBackgroundArea();
-        if (backgroundArea != null && !backgroundArea.isEmpty()) {
-            // Add extended margins to the background area for easier drag and drop
-            boolean overBackground = MouseHitUtil.isMouseOverDragDropArea(mouseX, mouseY, backgroundArea);
-            
-            if (overBackground) {
-                return true;
-            }
-        }
-        
-        // For drag and drop, be even more lenient with the main display bounds
-        boolean inExtendedArea = MouseHitUtil.isMouseOverDragDropArea(mouseX, mouseY, x, y, width, height);
-        return inExtendedArea;
+        return MouseHitUtil.isMouseOverContentView(
+            mouseX, mouseY,
+            contentsView.getX(),
+            contentsView.getY(),
+            contentsView.getWidth(),
+            contentsView.getHeight(),
+            contentsView.getBackgroundArea()
+        );
     }
 }

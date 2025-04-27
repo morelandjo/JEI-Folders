@@ -1,5 +1,6 @@
 package com.jeifolders.integration.impl;
 
+import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.IngredientService;
@@ -303,7 +304,13 @@ public class JeiContentsImpl {
     public boolean isNextButtonClicked(double mouseX, double mouseY) {
         try {
             ImmutableRect2i buttonArea = this.contents.getNextPageButtonArea();
-            return !buttonArea.isEmpty() && buttonArea.contains(mouseX, mouseY);
+            // Use MouseHitUtil to check if the mouse is over the button area
+            return !buttonArea.isEmpty() && 
+                   MouseHitUtil.isMouseOverRect(mouseX, mouseY, 
+                                               buttonArea.getX(), 
+                                               buttonArea.getY(),
+                                               buttonArea.getWidth(), 
+                                               buttonArea.getHeight());
         } catch (Exception e) {
             ModLogger.error("Error checking if next button is clicked: {}", e.getMessage(), e);
             return false;
@@ -316,7 +323,13 @@ public class JeiContentsImpl {
     public boolean isBackButtonClicked(double mouseX, double mouseY) {
         try {
             ImmutableRect2i buttonArea = this.contents.getBackButtonArea();
-            return !buttonArea.isEmpty() && buttonArea.contains(mouseX, mouseY);
+            // Use MouseHitUtil to check if the mouse is over the button area
+            return !buttonArea.isEmpty() && 
+                   MouseHitUtil.isMouseOverRect(mouseX, mouseY, 
+                                               buttonArea.getX(), 
+                                               buttonArea.getY(),
+                                               buttonArea.getWidth(), 
+                                               buttonArea.getHeight());
         } catch (Exception e) {
             ModLogger.error("Error checking if back button is clicked: {}", e.getMessage(), e);
             return false;

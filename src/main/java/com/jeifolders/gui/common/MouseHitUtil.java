@@ -140,4 +140,37 @@ public final class MouseHitUtil {
         return isMouseOverDragDropArea(mouseX, mouseY, rect.getX(), rect.getY(), 
                                      rect.getWidth(), rect.getHeight());
     }
+    
+    /**
+     * Checks if mouse coordinates are over a content view, considering both basic bounds and
+     * extended areas for drag-drop operations.
+     * This centralizes the hit detection logic previously duplicated in ContentViewRenderer
+     * and FolderContentsView.
+     *
+     * @param mouseX X coordinate of the mouse
+     * @param mouseY Y coordinate of the mouse
+     * @param x X coordinate of the content view
+     * @param y Y coordinate of the content view
+     * @param width Width of the content view
+     * @param height Height of the content view
+     * @param backgroundArea Optional background area (can be null)
+     * @return true if the mouse is over the content view or its extended hit area
+     */
+    public static boolean isMouseOverContentView(double mouseX, double mouseY,
+                                               int x, int y, int width, int height,
+                                               Rectangle2i backgroundArea) {
+        // Basic check if mouse is over the current display bounds
+        if (isMouseOverRect(mouseX, mouseY, x, y, width, height)) {
+            return true;
+        }
+        
+        // For drag operations, check against the background area if available
+        if (backgroundArea != null && !backgroundArea.isEmpty() &&
+            isMouseOverDragDropArea(mouseX, mouseY, backgroundArea)) {
+            return true;
+        }
+        
+        // For drag and drop, be even more lenient with the main display bounds
+        return isMouseOverDragDropArea(mouseX, mouseY, x, y, width, height);
+    }
 }
