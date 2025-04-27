@@ -23,7 +23,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Display for folder bookmarks that handles both display management and rendering.
+ * Manages folder contents data, layout, and interaction.
+ * Rendering is now handled by the ContentViewRenderer for better separation.
  */
 public class FolderContentsView {
     // Constants
@@ -332,7 +333,10 @@ public class FolderContentsView {
 
     /**
      * Renders the bookmarks display
+     * 
+     * @deprecated Use ContentViewRenderer.renderContentsView instead
      */
+    @Deprecated
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // Check if we need to do a deferred refresh
         if (needsRefresh) {
@@ -352,6 +356,29 @@ public class FolderContentsView {
                 ModLogger.error("Error rendering bookmark display: {}", e.getMessage(), e);
             }
         }
+    }
+    
+    /**
+     * Gets the JEI contents implementation for rendering
+     * @return The JEI contents implementation
+     */
+    public JeiContentsImpl getContentsImpl() {
+        return contentsImpl;
+    }
+    
+    /**
+     * Checks if this view needs to refresh its content
+     * @return true if a refresh is needed
+     */
+    public boolean needsRefresh() {
+        return needsRefresh;
+    }
+    
+    /**
+     * Clears the refresh flag after handling
+     */
+    public void clearRefreshFlag() {
+        needsRefresh = false;
     }
 
     /**

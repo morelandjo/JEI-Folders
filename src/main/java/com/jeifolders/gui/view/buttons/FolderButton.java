@@ -3,14 +3,11 @@ package com.jeifolders.gui.view.buttons;
 import com.jeifolders.data.Folder;
 import com.jeifolders.gui.common.MouseHitUtil;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.network.chat.Component;
-
 import java.util.function.Consumer;
 
 /**
  * A button that represents a folder in the UI.
+ * This class is now a pure data object without rendering logic.
  */
 public class FolderButton {
     // Position and dimensions
@@ -88,92 +85,6 @@ public class FolderButton {
     }
     
     /**
-     * Renders the button.
-     * 
-     * @param graphics The GUI graphics context
-     * @param mouseX Mouse X position
-     * @param mouseY Mouse Y position
-     * @param partialTicks Partial ticks for smooth animation
-     */
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // Update hover state using the centralized utility
-        boolean wasHovered = isHovered;
-        isHovered = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
-        
-        // Render the button based on its type and state
-        switch (buttonType) {
-            case NORMAL:
-                // Use renderFolderRowIcon instead, and convert hover progress to boolean
-                FolderButtonTextures.renderFolderRowIcon(graphics, x, y, isActive, hoverProgress > 0.5f);
-                
-                // Render the shortened name under the folder icon for normal folders
-                if (folder != null) {
-                    renderFolderName(graphics);
-                }
-                break;
-            case ADD:
-                // Convert hover progress to boolean
-                FolderButtonTextures.renderAddFolderIcon(graphics, x, y, hoverProgress > 0.5f);
-                break;
-            case DELETE:
-                FolderButtonTextures.renderDeleteFolderIcon(graphics, x, y);
-                break;
-            default:
-                // Use renderFolderRowIcon for default case too
-                FolderButtonTextures.renderFolderRowIcon(graphics, x, y, isActive, hoverProgress > 0.5f);
-                break;
-        }
-        
-        // Show tooltip when hovering
-        if (isHovered) {
-            String tooltipText;
-            if (buttonType == ButtonType.ADD) {
-                tooltipText = "tooltip.jeifolders.add_folder";
-            } else if (folder != null) {
-                tooltipText = folder.getName();
-            } else {
-                tooltipText = buttonType.name().toLowerCase();
-            }
-            
-            graphics.renderTooltip(
-                Minecraft.getInstance().font,
-                Component.literal(tooltipText),
-                mouseX, mouseY
-            );
-        }
-    }
-    
-    /**
-     * Renders the shortened folder name under the folder icon.
-     * 
-     * @param graphics The GUI graphics context
-     */
-    private void renderFolderName(GuiGraphics graphics) {
-        if (folder == null) return;
-        
-        // Get the folder name
-        String folderName = folder.getName();
-        
-        // Get the first 3 characters, or the entire name if it's shorter
-        String shortName = folderName.length() > 3 ? folderName.substring(0, 3) : folderName;
-        
-        // Calculate the position to center the text under the folder icon
-        int textWidth = Minecraft.getInstance().font.width(shortName);
-        int textX = x + (width - textWidth) / 2;
-        int textY = y + height + 2; // Position right below the folder icon
-        
-        // Draw the name with a shadow to make it more readable
-        graphics.drawString(
-            Minecraft.getInstance().font,
-            shortName,
-            textX,
-            textY,
-            0xFFFFFF, // White color
-            true // Draw with shadow
-        );
-    }
-    
-    /**
      * Update animation state.
      */
     public void tick() {
@@ -217,6 +128,15 @@ public class FolderButton {
     }
     
     /**
+     * Sets the hover state for this button
+     * 
+     * @param hovered Whether the button is being hovered over
+     */
+    public void setHovered(boolean hovered) {
+        this.isHovered = hovered;
+    }
+    
+    /**
      * Sets the click handler for this button.
      * 
      * @param handler The consumer that will handle clicks
@@ -245,4 +165,5 @@ public class FolderButton {
     public boolean isActive() { return isActive; }
     public ButtonType getButtonType() { return buttonType; }
     public boolean isHovered() { return isHovered; }
+    public float getHoverProgress() { return hoverProgress; }
 }

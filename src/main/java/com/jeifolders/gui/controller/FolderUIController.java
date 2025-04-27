@@ -30,7 +30,8 @@ import java.util.List;
 
 /**
  * Main entry point for the folder button system.
- * Coordinates between rendering, input handling, and screen management components.
+ * Coordinates between state management, input handling, and screen management components.
+ * Rendering is delegated to the centralized rendering system.
  */
 public class FolderUIController extends AbstractWidget implements IngredientDropTarget {
     // Singleton instance for static access
@@ -207,7 +208,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Reset first time loading flag since we're rendering now
         firstTimeLoaded = false;
         
-        // Delegate rendering to the FolderRenderer
+        // Delegate rendering to the FolderRenderer facade which uses the centralized UIRenderManager
         renderer.renderWidget(graphics, mouseX, mouseY, partialTick);
         
         // Update the exclusion zone via the layout service
