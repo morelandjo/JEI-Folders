@@ -212,10 +212,7 @@ public class FolderContentsView {
                 }
             }
             
-            // Fire a display refreshed event
-            FolderEvent event = new FolderEvent(this, FolderEventType.DISPLAY_REFRESHED)
-                .with("folder", activeFolder)
-                .with("folderId", activeFolder != null ? activeFolder.getId() : null);
+            // Fire a display refreshed event using the proper event manager method
             eventManager.fireDisplayRefreshedEvent(activeFolder);
             
         } catch (Exception e) {
