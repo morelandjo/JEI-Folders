@@ -3,6 +3,7 @@ package com.jeifolders.gui.controller;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.data.Folder;
 import com.jeifolders.gui.event.FolderEvent;
+import com.jeifolders.gui.event.FolderEventBus;
 import com.jeifolders.gui.event.FolderEventListener;
 import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.gui.view.buttons.FolderButton;
@@ -15,9 +16,7 @@ import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -32,27 +31,6 @@ import java.util.function.Consumer;
 public class FolderStateManager {
     // Singleton instance
     private static FolderStateManager instance;
-    
-    // ----- Event Types -----
-    public enum EventType {
-        // Folder UI events
-        FOLDER_CLICKED,
-        FOLDER_ACTIVATED,
-        FOLDER_DEACTIVATED,
-        FOLDER_CREATED,
-        FOLDER_DELETED,
-        ADD_BUTTON_CLICKED,
-        DELETE_BUTTON_CLICKED,
-        BOOKMARK_CLICKED,
-        INGREDIENT_DROPPED,
-        
-        // Bookmark operation events
-        BOOKMARK_ADDED,
-        BOOKMARK_REMOVED,
-        BOOKMARKS_CLEARED,
-        FOLDER_CONTENTS_CHANGED,
-        DISPLAY_REFRESHED
-    }
     
     // ----- Transient State (preserved across GUI rebuilds) -----
     private static Integer lastActiveFolderId = null;
@@ -72,8 +50,8 @@ public class FolderStateManager {
     // ----- Persistent Storage (saved to disk) -----
     private final FolderStorageService folderService;
     
-    // ----- Event listeners -----
-    private final Map<EventType, List<FolderEventListener>> listeners = new HashMap<>();
+    // ----- Event system -----
+    private final FolderEventBus eventBus = new FolderEventBus();
     
     // Reference to the dialog handler (will be set by FolderButtonSystem)
     private Runnable addFolderDialogHandler = null;
@@ -91,18 +69,13 @@ public class FolderStateManager {
     private FolderStateManager() {
         this.folderService = FolderStorageService.getInstance();
         
-        // Initialize event listeners map
-        for (EventType type : EventType.values()) {
-            listeners.put(type, new ArrayList<>());
-        }
-        
         // Set up bidirectional connection
         this.folderService.registerCallback(this);
         
         // Don't create the bookmark display in constructor to avoid circular dependency
         // The display will be created when needed via getBookmarkDisplay()
         
-        ModLogger.debug("UnifiedFolderManager initialized");
+        ModLogger.debug("FolderStateManager initialized");
     }
     
     /**
@@ -241,11 +214,19 @@ public class FolderStateManager {
      * @param type Event type to listen for
      * @param listener Listener that will be called when event occurs
      */
-    public void addEventListener(EventType type, FolderEventListener listener) {
+    public void addEventListener(FolderEventType type, Consumer<FolderEvent> listener) {
+        eventBus.register(type, listener);
+    }
+    
+    /**
+     * Add a legacy listener for backward compatibility
+     * 
+     * @param type Event type to listen for
+     * @param listener Legacy listener that will be called when event occurs
+     */
+    public void addEventListener(FolderEventType type, FolderEventListener listener) {
         if (listener != null) {
-            listeners.get(type).add(listener);
-            ModLogger.debug("Added event listener for {}, total: {}", 
-                           type, listeners.get(type).size());
+            eventBus.register(type, event -> listener.onFolderEvent(event));
         }
     }
     
@@ -254,12 +235,18 @@ public class FolderStateManager {
      * 
      * @param listener Listener that will be called for all events
      */
+    public void addGlobalEventListener(Consumer<FolderEvent> listener) {
+        eventBus.registerGlobal(listener);
+    }
+    
+    /**
+     * Add a legacy listener for all event types (backward compatibility)
+     * 
+     * @param listener Listener that will be called for all events
+     */
     public void addGlobalEventListener(FolderEventListener listener) {
         if (listener != null) {
-            for (EventType type : EventType.values()) {
-                listeners.get(type).add(listener);
-            }
-            ModLogger.debug("Added global event listener");
+            eventBus.registerGlobal(event -> listener.onFolderEvent(event));
         }
     }
     
@@ -269,10 +256,8 @@ public class FolderStateManager {
      * @param type Event type to remove listener from
      * @param listener The listener to remove
      */
-    public void removeEventListener(EventType type, FolderEventListener listener) {
-        listeners.get(type).remove(listener);
-        ModLogger.debug("Removed event listener for {}, remaining: {}", 
-                       type, listeners.get(type).size());
+    public void removeEventListener(FolderEventType type, Consumer<FolderEvent> listener) {
+        eventBus.unregister(type, listener);
     }
     
     /**
@@ -280,34 +265,8 @@ public class FolderStateManager {
      * 
      * @param listener The listener to remove
      */
-    public void removeGlobalEventListener(FolderEventListener listener) {
-        for (EventType type : EventType.values()) {
-            listeners.get(type).remove(listener);
-        }
-        ModLogger.debug("Removed global event listener");
-    }
-    
-    /**
-     * Fire an event to all registered listeners
-     * 
-     * @param event The event to fire
-     */
-    public void fireEvent(FolderEvent event) {
-        // Get the event type directly
-        FolderEventType eventType = event.getType();
-        EventType type = EventType.valueOf(eventType.name());
-        
-        List<FolderEventListener> typeListeners = listeners.get(type);
-        if (typeListeners != null && !typeListeners.isEmpty()) {
-            for (FolderEventListener listener : new ArrayList<>(typeListeners)) {
-                try {
-                    listener.onFolderEvent(event);
-                } catch (Exception e) {
-                    ModLogger.error("Error in folder event listener: {}", e.getMessage(), e);
-                }
-            }
-            ModLogger.debug("Fired {} event to {} listeners", type, typeListeners.size());
-        }
+    public void removeGlobalEventListener(Consumer<FolderEvent> listener) {
+        eventBus.unregisterGlobal(listener);
     }
     
     // ----- Helper methods for firing folder UI events -----
@@ -316,7 +275,7 @@ public class FolderStateManager {
         FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CLICKED)
             .with("folder", folder)
             .with("folderId", folder != null ? folder.getId() : null);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireFolderActivatedEvent(FolderButton button) {
@@ -328,43 +287,43 @@ public class FolderStateManager {
                 .with("folderId", button.getFolder().getId());
         }
         
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireFolderDeactivatedEvent() {
         FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_DEACTIVATED);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireFolderCreatedEvent(Folder folder) {
         FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CREATED)
             .with("folder", folder)
             .with("folderId", folder != null ? folder.getId() : null);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireFolderDeletedEvent(int folderId, String folderName) {
         FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_DELETED)
             .with("folderId", folderId)
             .with("folderName", folderName);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireAddButtonClickedEvent() {
         FolderEvent event = new FolderEvent(this, FolderEventType.ADD_BUTTON_CLICKED);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireDeleteButtonClickedEvent(int folderId) {
         FolderEvent event = new FolderEvent(this, FolderEventType.DELETE_BUTTON_CLICKED)
             .with("folderId", folderId);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireBookmarkClickedEvent(TypedIngredient ingredient) {
         FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARK_CLICKED)
             .with("ingredient", ingredient);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireIngredientDroppedEvent(Object ingredient, Integer folderId) {
@@ -375,7 +334,7 @@ public class FolderStateManager {
             event.with("folderId", folderId);
         }
         
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireBookmarkAddedEvent(Folder folder, 
@@ -386,7 +345,7 @@ public class FolderStateManager {
             .with("folderId", folder != null ? folder.getId() : null)
             .with("ingredient", ingredient)
             .with("bookmarkKey", key);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireBookmarkRemovedEvent(Folder folder, 
@@ -397,34 +356,34 @@ public class FolderStateManager {
             .with("folderId", folder != null ? folder.getId() : null)
             .with("ingredient", ingredient)
             .with("bookmarkKey", key);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireBookmarksClearedEvent(Folder folder) {
         FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARKS_CLEARED)
             .with("folder", folder)
             .with("folderId", folder != null ? folder.getId() : null);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireFolderContentsChangedEvent(Folder folder) {
         FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
             .with("folder", folder)
             .with("folderId", folder != null ? folder.getId() : null);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireFolderContentsChangedEvent(int folderId) {
         FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
             .with("folderId", folderId);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     public void fireDisplayRefreshedEvent(Folder folder) {
         FolderEvent event = new FolderEvent(this, FolderEventType.DISPLAY_REFRESHED)
             .with("folder", folder)
             .with("folderId", folder != null ? folder.getId() : null);
-        fireEvent(event);
+        eventBus.post(event);
     }
     
     // ----- Persistent Storage Management -----
@@ -664,15 +623,6 @@ public class FolderStateManager {
      * Gets the folder data service instance
      */
     public FolderStorageService getFolderService() {
-        return folderService;
-    }
-    
-    /**
-     * Legacy method for backward compatibility.
-     * @deprecated Use getFolderService() instead
-     */
-    @Deprecated
-    public FolderStorageService getFolderManager() {
         return folderService;
     }
     
