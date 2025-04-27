@@ -81,7 +81,7 @@ public class FolderContentsView {
         };
         
         // Register with event system
-        eventManager.addEventListener(FolderStateManager.EventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
+        eventManager.addEventListener(FolderEventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
     }
 
     /**
@@ -216,7 +216,7 @@ public class FolderContentsView {
             FolderEvent event = new FolderEvent(this, FolderEventType.DISPLAY_REFRESHED)
                 .with("folder", activeFolder)
                 .with("folderId", activeFolder != null ? activeFolder.getId() : null);
-            eventManager.fireEvent(event);
+            eventManager.fireDisplayRefreshedEvent(activeFolder);
             
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
@@ -539,18 +539,15 @@ public class FolderContentsView {
             // Fire bookmark added event
             if (ingredient instanceof BookmarkIngredient) {
                 ModLogger.info("[DROP-DEBUG] Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
-                FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARK_ADDED)
-                    .with("folder", activeFolder)
-                    .with("folderId", activeFolder != null ? activeFolder.getId() : null)
-                    .with("ingredient", ingredient)
-                    .with("bookmarkKey", key);
-                eventManager.fireEvent(event);
+                eventManager.fireBookmarkAddedEvent(
+                    activeFolder,
+                    (BookmarkIngredient)ingredient,
+                    key
+                );
             } else {
                 // For non-BookmarkIngredient, just fire a folder contents changed event
                 ModLogger.info("[DROP-DEBUG] Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
-                FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
-                    .with("folderId", folderId);
-                eventManager.fireEvent(event);
+                eventManager.fireFolderContentsChangedEvent(folderId);
             }
             
             // Refresh the display
