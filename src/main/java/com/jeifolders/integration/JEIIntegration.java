@@ -5,8 +5,6 @@ import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.gui.common.ExclusionHandler;
 import com.jeifolders.gui.common.IngredientDragManager;
 import com.jeifolders.gui.controller.FolderUIController;
-import com.jeifolders.gui.interaction.IngredientDropTarget;
-import com.jeifolders.gui.view.layout.FolderRenderingManager;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;

@@ -6,7 +6,6 @@ import com.jeifolders.gui.event.FolderEvent;
 import com.jeifolders.gui.event.FolderEventListener;
 import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.gui.view.buttons.FolderButton;
-import com.jeifolders.gui.view.layout.FolderRenderingManager;
 import com.jeifolders.gui.view.contents.FolderContentsView;
 import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.integration.BookmarkIngredient;
