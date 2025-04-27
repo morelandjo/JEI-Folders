@@ -259,9 +259,6 @@ public class JEIIntegration implements IModPlugin {
                 JEIIntegrationFactory.getJEIService().setActuallyDragging(false);
                 JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
                 ModLogger.debug("[HOVER-FIX] Mouse button released, drag operation ended");
-            } else {
-                // This is just a hover, not a drag - don't return any targets
-                ModLogger.debug("[HOVER-FIX] This is just a hover (not a drag), not returning any targets");
             }
             
             return targets;

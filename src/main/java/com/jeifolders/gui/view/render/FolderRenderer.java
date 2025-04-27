@@ -1,10 +1,9 @@
 package com.jeifolders.gui.view.render;
 
 import com.jeifolders.gui.controller.FolderStateManager;
+import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.buttons.FolderButtonTextures;
-import com.jeifolders.gui.view.layout.FolderRenderingManager;
-import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
@@ -16,16 +15,16 @@ import net.minecraft.network.chat.Component;
  */
 public class FolderRenderer {
     private final FolderStateManager folderManager;
-    private final FolderRenderingManager renderingManager;
+    private final FolderLayoutService layoutService;
     
     // UI State
     private int currentDeleteButtonX = -1;
     private boolean deleteHovered = false;
     
     public FolderRenderer(FolderStateManager folderManager, 
-                         FolderRenderingManager renderingManager) {
+                         FolderLayoutService layoutService) {
         this.folderManager = folderManager;
-        this.renderingManager = renderingManager;
+        this.layoutService = layoutService;
     }
     
     /**
@@ -58,7 +57,6 @@ public class FolderRenderer {
     public void renderActiveFolderDetails(GuiGraphics graphics, int mouseX, int mouseY) {
         FolderButton activeFolder = folderManager.getActiveFolder();
         if (activeFolder == null) {
-            ModLogger.debug("[NAME-DEBUG] No active folder to render name for");
             return;
         }
 
@@ -69,9 +67,8 @@ public class FolderRenderer {
             displayName = fullName.substring(0, 12) + "...";
         }
 
-        // Use the correct Y position from renderingManager for the folder name
-        int nameY = renderingManager.getFolderNameY();
-        ModLogger.debug("[NAME-DEBUG] Drawing folder name '{}' at Y={}", displayName, nameY);
+        // Use the correct Y position from layoutService for the folder name
+        int nameY = layoutService.getFolderNameY();
         
         // Changed back to white color (0xFFFFFF) for the folder name
         graphics.drawString(
@@ -83,13 +80,9 @@ public class FolderRenderer {
             true
         );
         
-        // Log font metrics to ensure name is within visible area
+        // Font metrics calculation (without logging)
         int fontHeight = Minecraft.getInstance().font.lineHeight;
         int stringWidth = Minecraft.getInstance().font.width(displayName);
-        ModLogger.debug("[NAME-DEBUG] Font metrics: width={}, height={}, screen dimensions: {}x{}", 
-                      stringWidth, fontHeight,
-                      Minecraft.getInstance().getWindow().getGuiScaledWidth(),
-                      Minecraft.getInstance().getWindow().getGuiScaledHeight());
 
         // Show tooltip with the full name when hovering over a truncated name
         if (!displayName.equals(fullName) && mouseX >= 10 && mouseX < 10 + Minecraft.getInstance().font.width(displayName) &&
@@ -101,14 +94,13 @@ public class FolderRenderer {
             );
         }
 
-        // Calculate and position the delete button using the layout manager
-        int[] deleteButtonPos = renderingManager.calculateDeleteButtonPosition();
+        // Calculate and position the delete button using the layout service
+        int[] deleteButtonPos = layoutService.calculateDeleteButtonPosition();
         int deleteX = deleteButtonPos[0];
         int deleteY = deleteButtonPos[1];
         
         // Render the delete button using the sprite sheet
         FolderButtonTextures.renderDeleteFolderIcon(graphics, deleteX, deleteY);
-        ModLogger.debug("[NAME-DEBUG] Delete button rendered at X={}, Y={}", deleteX, deleteY);
 
         deleteHovered = mouseX >= deleteX && mouseX < deleteX + 16 &&
                       mouseY >= deleteY && mouseY < deleteY + 16;
@@ -133,7 +125,7 @@ public class FolderRenderer {
             bookmarkDisplayHeight = folderManager.getBookmarkDisplay().getHeight();
         }
         
-        Rect2i lastDrawnArea = renderingManager.updateExclusionZone(
+        Rect2i lastDrawnArea = layoutService.updateExclusionZone(
             folderManager.getFolderButtons().size(), 
             folderManager.areFoldersVisible(), 
             folderManager.hasActiveFolder(),
@@ -142,11 +134,12 @@ public class FolderRenderer {
         
         // Update bookmark display bounds if active
         if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
-            Rect2i zone = renderingManager.getExclusionZone();
+            Rect2i zone = layoutService.getExclusionZone();
             int bookmarkDisplayWidth = zone.getWidth() + 10;
+            
             folderManager.getBookmarkDisplay().updateBounds(
                 0, 
-                renderingManager.getBookmarkDisplayY(), 
+                layoutService.getBookmarkDisplayY(), 
                 bookmarkDisplayWidth,
                 folderManager.getBookmarkDisplay().getHeight()
             );

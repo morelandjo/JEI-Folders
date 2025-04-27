@@ -4,10 +4,10 @@ import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.gui.input.FolderInputHandler;
 import com.jeifolders.gui.interaction.IngredientDropTarget;
+import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.screen.FolderScreenManager;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.buttons.FolderButtonTextures;
-import com.jeifolders.gui.view.layout.FolderRenderingManager;
 import com.jeifolders.gui.view.render.FolderRenderer;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
@@ -45,8 +45,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     // Component managers
     private final FolderStateManager folderManager;
-    private final FolderRenderingManager renderingManager;
-    // BookmarkManager has been consolidated into FolderStateManager
+    private final FolderLayoutService layoutService;
     
     // Newly refactored components
     private final FolderRenderer renderer;
@@ -105,11 +104,10 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         
         // Initialize the component classes
         this.folderManager = FolderStateManager.getInstance();
-        this.renderingManager = FolderRenderingManager.getInstance();
-        // BookmarkManager is no longer needed as its functionality is in FolderStateManager
+        this.layoutService = FolderLayoutService.getInstance();
         
         // Create the specialized components
-        this.renderer = new FolderRenderer(folderManager, renderingManager);
+        this.renderer = new FolderRenderer(folderManager, layoutService);
         this.screenManager = new FolderScreenManager(folderManager, this::createFolder);
         this.inputHandler = new FolderInputHandler(folderManager, renderer, this::createFolder);
         
@@ -121,21 +119,21 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         }
         
         // Calculate initial layout and load folders
-        renderingManager.calculateFoldersPerRow();
+        layoutService.calculateFoldersPerRow();
         loadFolders();
         
         // Update layout positions and bookmark display bounds
         updateLayoutPositions();
         
         ModLogger.debug("FolderButtonSystem initialized with {} folders, visibility: {}, foldersPerRow: {}",
-            folderManager.getFolderButtons().size(), folderManager.areFoldersVisible(), renderingManager.getFoldersPerRow());
+            folderManager.getFolderButtons().size(), folderManager.areFoldersVisible(), layoutService.getFoldersPerRow());
             
         // Set up JEI runtime initialization
         initializeJeiRuntime();
         
         // Restore the state if needed
         if (folderManager.shouldRestoreFromStaticState()) {
-            folderManager.createBookmarkDisplay(true); // This replaces bookmarkManager.restoreFromStaticState()
+            folderManager.createBookmarkDisplay(true);
         }
         
         ModLogger.debug("FolderButtonSystem initialization complete");
@@ -151,8 +149,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             return;
         }
         
-        // Use the UnifiedFolderManager to create and initialize folder buttons
-        FolderButton buttonToActivate = folderManager.initializeFolderButtons(renderingManager, this::onFolderClicked);
+        // Use the FolderLayoutService to create and initialize folder buttons
+        FolderButton buttonToActivate = folderManager.initializeFolderButtons(layoutService, this::onFolderClicked);
         
         // Set active folder if needed
         if (buttonToActivate != null) {
@@ -195,13 +193,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * Updates the vertical positions for folder names and bookmark display
      */
     private void updateLayoutPositions() {
-        renderingManager.updateLayoutPositions(folderManager.getFolderButtons().size());
-        
-        // Update the folderManager with the calculated positions
-        folderManager.setBookmarkDisplayPositions(
-            renderingManager.getFolderNameY(), 
-            renderingManager.getBookmarkDisplayY()
-        );
+        layoutService.updateLayoutPositions(folderManager.getFolderButtons().size());
     }
     
     /**
@@ -268,7 +260,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             lastWindowHeight = currentHeight;
             
             // Recalculate layout with preserved folder state
-            renderingManager.calculateFoldersPerRow();
+            layoutService.calculateFoldersPerRow();
             loadFolders();
             updateLayoutPositions();
             
@@ -298,11 +290,11 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     }
     
     /**
-     * Gets the rendering manager instance
-     * @return The rendering manager
+     * Gets the layout service instance
+     * @return The layout service
      */
-    public FolderRenderingManager getRenderingManager() {
-        return renderingManager;
+    public FolderLayoutService getLayoutService() {
+        return layoutService;
     }
     
     @Override

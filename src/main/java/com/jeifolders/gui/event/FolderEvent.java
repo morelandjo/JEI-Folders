@@ -2,8 +2,6 @@ package com.jeifolders.gui.event;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.gui.view.buttons.FolderButton;
-import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.TypedIngredient;
 
 import java.util.EventObject;
 import java.util.HashMap;

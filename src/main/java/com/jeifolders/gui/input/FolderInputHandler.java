@@ -1,9 +1,12 @@
 package com.jeifolders.gui.input;
 
+import com.jeifolders.data.Folder;
 import com.jeifolders.gui.controller.FolderStateManager;
+import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.render.FolderRenderer;
 import com.jeifolders.util.ModLogger;
+
 import net.minecraft.client.renderer.Rect2i;
 
 import java.util.List;
@@ -16,13 +19,14 @@ import java.util.function.Consumer;
 public class FolderInputHandler {
     private final FolderStateManager folderManager;
     private final FolderRenderer folderRenderer;
-    private final Consumer<String> folderNameInputCallback;
+    private final Consumer<String> folderCreator;
     
-    public FolderInputHandler(FolderStateManager folderManager,
-                              FolderRenderer folderRenderer, Consumer<String> folderNameInputCallback) {
+    public FolderInputHandler(FolderStateManager folderManager, 
+                             FolderRenderer folderRenderer,
+                             Consumer<String> folderCreator) {
         this.folderManager = folderManager;
         this.folderRenderer = folderRenderer;
-        this.folderNameInputCallback = folderNameInputCallback;
+        this.folderCreator = folderCreator;
     }
     
     /**
@@ -46,49 +50,75 @@ public class FolderInputHandler {
 
         if (folderManager.areFoldersVisible()) {
             for (FolderButton folderButton : folderManager.getFolderButtons()) {
-                if (folderButton.mouseClicked(mouseX, mouseY, button)) {
+                if (isMouseOver(mouseX, mouseY, folderButton)) {
+                    // Handle different button types
+                    switch (folderButton.getButtonType()) {
+                        case ADD:
+                            // Add button handled by the folder manager
+                            folderManager.handleAddFolderButtonClick(null);
+                            break;
+                        case NORMAL:
+                            // Normal folder buttons handled by the folder manager
+                            if (folderButton.getFolder() != null) {
+                                folderManager.handleFolderClick(folderButton.getFolder());
+                            }
+                            break;
+                        default:
+                            break;
+                    }
                     return true;
                 }
             }
         }
 
-        // Handle bookmark display click
-        if (folderManager.handleBookmarkDisplayClick(mouseX, mouseY, button)) {
-            return true;
-        }
-
-        return false;
+        // Check if the click should be handled by the bookmark display
+        return folderManager.hasActiveFolder() && 
+               folderManager.getBookmarkDisplay() != null &&
+               folderManager.handleBookmarkDisplayClick(mouseX, mouseY, button);
     }
     
     /**
-     * Handles ingredient drops on the folder UI
+     * Handles ingredients being dropped on the folder system
      * 
-     * @param mouseX X position of the mouse
-     * @param mouseY Y position of the mouse
+     * @param mouseX X position of the drop
+     * @param mouseY Y position of the drop
      * @param ingredient The ingredient being dropped
      * @return true if the drop was handled, false otherwise
      */
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
-        // Add detailed logging about the incoming ingredient
-        ModLogger.info("[DROP-DEBUG] handleIngredientDrop called with ingredient type: {}", 
-            ingredient != null ? ingredient.getClass().getName() : "null");
+        if (ingredient == null) {
+            ModLogger.debug("Cannot handle ingredient drop: ingredient is null");
+            return false;
+        }
         
-        // Delegate ingredient drop handling to FolderStateManager
+        if (!folderManager.areFoldersVisible()) {
+            ModLogger.debug("Cannot handle ingredient drop: folders not visible");
+            return false;
+        }
+        
         return folderManager.handleIngredientDrop(mouseX, mouseY, ingredient, folderManager.areFoldersVisible());
     }
     
     /**
-     * Get the list of folder buttons from the state manager
+     * Gets the folder buttons for the interface
      */
     public List<FolderButton> getFolderButtons() {
         return folderManager.getFolderButtons();
     }
     
     /**
-     * Check if the bookmark area is available
+     * Checks if the bookmark area is available for drag/drop
      */
     public boolean isBookmarkAreaAvailable() {
         return folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null;
+    }
+    
+    /**
+     * Helper method to check if the mouse is over a button
+     */
+    private boolean isMouseOver(double mouseX, double mouseY, FolderButton button) {
+        return mouseX >= button.getX() && mouseX < button.getX() + button.getWidth() &&
+               mouseY >= button.getY() && mouseY < button.getY() + button.getHeight();
     }
     
     /**

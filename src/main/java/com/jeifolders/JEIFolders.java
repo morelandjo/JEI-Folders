@@ -3,6 +3,7 @@ package com.jeifolders;
 import com.jeifolders.integration.JEIIntegration;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.gui.controller.FolderUIController;
+import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.util.ModLogger;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -40,7 +41,10 @@ public class JEIFolders {
     private void clientSetup(final FMLClientSetupEvent event) {
         ModLogger.info("Setting up JEI Folders client");
         
-        // Initialize the folder button system (which internally initializes the rendering manager)
+        // Initialize the layout service first
+        FolderLayoutService.init();
+        
+        // Initialize the folder button system 
         FolderUIController.init();
         
         // Initialize JEI integration

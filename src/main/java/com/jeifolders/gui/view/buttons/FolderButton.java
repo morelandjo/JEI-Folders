@@ -101,14 +101,6 @@ public class FolderButton {
         isHovered = mouseX >= x && mouseX < x + width && 
                    mouseY >= y && mouseY < y + height;
         
-        // Handle hover state change for logging
-        if (isHovered != wasHovered) {
-            if (isHovered) {
-                String folderName = (folder != null) ? folder.getName() : buttonType.name();
-                ModLogger.debug("Hovering over folder button: {}", folderName);
-            }
-        }
-        
         // Render the button based on its type and state
         switch (buttonType) {
             case NORMAL:
@@ -180,8 +172,6 @@ public class FolderButton {
             0xFFFFFF, // White color
             true // Draw with shadow
         );
-        
-        ModLogger.debug("[NAME-DEBUG] Drawing short name '{}' at X={}, Y={}", shortName, textX, textY);
     }
     
     /**
@@ -208,9 +198,6 @@ public class FolderButton {
         if (mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height) {
             // Only respond to left clicks (button == 0)
             if (button == 0 && clickHandler != null) {
-                ModLogger.debug("Folder button clicked: {}", 
-                    folder != null ? folder.getName() : buttonType.name());
-                
                 // Call the click handler with the folder
                 clickHandler.accept(folder);
                 return true;
@@ -227,8 +214,6 @@ public class FolderButton {
     public void setActive(boolean active) {
         if (this.isActive != active) {
             this.isActive = active;
-            ModLogger.debug("Folder button {} set active: {}", 
-                folder != null ? folder.getName() : buttonType.name(), active);
         }
     }
     

@@ -6,12 +6,14 @@ import com.jeifolders.gui.event.FolderEvent;
 import com.jeifolders.gui.event.FolderEventListener;
 import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.gui.view.buttons.FolderButton;
-import com.jeifolders.gui.view.contents.FolderContentsView;
 import com.jeifolders.gui.view.layout.FolderRenderingManager;
+import com.jeifolders.gui.view.contents.FolderContentsView;
+import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.util.ModLogger;
+import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -463,6 +465,14 @@ public class FolderStateManager {
         
         // Clear active folder
         activeFolder = null;
+        
+        // Force a complete UI rebuild through the FolderUIController
+        Minecraft.getInstance().execute(() -> {
+            if (FolderUIController.isInitialized()) {
+                ModLogger.info("Rebuilding folder UI after folder deletion");
+                FolderUIController.getInstance().rebuildFolders();
+            }
+        });
     }
     
     /**
@@ -734,15 +744,15 @@ public class FolderStateManager {
     /**
      * Initializes folder buttons based on the data from folder service
      * 
-     * @param renderingManager The rendering manager to use for positioning
+     * @param layoutService The layout service to use for positioning
      * @param clickHandler The handler for folder clicks
      * @return The button to activate (if any)
      */
-    public FolderButton initializeFolderButtons(FolderRenderingManager renderingManager, Consumer<Folder> clickHandler) {
+    public FolderButton initializeFolderButtons(FolderLayoutService layoutService, Consumer<Folder> clickHandler) {
         FolderButton buttonToActivate = null;
         
         // Create and position the folder buttons
-        List<FolderButton> buttons = renderingManager.createAndPositionFolderButtons();
+        List<FolderButton> buttons = layoutService.createAndPositionFolderButtons();
         
         // Find button to activate based on the last active folder ID
         if (lastActiveFolderId != null) {
