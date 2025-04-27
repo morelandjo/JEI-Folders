@@ -49,7 +49,7 @@ public class BookmarkManager {
         folderManager.addEventListener(FolderStateManager.EventType.FOLDER_ACTIVATED, new FolderEventListener() {
             @Override
             public void onFolderEvent(FolderEvent event) {
-                FolderButton folderButton = event.getData("folderButton", FolderButton.class);
+                FolderButton folderButton = event.get("folderButton");
                 onFolderActivationChanged(folderButton);
             }
         });

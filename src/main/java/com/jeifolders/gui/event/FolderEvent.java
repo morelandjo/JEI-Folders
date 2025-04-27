@@ -11,35 +11,12 @@ import java.util.Map;
 
 /**
  * Represents a folder-related event.
- * Based on Java's standard EventObject but with additional type and data fields.
+ * Simplified event model with a flexible data structure.
  */
 public class FolderEvent extends EventObject {
     private static final long serialVersionUID = 1L;
     
-    /**
-     * Event types for folder-related events
-     */
-    public enum Type {
-        // Folder UI events
-        FOLDER_CLICKED,
-        FOLDER_ACTIVATED,
-        FOLDER_DEACTIVATED,
-        FOLDER_CREATED,
-        FOLDER_DELETED,
-        ADD_BUTTON_CLICKED,
-        DELETE_BUTTON_CLICKED,
-        BOOKMARK_CLICKED,
-        INGREDIENT_DROPPED,
-        
-        // Bookmark operation events
-        BOOKMARK_ADDED,
-        BOOKMARK_REMOVED,
-        BOOKMARKS_CLEARED,
-        FOLDER_CONTENTS_CHANGED,
-        DISPLAY_REFRESHED
-    }
-
-    private final Type type;
+    private final FolderEventType type;
     private final Map<String, Object> data = new HashMap<>();
     
     /**
@@ -48,7 +25,7 @@ public class FolderEvent extends EventObject {
      * @param source the object on which the event initially occurred
      * @param type the type of the event
      */
-    public FolderEvent(Object source, Type type) {
+    public FolderEvent(Object source, FolderEventType type) {
         super(source);
         this.type = type;
     }
@@ -58,7 +35,7 @@ public class FolderEvent extends EventObject {
      * 
      * @return the event type
      */
-    public Type getType() {
+    public FolderEventType getType() {
         return type;
     }
     
@@ -69,7 +46,7 @@ public class FolderEvent extends EventObject {
      * @param value the value to associate with the key
      * @return this event, for chaining
      */
-    public FolderEvent withData(String key, Object value) {
+    public FolderEvent with(String key, Object value) {
         data.put(key, value);
         return this;
     }
@@ -79,16 +56,11 @@ public class FolderEvent extends EventObject {
      * 
      * @param <T> the expected return type
      * @param key the key for the data
-     * @param clazz the class of the expected return type
-     * @return the data as the specified type, or null if not found or wrong type
+     * @return the data as the specified type, or null if not found
      */
     @SuppressWarnings("unchecked")
-    public <T> T getData(String key, Class<T> clazz) {
-        Object value = data.get(key);
-        if (value != null && clazz.isAssignableFrom(value.getClass())) {
-            return (T) value;
-        }
-        return null;
+    public <T> T get(String key) {
+        return (T) data.get(key);
     }
     
     /**
@@ -97,9 +69,11 @@ public class FolderEvent extends EventObject {
      * @param key the key to check
      * @return true if data exists for the key, false otherwise
      */
-    public boolean hasData(String key) {
+    public boolean has(String key) {
         return data.containsKey(key);
     }
+    
+    // Convenience getter methods to maintain compatibility
     
     /**
      * Gets the folder ID from this event.
@@ -107,7 +81,7 @@ public class FolderEvent extends EventObject {
      * @return the folder ID, or null if not present
      */
     public Integer getFolderId() {
-        return getData("folderId", Integer.class);
+        return get("folderId");
     }
     
     /**
@@ -116,215 +90,42 @@ public class FolderEvent extends EventObject {
      * @return the folder, or null if not present
      */
     public Folder getFolder() {
-        return getData("folder", Folder.class);
+        return get("folder");
     }
     
     /**
-     * Creates a new folder event with the folder clicked type.
+     * Gets the folder button from this event.
      * 
-     * @param source the event source
-     * @param folder the clicked folder
-     * @return the created event
+     * @return the folder button, or null if not present
      */
-    public static FolderEvent createFolderClickedEvent(Object source, Folder folder) {
-        return new FolderEvent(source, Type.FOLDER_CLICKED)
-            .withData("folder", folder)
-            .withData("folderId", folder != null ? folder.getId() : null);
+    public FolderButton getFolderButton() {
+        return get("folderButton");
     }
     
     /**
-     * Creates a new folder event with the folder activated type.
+     * Gets the ingredient from this event.
      * 
-     * @param source the event source
-     * @param button the activated folder button
-     * @return the created event
+     * @return the ingredient, or null if not present
      */
-    public static FolderEvent createFolderActivatedEvent(Object source, FolderButton button) {
-        FolderEvent event = new FolderEvent(source, Type.FOLDER_ACTIVATED)
-            .withData("folderButton", button);
-            
-        if (button != null && button.getFolder() != null) {
-            event.withData("folder", button.getFolder())
-                .withData("folderId", button.getFolder().getId());
-        }
-        
-        return event;
+    public Object getIngredient() {
+        return get("ingredient");
     }
     
     /**
-     * Creates a new folder event with the folder deactivated type.
+     * Gets the bookmark key from this event.
      * 
-     * @param source the event source
-     * @return the created event
+     * @return the bookmark key, or null if not present
      */
-    public static FolderEvent createFolderDeactivatedEvent(Object source) {
-        return new FolderEvent(source, Type.FOLDER_DEACTIVATED);
+    public String getBookmarkKey() {
+        return get("bookmarkKey");
     }
     
     /**
-     * Creates a new folder event with the folder created type.
+     * Gets the folder name from this event.
      * 
-     * @param source the event source
-     * @param folder the created folder
-     * @return the created event
+     * @return the folder name, or null if not present
      */
-    public static FolderEvent createFolderCreatedEvent(Object source, Folder folder) {
-        return new FolderEvent(source, Type.FOLDER_CREATED)
-            .withData("folder", folder)
-            .withData("folderId", folder != null ? folder.getId() : null);
-    }
-    
-    /**
-     * Creates a new folder event with the folder deleted type.
-     * 
-     * @param source the event source
-     * @param folderId the ID of the deleted folder
-     * @param folderName the name of the deleted folder
-     * @return the created event
-     */
-    public static FolderEvent createFolderDeletedEvent(Object source, int folderId, String folderName) {
-        return new FolderEvent(source, Type.FOLDER_DELETED)
-            .withData("folderId", folderId)
-            .withData("folderName", folderName);
-    }
-    
-    /**
-     * Creates a new folder event with the add button clicked type.
-     * 
-     * @param source the event source
-     * @return the created event
-     */
-    public static FolderEvent createAddButtonClickedEvent(Object source) {
-        return new FolderEvent(source, Type.ADD_BUTTON_CLICKED);
-    }
-    
-    /**
-     * Creates a new folder event with the delete button clicked type.
-     * 
-     * @param source the event source
-     * @param folderId the ID of the folder to delete
-     * @return the created event
-     */
-    public static FolderEvent createDeleteButtonClickedEvent(Object source, int folderId) {
-        return new FolderEvent(source, Type.DELETE_BUTTON_CLICKED)
-            .withData("folderId", folderId);
-    }
-    
-    /**
-     * Creates a new folder event with the bookmark clicked type.
-     * 
-     * @param source the event source
-     * @param ingredient the clicked ingredient
-     * @return the created event
-     */
-    public static FolderEvent createBookmarkClickedEvent(Object source, TypedIngredient ingredient) {
-        return new FolderEvent(source, Type.BOOKMARK_CLICKED)
-            .withData("ingredient", ingredient);
-    }
-    
-    /**
-     * Creates a new folder event with the ingredient dropped type.
-     * 
-     * @param source the event source
-     * @param ingredient the dropped ingredient
-     * @param folderId the ID of the folder the ingredient was dropped on
-     * @return the created event
-     */
-    public static FolderEvent createIngredientDroppedEvent(Object source, Object ingredient, Integer folderId) {
-        FolderEvent event = new FolderEvent(source, Type.INGREDIENT_DROPPED)
-            .withData("ingredient", ingredient);
-            
-        if (folderId != null) {
-            event.withData("folderId", folderId);
-        }
-        
-        return event;
-    }
-    
-    /**
-     * Creates a new folder event with the bookmark added type.
-     * 
-     * @param source the event source
-     * @param folder the folder the bookmark was added to
-     * @param ingredient the bookmark ingredient
-     * @param key the bookmark key
-     * @return the created event
-     */
-    public static FolderEvent createBookmarkAddedEvent(Object source, Folder folder, 
-                                                      BookmarkIngredient ingredient, String key) {
-        return new FolderEvent(source, Type.BOOKMARK_ADDED)
-            .withData("folder", folder)
-            .withData("folderId", folder != null ? folder.getId() : null)
-            .withData("ingredient", ingredient)
-            .withData("bookmarkKey", key);
-    }
-    
-    /**
-     * Creates a new folder event with the bookmark removed type.
-     * 
-     * @param source the event source
-     * @param folder the folder the bookmark was removed from
-     * @param ingredient the bookmark ingredient
-     * @param key the bookmark key
-     * @return the created event
-     */
-    public static FolderEvent createBookmarkRemovedEvent(Object source, Folder folder, 
-                                                        BookmarkIngredient ingredient, String key) {
-        return new FolderEvent(source, Type.BOOKMARK_REMOVED)
-            .withData("folder", folder)
-            .withData("folderId", folder != null ? folder.getId() : null)
-            .withData("ingredient", ingredient)
-            .withData("bookmarkKey", key);
-    }
-    
-    /**
-     * Creates a new folder event with the bookmarks cleared type.
-     * 
-     * @param source the event source
-     * @param folder the folder whose bookmarks were cleared
-     * @return the created event
-     */
-    public static FolderEvent createBookmarksClearedEvent(Object source, Folder folder) {
-        return new FolderEvent(source, Type.BOOKMARKS_CLEARED)
-            .withData("folder", folder)
-            .withData("folderId", folder != null ? folder.getId() : null);
-    }
-    
-    /**
-     * Creates a new folder event with the folder contents changed type.
-     * 
-     * @param source the event source
-     * @param folder the folder whose contents changed
-     * @return the created event
-     */
-    public static FolderEvent createFolderContentsChangedEvent(Object source, Folder folder) {
-        return new FolderEvent(source, Type.FOLDER_CONTENTS_CHANGED)
-            .withData("folder", folder)
-            .withData("folderId", folder != null ? folder.getId() : null);
-    }
-    
-    /**
-     * Creates a new folder event with the folder contents changed type.
-     * 
-     * @param source the event source
-     * @param folderId the ID of the folder whose contents changed
-     * @return the created event
-     */
-    public static FolderEvent createFolderContentsChangedEvent(Object source, int folderId) {
-        return new FolderEvent(source, Type.FOLDER_CONTENTS_CHANGED)
-            .withData("folderId", folderId);
-    }
-    
-    /**
-     * Creates a new folder event with the display refreshed type.
-     * 
-     * @param source the event source
-     * @param folder the folder whose display was refreshed
-     * @return the created event
-     */
-    public static FolderEvent createDisplayRefreshedEvent(Object source, Folder folder) {
-        return new FolderEvent(source, Type.DISPLAY_REFRESHED)
-            .withData("folder", folder)
-            .withData("folderId", folder != null ? folder.getId() : null);
+    public String getFolderName() {
+        return get("folderName");
     }
 }

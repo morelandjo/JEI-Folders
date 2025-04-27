@@ -4,6 +4,7 @@ import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.data.Folder;
 import com.jeifolders.gui.event.FolderEvent;
 import com.jeifolders.gui.event.FolderEventListener;
+import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.contents.FolderContentsView;
 import com.jeifolders.gui.view.layout.FolderRenderingManager;
@@ -128,7 +129,7 @@ public class FolderStateManager {
             lastGuiRebuildTime = System.currentTimeMillis();
             
             // Fire event
-            fireEvent(FolderEvent.createFolderActivatedEvent(this, button));
+            fireFolderActivatedEvent(button);
             
             // Update bookmark display
             if (bookmarkDisplay != null) {
@@ -152,7 +153,7 @@ public class FolderStateManager {
             lastBookmarkContents = new ArrayList<>();
             
             // Fire event
-            fireEvent(FolderEvent.createFolderDeactivatedEvent(this));
+            fireFolderDeactivatedEvent();
             
             // Update bookmark display
             if (bookmarkDisplay != null) {
@@ -284,8 +285,8 @@ public class FolderStateManager {
      * @param event The event to fire
      */
     public void fireEvent(FolderEvent event) {
-        // Convert from FolderEvent.Type to UnifiedFolderManager.EventType
-        FolderEvent.Type eventType = event.getType();
+        // Get the event type directly
+        FolderEventType eventType = event.getType();
         EventType type = EventType.valueOf(eventType.name());
         
         List<FolderEventListener> typeListeners = listeners.get(type);
@@ -304,67 +305,118 @@ public class FolderStateManager {
     // ----- Helper methods for firing folder UI events -----
     
     public void fireFolderClickedEvent(Folder folder) {
-        fireEvent(FolderEvent.createFolderClickedEvent(this, folder));
+        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CLICKED)
+            .with("folder", folder)
+            .with("folderId", folder != null ? folder.getId() : null);
+        fireEvent(event);
     }
     
-    public void fireFolderActivatedEvent(FolderButton folder) {
-        fireEvent(FolderEvent.createFolderActivatedEvent(this, folder));
+    public void fireFolderActivatedEvent(FolderButton button) {
+        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_ACTIVATED)
+            .with("folderButton", button);
+            
+        if (button != null && button.getFolder() != null) {
+            event.with("folder", button.getFolder())
+                .with("folderId", button.getFolder().getId());
+        }
+        
+        fireEvent(event);
     }
     
     public void fireFolderDeactivatedEvent() {
-        fireEvent(FolderEvent.createFolderDeactivatedEvent(this));
+        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_DEACTIVATED);
+        fireEvent(event);
     }
     
     public void fireFolderCreatedEvent(Folder folder) {
-        fireEvent(FolderEvent.createFolderCreatedEvent(this, folder));
+        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CREATED)
+            .with("folder", folder)
+            .with("folderId", folder != null ? folder.getId() : null);
+        fireEvent(event);
     }
     
     public void fireFolderDeletedEvent(int folderId, String folderName) {
-        fireEvent(FolderEvent.createFolderDeletedEvent(this, folderId, folderName));
+        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_DELETED)
+            .with("folderId", folderId)
+            .with("folderName", folderName);
+        fireEvent(event);
     }
     
     public void fireAddButtonClickedEvent() {
-        fireEvent(FolderEvent.createAddButtonClickedEvent(this));
+        FolderEvent event = new FolderEvent(this, FolderEventType.ADD_BUTTON_CLICKED);
+        fireEvent(event);
     }
     
     public void fireDeleteButtonClickedEvent(int folderId) {
-        fireEvent(FolderEvent.createDeleteButtonClickedEvent(this, folderId));
+        FolderEvent event = new FolderEvent(this, FolderEventType.DELETE_BUTTON_CLICKED)
+            .with("folderId", folderId);
+        fireEvent(event);
     }
     
     public void fireBookmarkClickedEvent(TypedIngredient ingredient) {
-        fireEvent(FolderEvent.createBookmarkClickedEvent(this, ingredient));
+        FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARK_CLICKED)
+            .with("ingredient", ingredient);
+        fireEvent(event);
     }
     
     public void fireIngredientDroppedEvent(Object ingredient, Integer folderId) {
-        fireEvent(FolderEvent.createIngredientDroppedEvent(this, ingredient, folderId));
+        FolderEvent event = new FolderEvent(this, FolderEventType.INGREDIENT_DROPPED)
+            .with("ingredient", ingredient);
+            
+        if (folderId != null) {
+            event.with("folderId", folderId);
+        }
+        
+        fireEvent(event);
     }
     
     public void fireBookmarkAddedEvent(Folder folder, 
                                       BookmarkIngredient ingredient, 
                                       String key) {
-        fireEvent(FolderEvent.createBookmarkAddedEvent(this, folder, ingredient, key));
+        FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARK_ADDED)
+            .with("folder", folder)
+            .with("folderId", folder != null ? folder.getId() : null)
+            .with("ingredient", ingredient)
+            .with("bookmarkKey", key);
+        fireEvent(event);
     }
     
     public void fireBookmarkRemovedEvent(Folder folder, 
                                         BookmarkIngredient ingredient, 
                                         String key) {
-        fireEvent(FolderEvent.createBookmarkRemovedEvent(this, folder, ingredient, key));
+        FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARK_REMOVED)
+            .with("folder", folder)
+            .with("folderId", folder != null ? folder.getId() : null)
+            .with("ingredient", ingredient)
+            .with("bookmarkKey", key);
+        fireEvent(event);
     }
     
     public void fireBookmarksClearedEvent(Folder folder) {
-        fireEvent(FolderEvent.createBookmarksClearedEvent(this, folder));
+        FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARKS_CLEARED)
+            .with("folder", folder)
+            .with("folderId", folder != null ? folder.getId() : null);
+        fireEvent(event);
     }
     
     public void fireFolderContentsChangedEvent(Folder folder) {
-        fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folder));
+        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
+            .with("folder", folder)
+            .with("folderId", folder != null ? folder.getId() : null);
+        fireEvent(event);
     }
     
     public void fireFolderContentsChangedEvent(int folderId) {
-        fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folderId));
+        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
+            .with("folderId", folderId);
+        fireEvent(event);
     }
     
     public void fireDisplayRefreshedEvent(Folder folder) {
-        fireEvent(FolderEvent.createDisplayRefreshedEvent(this, folder));
+        FolderEvent event = new FolderEvent(this, FolderEventType.DISPLAY_REFRESHED)
+            .with("folder", folder)
+            .with("folderId", folder != null ? folder.getId() : null);
+        fireEvent(event);
     }
     
     // ----- Persistent Storage Management -----

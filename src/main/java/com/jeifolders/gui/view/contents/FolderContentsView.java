@@ -6,6 +6,7 @@ import com.jeifolders.gui.common.LayoutConstants;
 import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.gui.event.FolderEvent;
 import com.jeifolders.gui.event.FolderEventListener;
+import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.Rectangle2i;
@@ -212,7 +213,10 @@ public class FolderContentsView {
             }
             
             // Fire a display refreshed event
-            eventManager.fireEvent(FolderEvent.createDisplayRefreshedEvent(this, activeFolder));
+            FolderEvent event = new FolderEvent(this, FolderEventType.DISPLAY_REFRESHED)
+                .with("folder", activeFolder)
+                .with("folderId", activeFolder != null ? activeFolder.getId() : null);
+            eventManager.fireEvent(event);
             
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
@@ -535,12 +539,18 @@ public class FolderContentsView {
             // Fire bookmark added event
             if (ingredient instanceof BookmarkIngredient) {
                 ModLogger.info("[DROP-DEBUG] Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
-                eventManager.fireEvent(FolderEvent.createBookmarkAddedEvent(this, activeFolder, 
-                                      (BookmarkIngredient)ingredient, key));
+                FolderEvent event = new FolderEvent(this, FolderEventType.BOOKMARK_ADDED)
+                    .with("folder", activeFolder)
+                    .with("folderId", activeFolder != null ? activeFolder.getId() : null)
+                    .with("ingredient", ingredient)
+                    .with("bookmarkKey", key);
+                eventManager.fireEvent(event);
             } else {
                 // For non-BookmarkIngredient, just fire a folder contents changed event
                 ModLogger.info("[DROP-DEBUG] Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
-                eventManager.fireEvent(FolderEvent.createFolderContentsChangedEvent(this, folderId));
+                FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
+                    .with("folderId", folderId);
+                eventManager.fireEvent(event);
             }
             
             // Refresh the display
