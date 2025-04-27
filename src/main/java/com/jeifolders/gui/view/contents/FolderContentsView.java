@@ -330,33 +330,6 @@ public class FolderContentsView {
         int maxAllowedWidth = LayoutConstants.calculateMaxWidthBeforeGui(screenWidth);
         return Math.min(requestedWidth, maxAllowedWidth);
     }
-
-    /**
-     * Renders the bookmarks display
-     * 
-     * @deprecated Use ContentViewRenderer.renderContentsView instead
-     */
-    @Deprecated
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Check if we need to do a deferred refresh
-        if (needsRefresh) {
-            refreshBookmarks();
-            needsRefresh = false;
-        }
-        
-        if (activeFolder != null) {
-            try {
-                contentsImpl.draw(Minecraft.getInstance(), graphics, mouseX, mouseY, partialTick);
-                
-                // Only draw tooltips if mouse is over
-                if (isMouseOver(mouseX, mouseY)) {
-                    contentsImpl.drawTooltips(Minecraft.getInstance(), graphics, mouseX, mouseY);
-                }
-            } catch (Exception e) {
-                ModLogger.error("Error rendering bookmark display: {}", e.getMessage(), e);
-            }
-        }
-    }
     
     /**
      * Gets the JEI contents implementation for rendering

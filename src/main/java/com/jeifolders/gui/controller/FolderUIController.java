@@ -380,14 +380,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         return new Rect2i(0, 0, 0, 0);
     }
     
-    /**
-     * Helper method to check if the mouse is over a button
-     * @deprecated Use MouseHitUtil.isMouseOverButton instead
-     */
-    @Deprecated
-    private boolean isMouseOver(double mouseX, double mouseY, FolderButton button) {
-        return MouseHitUtil.isMouseOverButton(mouseX, mouseY, button);
-    }
     
     /**
      * Creates a new folder with the given name
