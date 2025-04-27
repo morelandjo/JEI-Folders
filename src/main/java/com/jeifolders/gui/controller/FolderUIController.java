@@ -2,6 +2,7 @@ package com.jeifolders.gui.controller;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.gui.interaction.IngredientDropTarget;
 import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.screen.FolderScreenManager;
@@ -308,7 +309,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
 
         if (folderManager.areFoldersVisible()) {
             for (FolderButton folderButton : folderManager.getFolderButtons()) {
-                if (isMouseOver(mouseX, mouseY, folderButton)) {
+                if (MouseHitUtil.isMouseOverButton(mouseX, mouseY, folderButton)) {
                     // Handle different button types
                     switch (folderButton.getButtonType()) {
                         case ADD:
@@ -380,10 +381,11 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     /**
      * Helper method to check if the mouse is over a button
+     * @deprecated Use MouseHitUtil.isMouseOverButton instead
      */
+    @Deprecated
     private boolean isMouseOver(double mouseX, double mouseY, FolderButton button) {
-        return mouseX >= button.getX() && mouseX < button.getX() + button.getWidth() &&
-               mouseY >= button.getY() && mouseY < button.getY() + button.getHeight();
+        return MouseHitUtil.isMouseOverButton(mouseX, mouseY, button);
     }
     
     /**

@@ -3,8 +3,8 @@ package com.jeifolders.gui.view.contents;
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.gui.common.LayoutConstants;
+import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.gui.controller.FolderStateManager;
-import com.jeifolders.gui.event.FolderEvent;
 import com.jeifolders.gui.event.FolderEventListener;
 import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.integration.BookmarkIngredient;
@@ -360,8 +360,7 @@ public class FolderContentsView {
      */
     public boolean isMouseOver(double mouseX, double mouseY) {
         // Basic check if mouse is over the current display bounds
-        boolean overCurrentBounds = mouseX >= x && mouseX < x + width && 
-                                   mouseY >= y && mouseY < y + height;
+        boolean overCurrentBounds = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
         
         // If this is already true, no need for additional checks
         if (overCurrentBounds) {
@@ -371,11 +370,8 @@ public class FolderContentsView {
         // For drag operations, check against the background area if available
         if (backgroundArea != null && !backgroundArea.isEmpty()) {
             // Add extended margins to the background area for easier drag and drop
-            boolean overBackground = mouseX >= (backgroundArea.getX() - LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN) && 
-                   mouseX <= (backgroundArea.getX() + backgroundArea.getWidth() + LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN) &&
-                   mouseY >= (backgroundArea.getY() - LayoutConstants.DRAG_DROP_VERTICAL_MARGIN) && 
-                   mouseY <= (backgroundArea.getY() + backgroundArea.getHeight() + LayoutConstants.DRAG_DROP_VERTICAL_MARGIN);
-                   
+            boolean overBackground = MouseHitUtil.isMouseOverDragDropArea(mouseX, mouseY, backgroundArea);
+            
             if (overBackground) {
                 ModLogger.debug("Mouse in extended background hit area for drag and drop");
                 return true;
@@ -383,14 +379,10 @@ public class FolderContentsView {
         }
         
         // For drag and drop, be even more lenient with the main display bounds
-        if (mouseX >= (x - LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN) && 
-            mouseX < (x + width + LayoutConstants.DRAG_DROP_HORIZONTAL_MARGIN)) {
-            boolean inVerticalRegion = mouseY >= (y - LayoutConstants.DRAG_DROP_VERTICAL_MARGIN) && 
-                                      mouseY <= (y + height + LayoutConstants.DRAG_DROP_VERTICAL_MARGIN);
-            if (inVerticalRegion) {
-                ModLogger.debug("Mouse in extended drag-and-drop hit area");
-                return true;
-            }
+        boolean inExtendedArea = MouseHitUtil.isMouseOverDragDropArea(mouseX, mouseY, x, y, width, height);
+        if (inExtendedArea) {
+            ModLogger.debug("Mouse in extended drag-and-drop hit area");
+            return true;
         }
         
         return false;

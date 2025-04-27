@@ -1,7 +1,7 @@
 package com.jeifolders.gui.view.buttons;
 
 import com.jeifolders.data.Folder;
-import com.jeifolders.util.ModLogger;
+import com.jeifolders.gui.common.MouseHitUtil;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -96,10 +96,9 @@ public class FolderButton {
      * @param partialTicks Partial ticks for smooth animation
      */
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        // Update hover state
+        // Update hover state using the centralized utility
         boolean wasHovered = isHovered;
-        isHovered = mouseX >= x && mouseX < x + width && 
-                   mouseY >= y && mouseY < y + height;
+        isHovered = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
         
         // Render the button based on its type and state
         switch (buttonType) {
@@ -195,7 +194,7 @@ public class FolderButton {
      * @return true if the click was processed
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height) {
+        if (MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height)) {
             // Only respond to left clicks (button == 0)
             if (button == 0 && clickHandler != null) {
                 // Call the click handler with the folder

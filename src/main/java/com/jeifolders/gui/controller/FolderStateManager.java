@@ -2,6 +2,7 @@ package com.jeifolders.gui.controller;
 
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.data.Folder;
+import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.gui.event.FolderEvent;
 import com.jeifolders.gui.event.FolderEventBus;
 import com.jeifolders.gui.event.FolderEventListener;
@@ -446,8 +447,7 @@ public class FolderStateManager {
      */
     public FolderButton getFolderButtonAt(double mouseX, double mouseY) {
         for (FolderButton button : folderButtons) {
-            if (mouseX >= button.getX() && mouseX < button.getX() + button.getWidth() &&
-                mouseY >= button.getY() && mouseY < button.getY() + button.getHeight()) {
+            if (MouseHitUtil.isMouseOverButton(mouseX, mouseY, button)) {
                 return button;
             }
         }

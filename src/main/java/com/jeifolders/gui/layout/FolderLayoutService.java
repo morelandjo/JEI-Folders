@@ -11,7 +11,6 @@ import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;

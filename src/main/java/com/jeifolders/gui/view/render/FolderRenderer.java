@@ -1,5 +1,6 @@
 package com.jeifolders.gui.view.render;
 
+import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.view.buttons.FolderButton;
@@ -80,14 +81,11 @@ public class FolderRenderer {
             0xFFFFFF, // White color
             true
         );
-        
-        // Font metrics calculation (without logging)
-        int fontHeight = Minecraft.getInstance().font.lineHeight;
-        int stringWidth = Minecraft.getInstance().font.width(displayName);
 
         // Show tooltip with the full name when hovering over a truncated name
-        if (!displayName.equals(fullName) && mouseX >= 10 && mouseX < 10 + Minecraft.getInstance().font.width(displayName) &&
-            mouseY >= nameY - 4 && mouseY < nameY + 10) {
+        if (!displayName.equals(fullName) && 
+            MouseHitUtil.isMouseOverRect(mouseX, mouseY, 10, nameY - 4, 
+                                       Minecraft.getInstance().font.width(displayName), 14)) {
             graphics.renderTooltip(
                 Minecraft.getInstance().font,
                 Component.literal(fullName),
@@ -103,8 +101,8 @@ public class FolderRenderer {
         // Render the delete button using the sprite sheet
         FolderButtonTextures.renderDeleteFolderIcon(graphics, deleteX, deleteY);
 
-        deleteHovered = mouseX >= deleteX && mouseX < deleteX + 16 &&
-                      mouseY >= deleteY && mouseY < deleteY + 16;
+        // Check if mouse is over delete button
+        deleteHovered = MouseHitUtil.isMouseOverRect(mouseX, mouseY, deleteX, deleteY, 16, 16);
 
         if (deleteHovered) {
             graphics.renderTooltip(
