@@ -400,75 +400,40 @@ public class FolderContentsView {
     }
 
     /**
-     * Navigate to the next page
-     */
-    public void nextPage() {
-        contentsImpl.nextPage();
-    }
-
-    /**
-     * Navigate to the previous page
-     */
-    public void previousPage() {
-        contentsImpl.previousPage();
-    }
-
-    /**
-     * Get the current page number (1-indexed for display)
-     */
-    public int getCurrentPageNumber() {
-        return contentsImpl.getCurrentPageNumber();
-    }
-
-    /**
-     * Get the total number of pages
-     */
-    public int getPageCount() {
-        return contentsImpl.getPageCount();
-    }
-
-    /**
-     * Checks if a point is over the next button
-     */
-    public boolean isNextButtonClicked(double mouseX, double mouseY) {
-        return contentsImpl.isNextButtonClicked(mouseX, mouseY);
-    }
-
-    /**
-     * Checks if a point is over the back button
-     */
-    public boolean isBackButtonClicked(double mouseX, double mouseY) {
-        return contentsImpl.isBackButtonClicked(mouseX, mouseY);
-    }
-    
-    /**
      * Handles a click on the bookmark display
+     * Only handles view-specific aspects like pagination and returns position data
+     * Event firing is delegated to FolderStateManager
+     * 
      * @return true if the click was handled
      */
     public boolean handleClick(double mouseX, double mouseY, int button) {
-        // Early return if not over the display
-        if (!isMouseOver(mouseX, mouseY)) {
-            return false;
+        // First check pagination buttons which are always part of the view logic
+        if (contentsImpl.isNextButtonClicked(mouseX, mouseY)) {
+            contentsImpl.nextPage();
+            return true;
         }
         
-        // Handle page navigation
-        if (button == 0) {
-            // Check if next page button is clicked
-            if (isNextButtonClicked(mouseX, mouseY)) {
-                nextPage();
-                return true;
-            }
-
-            // Check if back button is clicked
-            if (isBackButtonClicked(mouseX, mouseY)) {
-                previousPage();
+        if (contentsImpl.isBackButtonClicked(mouseX, mouseY)) {
+            contentsImpl.previousPage();
+            return true;
+        }
+        
+        // Check for bookmark clicks to get ingredient information
+        // Note: Event handling is done by FolderStateManager
+        Optional<String> bookmarkKey = getBookmarkKeyAt(mouseX, mouseY);
+        if (bookmarkKey.isPresent() && activeFolder != null) {
+            String key = bookmarkKey.get();
+            
+            // Get the ingredient from the bookmark list
+            BookmarkIngredient bookmark = bookmarkList.getBookmark(key);
+            if (bookmark != null) {
+                // Return true since we determined this is a valid bookmark click
+                // Actual event firing is handled by FolderStateManager
                 return true;
             }
         }
-
-        // Check if a bookmark was clicked
-        Optional<String> clickedBookmarkKey = getBookmarkKeyAt(mouseX, mouseY);
-        return clickedBookmarkKey.isPresent();
+        
+        return false;
     }
     
     /**
@@ -618,6 +583,54 @@ public class FolderContentsView {
         refreshBookmarks();
         if (contentsImpl != null) {
             contentsImpl.updateLayout(true);
+        }
+    }
+    
+    /**
+     * Gets the current page number (1-indexed).
+     * 
+     * @return The current page number
+     */
+    public int getCurrentPageNumber() {
+        if (contentsImpl == null) {
+            return 1;
+        }
+        return contentsImpl.getCurrentPageNumber();
+    }
+    
+    /**
+     * Gets the total number of pages.
+     * 
+     * @return The total number of pages
+     */
+    public int getPageCount() {
+        if (contentsImpl == null) {
+            return 1;
+        }
+        return contentsImpl.getPageCount();
+    }
+    
+    /**
+     * Navigates to a specific page number.
+     * 
+     * @param pageNumber The page number to navigate to (1-indexed)
+     */
+    public void goToPage(int pageNumber) {
+        if (contentsImpl == null) {
+            return;
+        }
+        
+        int currentPage = getCurrentPageNumber();
+        int targetPage = Math.max(1, Math.min(pageNumber, getPageCount()));
+        
+        if (currentPage < targetPage) {
+            for (int i = currentPage; i < targetPage; i++) {
+                contentsImpl.nextPage();
+            }
+        } else if (currentPage > targetPage) {
+            for (int i = currentPage; i > targetPage; i--) {
+                contentsImpl.previousPage();
+            }
         }
     }
 }

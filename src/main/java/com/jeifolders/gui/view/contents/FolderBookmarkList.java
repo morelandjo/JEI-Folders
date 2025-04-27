@@ -312,4 +312,17 @@ public class FolderBookmarkList {
         
         notifyListenersOfChange();
     }
+
+    /**
+     * Gets a bookmark by its key
+     * 
+     * @param key The key of the bookmark to retrieve
+     * @return The bookmark ingredient, or null if not found
+     */
+    public BookmarkIngredient getBookmark(String key) {
+        if (key == null || key.isEmpty()) {
+            return null;
+        }
+        return ingredientMap.get(key);
+    }
 }

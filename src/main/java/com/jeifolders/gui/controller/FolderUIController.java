@@ -298,43 +298,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (renderer.getCurrentDeleteButtonX() >= 0 && button == 0 && renderer.isDeleteButtonHovered()) {
-            // Fire delete button clicked event before deleting
-            if (folderManager.hasActiveFolder()) {
-                folderManager.fireDeleteButtonClickedEvent(folderManager.getActiveFolder().getFolder().getId());
-            }
-            
-            folderManager.deleteActiveFolder();
-            return true;
-        }
-
-        if (folderManager.areFoldersVisible()) {
-            for (FolderButton folderButton : folderManager.getFolderButtons()) {
-                if (MouseHitUtil.isMouseOverButton(mouseX, mouseY, folderButton)) {
-                    // Handle different button types
-                    switch (folderButton.getButtonType()) {
-                        case ADD:
-                            // Add button handled by the folder manager
-                            folderManager.handleAddFolderButtonClick(null);
-                            break;
-                        case NORMAL:
-                            // Normal folder buttons handled by the folder manager
-                            if (folderButton.getFolder() != null) {
-                                folderManager.handleFolderClick(folderButton.getFolder());
-                            }
-                            break;
-                        default:
-                            break;
-                    }
-                    return true;
-                }
-            }
-        }
-
-        // Check if the click should be handled by the bookmark display
-        return folderManager.hasActiveFolder() && 
-               folderManager.getBookmarkDisplay() != null &&
-               folderManager.handleBookmarkDisplayClick(mouseX, mouseY, button);
+        // Delegate all mouse click handling to FolderStateManager
+        return folderManager.handleMouseClick(mouseX, mouseY, button, renderer.isDeleteButtonHovered(), renderer.getCurrentDeleteButtonX());
     }
     
     @Override

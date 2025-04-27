@@ -581,6 +581,7 @@ public class FolderStateManager {
 
     /**
      * Handles a click on the bookmark display
+     * This method processes business logic and events after the view handles UI interactions
      *
      * @param mouseX The mouse X position
      * @param mouseY The mouse Y position
@@ -592,8 +593,30 @@ public class FolderStateManager {
             return false;
         }
 
-        // Let the display handle the click, which includes pagination buttons
-        return bookmarkDisplay.handleClick(mouseX, mouseY, button);
+        // First let the display handle the view-specific aspects like pagination
+        // If it returns true, it means a UI element was clicked (like a pagination button)
+        boolean handledByDisplay = bookmarkDisplay.handleClick(mouseX, mouseY, button);
+        
+        // If the UI handled it, we're done
+        if (handledByDisplay) {
+            return true;
+        }
+        
+        // Check for ingredient clicks that need business logic processing
+        Optional<String> bookmarkKey = bookmarkDisplay.getBookmarkKeyAt(mouseX, mouseY);
+        if (bookmarkKey.isPresent() && activeFolder != null) {
+            String key = bookmarkKey.get();
+            
+            // Get the typed ingredient from the bookmark
+            var typedIngredient = TypedIngredientHelper.getTypedIngredientForKey(key);
+            if (typedIngredient != null) {
+                // Fire bookmark clicked event
+                fireBookmarkClickedEvent(typedIngredient);
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -847,5 +870,58 @@ public class FolderStateManager {
         if (bookmarkDisplay != null) {
             bookmarkDisplay.setCalculatedPositions(nameY, bookmarkDisplayY);
         }
+    }
+
+    /**
+     * Central method to handle all mouse click events in the UI.
+     * This consolidates all click handling in one place for better maintainability.
+     *
+     * @param mouseX Mouse X position
+     * @param mouseY Mouse Y position
+     * @param button Mouse button used
+     * @param isDeleteButtonHovered Whether the delete button is hovered
+     * @param deleteButtonX X position of the delete button
+     * @return true if the click was handled
+     */
+    public boolean handleMouseClick(double mouseX, double mouseY, int button, boolean isDeleteButtonHovered, int deleteButtonX) {
+        // Check delete button clicks first - highest priority
+        if (deleteButtonX >= 0 && button == 0 && isDeleteButtonHovered) {
+            // Fire delete button clicked event before deleting
+            if (hasActiveFolder()) {
+                fireDeleteButtonClickedEvent(getActiveFolder().getFolder().getId());
+            }
+            
+            deleteActiveFolder();
+            return true;
+        }
+
+        // Check folder button clicks
+        if (areFoldersVisible()) {
+            for (FolderButton folderButton : getFolderButtons()) {
+                if (MouseHitUtil.isMouseOverButton(mouseX, mouseY, folderButton)) {
+                    // Handle different button types
+                    switch (folderButton.getButtonType()) {
+                        case ADD:
+                            // Add button handled directly by the folder manager
+                            handleAddFolderButtonClick(null);
+                            break;
+                        case NORMAL:
+                            // Normal folder buttons handled directly by the folder manager
+                            if (folderButton.getFolder() != null) {
+                                handleFolderClick(folderButton.getFolder());
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                    return true;
+                }
+            }
+        }
+
+        // Check if the click should be handled by the bookmark display
+        return hasActiveFolder() && 
+               getBookmarkDisplay() != null &&
+               handleBookmarkDisplayClick(mouseX, mouseY, button);
     }
 }

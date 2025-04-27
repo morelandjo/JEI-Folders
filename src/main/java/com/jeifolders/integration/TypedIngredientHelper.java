@@ -439,4 +439,32 @@ public class TypedIngredientHelper {
         
         return result;
     }
+    
+    /**
+     * Gets a TypedIngredient object for a bookmark key.
+     * Centralizes ingredient lookup by key to avoid duplication.
+     *
+     * @param key The bookmark key to look up
+     * @return The TypedIngredient object for the key, or null if not found
+     */
+    public static TypedIngredient getTypedIngredientForKey(String key) {
+        if (key == null || key.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+            Optional<ITypedIngredient<?>> ingredient = ingredientService.getIngredientForKey(key);
+            
+            if (ingredient.isPresent()) {
+                return new TypedIngredient(ingredient.get());
+            } else {
+                ModLogger.debug("No ingredient found for key: {}", key);
+                return null;
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error getting typed ingredient for key {}: {}", key, e.getMessage(), e);
+            return null;
+        }
+    }
 }
