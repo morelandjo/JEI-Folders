@@ -1,6 +1,5 @@
 package com.jeifolders.gui.view.render;
 
-import com.jeifolders.gui.controller.BookmarkManager;
 import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.buttons.FolderButtonTextures;
@@ -18,18 +17,15 @@ import net.minecraft.network.chat.Component;
 public class FolderRenderer {
     private final FolderStateManager folderManager;
     private final FolderRenderingManager renderingManager;
-    private final BookmarkManager bookmarkManager;
     
     // UI State
     private int currentDeleteButtonX = -1;
     private boolean deleteHovered = false;
     
     public FolderRenderer(FolderStateManager folderManager, 
-                         FolderRenderingManager renderingManager, 
-                         BookmarkManager bookmarkManager) {
+                         FolderRenderingManager renderingManager) {
         this.folderManager = folderManager;
         this.renderingManager = renderingManager;
-        this.bookmarkManager = bookmarkManager;
     }
     
     /**
@@ -49,8 +45,8 @@ public class FolderRenderer {
             deleteHovered = false;
         }
 
-        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
-            bookmarkManager.getBookmarkDisplay().render(graphics, mouseX, mouseY, partialTick);
+        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
+            folderManager.getBookmarkDisplay().render(graphics, mouseX, mouseY, partialTick);
         }
 
         updateExclusionZone();
@@ -133,8 +129,8 @@ public class FolderRenderer {
      */
     public Rect2i updateExclusionZone() {
         int bookmarkDisplayHeight = 0;
-        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
-            bookmarkDisplayHeight = bookmarkManager.getBookmarkDisplay().getHeight();
+        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
+            bookmarkDisplayHeight = folderManager.getBookmarkDisplay().getHeight();
         }
         
         Rect2i lastDrawnArea = renderingManager.updateExclusionZone(
@@ -145,14 +141,14 @@ public class FolderRenderer {
         );
         
         // Update bookmark display bounds if active
-        if (folderManager.hasActiveFolder() && bookmarkManager.getBookmarkDisplay() != null) {
+        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
             Rect2i zone = renderingManager.getExclusionZone();
             int bookmarkDisplayWidth = zone.getWidth() + 10;
-            bookmarkManager.getBookmarkDisplay().updateBounds(
+            folderManager.getBookmarkDisplay().updateBounds(
                 0, 
                 renderingManager.getBookmarkDisplayY(), 
                 bookmarkDisplayWidth,
-                bookmarkManager.getBookmarkDisplay().getHeight()
+                folderManager.getBookmarkDisplay().getHeight()
             );
         }
         

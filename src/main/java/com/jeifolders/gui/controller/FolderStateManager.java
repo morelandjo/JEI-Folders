@@ -24,7 +24,7 @@ import java.util.function.Consumer;
  * Unified manager for folder system functionality, combining:
  * - FolderStateManager - State management
  * - FolderEventManager - Event management
- * - Parts of BookmarkManager - Bookmark operations
+ * - BookmarkManager - Bookmark operations
  * 
  * This consolidation reduces the number of manager classes and clarifies responsibilities.
  */
@@ -76,6 +76,13 @@ public class FolderStateManager {
     
     // Reference to the dialog handler (will be set by FolderButtonSystem)
     private Runnable addFolderDialogHandler = null;
+    
+    // Track last refresh time for performance optimization (from BookmarkManager)
+    private long lastRefreshTime = 0;
+    private static final long MIN_REFRESH_INTERVAL_MS = 100; // Prevent too frequent refreshes
+    
+    // Add recursion guard to prevent stack overflow (from BookmarkManager)
+    private static boolean updatingBookmarkContents = false;
     
     /**
      * Private constructor for singleton pattern
@@ -539,14 +546,109 @@ public class FolderStateManager {
     /**
      * Safely updates the bookmark contents.
      */
-    private void safeUpdateBookmarkContents() {
-        if (bookmarkDisplay != null && hasActiveFolder()) {
-            // Use the helper to get ingredients from the display
-            List<TypedIngredient> bookmarkContents = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
-            
-            // Update cache
-            updateBookmarkContentsCache(bookmarkContents);
+    public void safeUpdateBookmarkContents() {
+        // Prevent recursion
+        if (updatingBookmarkContents) {
+            return;
         }
+        
+        try {
+            updatingBookmarkContents = true;
+            if (bookmarkDisplay != null) {
+                // Use the helper to get ingredients from the display
+                List<TypedIngredient> bookmarkContents = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
+                
+                // Update cache
+                updateBookmarkContentsCache(bookmarkContents);
+            }
+        } finally {
+            updatingBookmarkContents = false;
+        }
+    }
+    
+    /**
+     * Refreshes the bookmark display with the latest data
+     * 
+     * @return true if the refresh was successful
+     */
+    public boolean refreshBookmarkDisplay() {
+        // Check if we have an active folder
+        if (activeFolder == null) {
+            ModLogger.debug("Cannot refresh bookmark display - no active folder");
+            return false;
+        }
+
+        // Check if we need to throttle refreshes
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+            ModLogger.debug("Skipping refresh - too soon since last refresh");
+            return false;
+        }
+        lastRefreshTime = currentTime;
+
+        try {
+            // If the display is null, create a new one
+            if (bookmarkDisplay == null) {
+                if (!createBookmarkDisplay(true)) {
+                    return false;
+                }
+            }
+            // Otherwise just refresh the current display
+            else {
+                Folder currentFolder = activeFolder.getFolder();
+                TypedIngredientHelper.refreshBookmarkDisplay(bookmarkDisplay, currentFolder, folderService);
+                bookmarkDisplay.updateBoundsFromCalculatedPositions();
+            }
+
+            // Update the static state cache for GUI rebuilds
+            safeUpdateBookmarkContents();
+
+            ModLogger.debug("Bookmark display refresh completed successfully");
+            return true;
+        } catch (Exception e) {
+            ModLogger.error("Error refreshing bookmark display: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Handles a click on the bookmark display
+     *
+     * @param mouseX The mouse X position
+     * @param mouseY The mouse Y position
+     * @param button The mouse button
+     * @return true if the click was handled
+     */
+    public boolean handleBookmarkDisplayClick(double mouseX, double mouseY, int button) {
+        if (bookmarkDisplay == null) {
+            return false;
+        }
+
+        // Let the display handle the click, which includes pagination buttons
+        return bookmarkDisplay.handleClick(mouseX, mouseY, button);
+    }
+
+    /**
+     * Handles an ingredient being dropped onto the bookmark system.
+     * This method checks if the ingredient was dropped on a folder button or on the active display.
+     *
+     * @param mouseX The X coordinate of the mouse
+     * @param mouseY The Y coordinate of the mouse
+     * @param ingredient The ingredient that was dropped
+     * @param isFoldersVisible Whether folders are currently visible
+     * @return true if the drop was handled, false otherwise
+     */
+    public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient, boolean isFoldersVisible) {
+        // First check if it's a drop onto a folder button
+        if (isFoldersVisible) {
+            FolderButton targetButton = getFolderButtonAt(mouseX, mouseY);
+            if (targetButton != null) {
+                return handleIngredientDropOnFolder(targetButton.getFolder(), ingredient);
+            }
+        }
+
+        // Then check if it's a drop on the active display
+        return handleIngredientDropOnDisplay(mouseX, mouseY, ingredient);
     }
     
     /**

@@ -46,7 +46,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     // Component managers
     private final FolderStateManager folderManager;
     private final FolderRenderingManager renderingManager;
-    private final BookmarkManager bookmarkManager;
+    // BookmarkManager has been consolidated into FolderStateManager
     
     // Newly refactored components
     private final FolderRenderer renderer;
@@ -106,12 +106,12 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Initialize the component classes
         this.folderManager = FolderStateManager.getInstance();
         this.renderingManager = FolderRenderingManager.getInstance();
-        this.bookmarkManager = new BookmarkManager(folderManager);
+        // BookmarkManager is no longer needed as its functionality is in FolderStateManager
         
         // Create the specialized components
-        this.renderer = new FolderRenderer(folderManager, renderingManager, bookmarkManager);
+        this.renderer = new FolderRenderer(folderManager, renderingManager);
         this.screenManager = new FolderScreenManager(folderManager, this::createFolder);
-        this.inputHandler = new FolderInputHandler(folderManager, bookmarkManager, renderer, this::createFolder);
+        this.inputHandler = new FolderInputHandler(folderManager, renderer, this::createFolder);
         
         // Initialize window size tracking
         Minecraft minecraft = Minecraft.getInstance();
@@ -135,7 +135,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         
         // Restore the state if needed
         if (folderManager.shouldRestoreFromStaticState()) {
-            bookmarkManager.restoreFromStaticState();
+            folderManager.createBookmarkDisplay(true); // This replaces bookmarkManager.restoreFromStaticState()
         }
         
         ModLogger.debug("FolderButtonSystem initialization complete");
@@ -197,8 +197,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     private void updateLayoutPositions() {
         renderingManager.updateLayoutPositions(folderManager.getFolderButtons().size());
         
-        // Update the bookmark manager with the calculated positions
-        bookmarkManager.setCalculatedPositions(
+        // Update the folderManager with the calculated positions
+        folderManager.setBookmarkDisplayPositions(
             renderingManager.getFolderNameY(), 
             renderingManager.getBookmarkDisplayY()
         );
@@ -244,9 +244,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         
         // Update animations for folder buttons
         if (folderManager.areFoldersVisible()) {
-            for (FolderButton button : folderManager.getFolderButtons()) {
-                button.tick();
-            }
+            folderManager.tickFolderButtons();
         }
     }
     
@@ -276,7 +274,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             
             // Force update bookmark display after window resize
             if (folderManager.hasActiveFolder()) {
-                bookmarkManager.refreshBookmarkDisplay();
+                folderManager.refreshBookmarkDisplay();
                 ModLogger.info("Updated bookmark display after resize");
             }
         }
@@ -288,15 +286,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * @return true if the refresh was successful
      */
     public boolean refreshBookmarkDisplay() {
-        return bookmarkManager.refreshBookmarkDisplay();
-    }
-    
-    /**
-     * Gets the bookmark manager instance
-     * @return The bookmark manager
-     */
-    public BookmarkManager getBookmarkManager() {
-        return bookmarkManager;
+        return folderManager.refreshBookmarkDisplay();
     }
     
     /**
