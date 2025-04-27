@@ -2,7 +2,6 @@ package com.jeifolders.gui.controller;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.gui.input.FolderInputHandler;
 import com.jeifolders.gui.interaction.IngredientDropTarget;
 import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.screen.FolderScreenManager;
@@ -49,7 +48,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     // Newly refactored components
     private final FolderRenderer renderer;
-    private final FolderInputHandler inputHandler;
     private final FolderScreenManager screenManager;
     
     // Static initialization tracking
@@ -109,7 +107,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Create the specialized components
         this.renderer = new FolderRenderer(folderManager, layoutService);
         this.screenManager = new FolderScreenManager(folderManager, this::createFolder);
-        this.inputHandler = new FolderInputHandler(folderManager, renderer, this::createFolder);
         
         // Initialize window size tracking
         Minecraft minecraft = Minecraft.getInstance();
@@ -299,8 +296,94 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Delegate mouse click handling to the FolderInputHandler
-        return inputHandler.mouseClicked(mouseX, mouseY, button);
+        if (renderer.getCurrentDeleteButtonX() >= 0 && button == 0 && renderer.isDeleteButtonHovered()) {
+            // Fire delete button clicked event before deleting
+            if (folderManager.hasActiveFolder()) {
+                folderManager.fireDeleteButtonClickedEvent(folderManager.getActiveFolder().getFolder().getId());
+            }
+            
+            folderManager.deleteActiveFolder();
+            return true;
+        }
+
+        if (folderManager.areFoldersVisible()) {
+            for (FolderButton folderButton : folderManager.getFolderButtons()) {
+                if (isMouseOver(mouseX, mouseY, folderButton)) {
+                    // Handle different button types
+                    switch (folderButton.getButtonType()) {
+                        case ADD:
+                            // Add button handled by the folder manager
+                            folderManager.handleAddFolderButtonClick(null);
+                            break;
+                        case NORMAL:
+                            // Normal folder buttons handled by the folder manager
+                            if (folderButton.getFolder() != null) {
+                                folderManager.handleFolderClick(folderButton.getFolder());
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                    return true;
+                }
+            }
+        }
+
+        // Check if the click should be handled by the bookmark display
+        return folderManager.hasActiveFolder() && 
+               folderManager.getBookmarkDisplay() != null &&
+               folderManager.handleBookmarkDisplayClick(mouseX, mouseY, button);
+    }
+    
+    @Override
+    public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
+        if (ingredient == null) {
+            ModLogger.debug("Cannot handle ingredient drop: ingredient is null");
+            return false;
+        }
+        
+        if (!folderManager.areFoldersVisible()) {
+            ModLogger.debug("Cannot handle ingredient drop: folders not visible");
+            return false;
+        }
+        
+        return folderManager.handleIngredientDrop(mouseX, mouseY, ingredient, folderManager.areFoldersVisible());
+    }
+    
+    @Override
+    protected void updateWidgetNarration(@Nonnull NarrationElementOutput narrationOutput) {
+        this.defaultButtonNarrationText(narrationOutput);
+    }
+    
+    @Override
+    public List<FolderButton> getFolderButtons() {
+        return folderManager.getFolderButtons();
+    }
+
+    @Override
+    public boolean isBookmarkAreaAvailable() {
+        return folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null;
+    }
+
+    @Override
+    public Rect2i getBookmarkDisplayArea() {
+        if (folderManager.getBookmarkDisplay() != null) {
+            return new Rect2i(
+                folderManager.getBookmarkDisplay().getX(),
+                folderManager.getBookmarkDisplay().getY(),
+                folderManager.getBookmarkDisplay().getWidth(),
+                folderManager.getBookmarkDisplay().getHeight()
+            );
+        }
+        return new Rect2i(0, 0, 0, 0);
+    }
+    
+    /**
+     * Helper method to check if the mouse is over a button
+     */
+    private boolean isMouseOver(double mouseX, double mouseY, FolderButton button) {
+        return mouseX >= button.getX() && mouseX < button.getX() + button.getWidth() &&
+               mouseY >= button.getY() && mouseY < button.getY() + button.getHeight();
     }
     
     /**
@@ -322,15 +405,11 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         return folder;
     }
     
-    @Override
-    protected void updateWidgetNarration(@Nonnull NarrationElementOutput narrationOutput) {
-        this.defaultButtonNarrationText(narrationOutput);
-    }
-    
-    @Override
-    public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
-        // Delegate ingredient drop handling to the FolderInputHandler
-        return inputHandler.handleIngredientDrop(mouseX, mouseY, ingredient);
+    public void initializeJeiRuntime() {
+        JEIIntegrationFactory.getJEIService().registerRuntimeCallback(runtime -> {
+            // Perform any initialization that depends on the JEI runtime
+            ModLogger.debug("JEI runtime initialized in FolderButtonSystem");
+        });
     }
     
     /**
@@ -350,13 +429,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             
             // Make sure the bookmark display is refreshed
             refreshBookmarkDisplay();
-        });
-    }
-
-    public void initializeJeiRuntime() {
-        JEIIntegrationFactory.getJEIService().registerRuntimeCallback(runtime -> {
-            // Perform any initialization that depends on the JEI runtime
-            ModLogger.debug("JEI runtime initialized in FolderButtonSystem");
         });
     }
     
@@ -401,35 +473,12 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         }
     }
     
-    @Override
-    public List<FolderButton> getFolderButtons() {
-        return inputHandler.getFolderButtons();
-    }
-
-    @Override
-    public boolean isBookmarkAreaAvailable() {
-        return inputHandler.isBookmarkAreaAvailable();
-    }
-
-    @Override
-    public Rect2i getBookmarkDisplayArea() {
-        return inputHandler.getBookmarkDisplayArea();
-    }
-    
     /**
      * Gets the folder renderer instance
      * @return The folder renderer
      */
     public FolderRenderer getRenderer() {
         return renderer;
-    }
-    
-    /**
-     * Gets the input handler instance
-     * @return The input handler
-     */
-    public FolderInputHandler getInputHandler() {
-        return inputHandler;
     }
     
     /**
