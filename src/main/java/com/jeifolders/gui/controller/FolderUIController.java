@@ -2,13 +2,12 @@ package com.jeifolders.gui.controller;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.gui.interaction.IngredientDropTarget;
 import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.screen.FolderScreenManager;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.buttons.FolderButtonTextures;
-import com.jeifolders.gui.view.render.FolderRenderer;
+import com.jeifolders.gui.view.render.UIRenderManager;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
@@ -48,8 +47,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     private final FolderStateManager folderManager;
     private final FolderLayoutService layoutService;
     
-    // Newly refactored components
-    private final FolderRenderer renderer;
+    // Rendering component (directly using UIRenderManager instead of the facade)
+    private final UIRenderManager renderManager;
     private final FolderScreenManager screenManager;
     
     // Static initialization tracking
@@ -106,8 +105,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         this.folderManager = FolderStateManager.getInstance();
         this.layoutService = FolderLayoutService.getInstance();
         
-        // Create the specialized components
-        this.renderer = new FolderRenderer(folderManager, layoutService);
+        // Create the specialized components - directly use UIRenderManager
+        this.renderManager = new UIRenderManager(folderManager, layoutService);
         this.screenManager = new FolderScreenManager(folderManager, this::createFolder);
         
         // Initialize window size tracking
@@ -208,8 +207,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Reset first time loading flag since we're rendering now
         firstTimeLoaded = false;
         
-        // Delegate rendering to the FolderRenderer facade which uses the centralized UIRenderManager
-        renderer.renderWidget(graphics, mouseX, mouseY, partialTick);
+        // Directly use the UIRenderManager instead of the facade
+        renderManager.renderUI(graphics, mouseX, mouseY, partialTick);
         
         // Update the exclusion zone via the layout service
         lastDrawnArea = layoutService.updateExclusionZoneAndUI();
@@ -299,7 +298,9 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // Delegate all mouse click handling to FolderStateManager
-        return folderManager.handleMouseClick(mouseX, mouseY, button, renderer.isDeleteButtonHovered(), renderer.getCurrentDeleteButtonX());
+        return folderManager.handleMouseClick(mouseX, mouseY, button, 
+                                             renderManager.isDeleteButtonHovered(),
+                                             renderManager.getCurrentDeleteButtonX());
     }
     
     @Override
@@ -344,7 +345,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         }
         return new Rect2i(0, 0, 0, 0);
     }
-    
     
     /**
      * Creates a new folder with the given name
@@ -434,11 +434,27 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     }
     
     /**
-     * Gets the folder renderer instance
-     * @return The folder renderer
+     * Gets the current exclusion zone
+     * @return The current exclusion zone
      */
-    public FolderRenderer getRenderer() {
-        return renderer;
+    public Rect2i getExclusionZone() {
+        return renderManager.getExclusionZone();
+    }
+    
+    /**
+     * Checks if the delete button is currently hovered
+     * @return Whether the delete button is hovered
+     */
+    public boolean isDeleteButtonHovered() {
+        return renderManager.isDeleteButtonHovered();
+    }
+    
+    /**
+     * Gets the current X position of the delete button
+     * @return The X position of the delete button
+     */
+    public int getCurrentDeleteButtonX() {
+        return renderManager.getCurrentDeleteButtonX();
     }
     
     /**
