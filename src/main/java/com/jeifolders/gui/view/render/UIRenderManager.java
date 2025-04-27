@@ -1,16 +1,14 @@
 package com.jeifolders.gui.view.render;
 
 import com.jeifolders.data.Folder;
-import com.jeifolders.gui.common.MouseHitUtil;
+import com.jeifolders.gui.common.TooltipRenderer;
 import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.view.buttons.FolderButton;
-import com.jeifolders.gui.view.buttons.FolderButtonTextures;
 import com.jeifolders.gui.view.contents.FolderContentsView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
@@ -84,95 +82,8 @@ public class UIRenderManager {
         }
         
         for (FolderButton button : buttons) {
-            renderFolderButton(button, graphics, mouseX, mouseY, partialTick);
+            FolderButtonRenderer.renderFolderButton(button, graphics, mouseX, mouseY, partialTick);
         }
-    }
-    
-    /**
-     * Renders a single folder button
-     */
-    private void renderFolderButton(FolderButton button, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        int x = button.getX();
-        int y = button.getY();
-        int width = button.getWidth();
-        int height = button.getHeight();
-        boolean isActive = button.isActive();
-        
-        // Check hover state and update the button's hover state
-        boolean isHovered = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
-        button.setHovered(isHovered);
-        
-        // Get hover animation progress
-        float hoverProgress = button.getHoverProgress();
-        boolean isAnimatedHover = hoverProgress > 0.5f;
-        
-        // Render based on button type
-        FolderButton.ButtonType buttonType = button.getButtonType();
-        switch (buttonType) {
-            case NORMAL:
-                // Render folder icon
-                FolderButtonTextures.renderFolderRowIcon(graphics, x, y, isActive, isAnimatedHover);
-                
-                // Render shortened folder name if available
-                renderFolderButtonName(button, graphics);
-                break;
-            case ADD:
-                // Render add button
-                FolderButtonTextures.renderAddFolderIcon(graphics, x, y, isAnimatedHover);
-                break;
-            case DELETE:
-                // Render delete button
-                FolderButtonTextures.renderDeleteFolderIcon(graphics, x, y);
-                break;
-        }
-        
-        // Show tooltip when hovering
-        if (isHovered) {
-            String tooltipText;
-            if (buttonType == FolderButton.ButtonType.ADD) {
-                tooltipText = "tooltip.jeifolders.add_folder";
-            } else if (button.getFolder() != null) {
-                tooltipText = button.getFolder().getName();
-            } else {
-                tooltipText = buttonType.name().toLowerCase();
-            }
-            
-            renderTooltip(graphics, tooltipText, mouseX, mouseY);
-        }
-    }
-    
-    /**
-     * Renders a shortened folder name under the folder button
-     */
-    private void renderFolderButtonName(FolderButton button, GuiGraphics graphics) {
-        Folder folder = button.getFolder();
-        if (folder == null) return;
-        
-        // Get the folder name
-        String folderName = folder.getName();
-        
-        // Get the first 3 characters, or the entire name if it's shorter
-        String shortName = folderName.length() > 3 ? folderName.substring(0, 3) : folderName;
-        
-        int x = button.getX();
-        int y = button.getY();
-        int width = button.getWidth();
-        int height = button.getHeight();
-        
-        // Calculate the position to center the text under the folder icon
-        int textWidth = Minecraft.getInstance().font.width(shortName);
-        int textX = x + (width - textWidth) / 2;
-        int textY = y + height + 2; // Position right below the folder icon
-        
-        // Draw the name with a shadow to make it more readable
-        graphics.drawString(
-            Minecraft.getInstance().font,
-            shortName,
-            textX,
-            textY,
-            0xFFFFFF, // White color
-            true // Draw with shadow
-        );
     }
     
     /**
@@ -207,46 +118,20 @@ public class UIRenderManager {
         );
         
         // Show tooltip with the full name when hovering over a truncated name
-        if (!displayName.equals(fullName) && 
-            MouseHitUtil.isMouseOverRect(mouseX, mouseY, 10, nameY - 4, 
-                                       Minecraft.getInstance().font.width(displayName), 14)) {
-            renderTooltip(graphics, fullName, mouseX, mouseY);
-        }
+        TooltipRenderer.renderTruncatedTextTooltip(
+            graphics, fullName, displayName, 10, nameY, mouseX, mouseY
+        );
         
         // Calculate and position the delete button using the layout service
         int[] deleteButtonPos = layoutService.calculateDeleteButtonPosition();
         int deleteX = deleteButtonPos[0];
         int deleteY = deleteButtonPos[1];
         
-        // Render the delete button
-        FolderButtonTextures.renderDeleteFolderIcon(graphics, deleteX, deleteY);
-        
-        // Check if mouse is over delete button
-        deleteHovered = MouseHitUtil.isMouseOverRect(mouseX, mouseY, deleteX, deleteY, 16, 16);
-        
-        // Show tooltip when hovering over delete button
-        if (deleteHovered) {
-            renderTooltip(graphics, "tooltip.jeifolders.delete_folder", mouseX, mouseY);
-        }
+        // Render the delete button and check if it's hovered
+        deleteHovered = FolderButtonRenderer.isMouseOverDeleteButton(mouseX, mouseY, deleteX, deleteY);
+        FolderButtonRenderer.renderDeleteButton(graphics, deleteX, deleteY, mouseX, mouseY);
         
         currentDeleteButtonX = deleteX;
-    }
-    
-    /**
-     * Helper method to render tooltips with consistent formatting
-     */
-    private void renderTooltip(GuiGraphics graphics, String text, int mouseX, int mouseY) {
-        // Check if text is a translation key
-        boolean isTranslationKey = text.contains(".");
-        Component component = isTranslationKey ? 
-                            Component.translatable(text) : 
-                            Component.literal(text);
-        
-        graphics.renderTooltip(
-            Minecraft.getInstance().font,
-            component,
-            mouseX, mouseY
-        );
     }
     
     /**

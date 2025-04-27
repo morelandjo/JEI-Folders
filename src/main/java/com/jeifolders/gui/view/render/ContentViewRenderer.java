@@ -1,6 +1,5 @@
 package com.jeifolders.gui.view.render;
 
-import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.gui.view.contents.FolderContentsView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -36,31 +35,12 @@ public class ContentViewRenderer {
                 contentsView.getContentsImpl().draw(Minecraft.getInstance(), graphics, mouseX, mouseY, partialTick);
                 
                 // Only draw tooltips if mouse is over the display
-                if (isMouseOverContentsView(contentsView, mouseX, mouseY)) {
+                if (contentsView.isMouseOver(mouseX, mouseY)) {
                     contentsView.getContentsImpl().drawTooltips(Minecraft.getInstance(), graphics, mouseX, mouseY);
                 }
             } catch (Exception e) {
                 ModLogger.error("Error rendering bookmark display: {}", e.getMessage(), e);
             }
         }
-    }
-    
-    /**
-     * Checks if the mouse is over the contents view, using the centralized MouseHitUtil
-     * 
-     * @param contentsView The contents view to check
-     * @param mouseX Mouse X position
-     * @param mouseY Mouse Y position
-     * @return true if the mouse is over the contents view
-     */
-    public boolean isMouseOverContentsView(FolderContentsView contentsView, double mouseX, double mouseY) {
-        return MouseHitUtil.isMouseOverContentView(
-            mouseX, mouseY,
-            contentsView.getX(),
-            contentsView.getY(),
-            contentsView.getWidth(),
-            contentsView.getHeight(),
-            contentsView.getBackgroundArea()
-        );
     }
 }
