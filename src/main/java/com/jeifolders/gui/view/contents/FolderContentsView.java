@@ -10,7 +10,6 @@ import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.Rectangle2i;
-import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.integration.impl.JeiBookmarkAdapter;
 import com.jeifolders.integration.impl.JeiContentsImpl;
 import com.jeifolders.util.ModLogger;
@@ -172,6 +171,7 @@ public class FolderContentsView {
 
     /**
      * Refreshes bookmarks from the active folder.
+     * This now delegates to the central refresh method in FolderStateManager.
      */
     public void refreshBookmarks() {
         if (activeFolder == null) {
@@ -187,38 +187,20 @@ public class FolderContentsView {
 
         try {
             refreshingBookmarks = true;
-            
-            // Store the current page number before refreshing
-            int currentPageNumber = getCurrentPageNumber();
-            
-            List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(
-                TypedIngredientHelper.loadBookmarksFromFolder(folderService, activeFolder.getId(), true)
-            );
-            
-            // Set the ingredients
-            setIngredients(bookmarkIngredients);
-            
-            // Force layout update
-            if (contentsImpl != null) {
-                contentsImpl.updateLayout(true);
-                
-                // Restore the page number
-                if (currentPageNumber > 1 && getPageCount() >= currentPageNumber) {
-                    // Navigate to the previously active page
-                    for (int i = 1; i < currentPageNumber; i++) {
-                        contentsImpl.nextPage();
-                    }
-                    ModLogger.debug("Restored pagination to page {} after refresh", currentPageNumber);
-                }
-            }
-            
-            // Fire a display refreshed event using the proper event manager method
-            eventManager.fireDisplayRefreshedEvent(activeFolder);
-            
-        } catch (Exception e) {
-            ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
+            // Delegate to the centralized method in FolderStateManager
+            eventManager.refreshFolderBookmarks(activeFolder, true);
         } finally {
             refreshingBookmarks = false;
+        }
+    }
+    
+    /**
+     * Force a refresh of the contents and layout
+     */
+    public void forceRefresh() {
+        // Delegate to the centralized method in FolderStateManager
+        if (activeFolder != null) {
+            eventManager.refreshFolderBookmarks(activeFolder, true);
         }
     }
 
@@ -381,10 +363,10 @@ public class FolderContentsView {
 
     /**
      * Handles a click on the bookmark display
-     * Only handles view-specific aspects like pagination and returns position data
-     * Event firing is delegated to FolderStateManager
+     * Only handles view-specific aspects like pagination
+     * All business logic is delegated to FolderStateManager
      * 
-     * @return true if the click was handled
+     * @return true if the click was handled by pagination controls
      */
     public boolean handleClick(double mouseX, double mouseY, int button) {
         // First check pagination buttons which are always part of the view logic
@@ -398,21 +380,7 @@ public class FolderContentsView {
             return true;
         }
         
-        // Check for bookmark clicks to get ingredient information
-        // Note: Event handling is done by FolderStateManager
-        Optional<String> bookmarkKey = getBookmarkKeyAt(mouseX, mouseY);
-        if (bookmarkKey.isPresent() && activeFolder != null) {
-            String key = bookmarkKey.get();
-            
-            // Get the ingredient from the bookmark list
-            BookmarkIngredient bookmark = bookmarkList.getBookmark(key);
-            if (bookmark != null) {
-                // Return true since we determined this is a valid bookmark click
-                // Actual event firing is handled by FolderStateManager
-                return true;
-            }
-        }
-        
+        // Return false to let FolderStateManager handle business logic for bookmark clicks
         return false;
     }
     
@@ -436,68 +404,9 @@ public class FolderContentsView {
             return false;
         }
         
-        ModLogger.info("[DROP-DEBUG] Processing ingredient drop - ingredient: {} ({})", 
-                      ingredient, ingredient.getClass().getName());
-        
-        try {
-            // Try to get the ingredient key
-            String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
-            ModLogger.info("[DROP-DEBUG] Generated ingredient key: {}", key);
-            
-            if (key == null || key.isEmpty()) {
-                ModLogger.warn("[DROP-DEBUG] Failed to generate key for dropped ingredient of type: {}", 
-                              ingredient.getClass().getName());
-                return false;
-            }
-            
-            // Check if the folder already has this bookmark
-            if (activeFolder.containsBookmark(key)) {
-                ModLogger.info("[DROP-DEBUG] Folder already contains bookmark with key: {}", key);
-                return true;
-            }
-            
-            // Add the ingredient to the folder
-            int folderId = activeFolder.getId();
-            ModLogger.info("[DROP-DEBUG] Adding bookmark to folder {} with key: {}", folderId, key);
-            folderService.addBookmark(folderId, key);
-            
-            // Log the success
-            Optional<Folder> folderOpt = folderService.getFolder(folderId);
-            if (folderOpt.isPresent()) {
-                Folder folder = folderOpt.get();
-                List<String> bookmarkKeys = folder.getBookmarkKeys();
-                ModLogger.info("[DROP-DEBUG] Folder '{}' now has {} bookmarks, added key: {}", 
-                              activeFolder.getName(), bookmarkKeys.size(), key);
-            }
-            
-            // Fire bookmark added event
-            if (ingredient instanceof BookmarkIngredient) {
-                ModLogger.info("[DROP-DEBUG] Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
-                eventManager.fireBookmarkAddedEvent(
-                    activeFolder,
-                    (BookmarkIngredient)ingredient,
-                    key
-                );
-            } else {
-                // For non-BookmarkIngredient, just fire a folder contents changed event
-                ModLogger.info("[DROP-DEBUG] Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
-                eventManager.fireFolderContentsChangedEvent(folderId);
-            }
-            
-            // Refresh the display
-            ModLogger.info("[DROP-DEBUG] Refreshing bookmark display after adding ingredient");
-            refreshBookmarks();
-            
-            // Save the changes
-            folderService.saveData();
-            
-            ModLogger.info("[DROP-DEBUG] Successfully handled ingredient drop");
-            return true;
-        } catch (Exception e) {
-            ModLogger.error("[DROP-DEBUG] Error processing ingredient drop: {}", e.getMessage(), e);
-            e.printStackTrace();
-            return false;
-        }
+        // After validation, delegate to the central method in FolderStateManager
+        // which now handles all the shared logic, event firing, and refresh operations
+        return eventManager.handleIngredientDropOnFolder(activeFolder, ingredient);
     }
     
     /**
@@ -555,16 +464,6 @@ public class FolderContentsView {
     public int getWidth() { return width; }
     public int getHeight() { return height; }
     public Rectangle2i getBackgroundArea() { return backgroundArea; }
-    
-    /**
-     * Force a refresh of the contents and layout
-     */
-    public void forceRefresh() {
-        refreshBookmarks();
-        if (contentsImpl != null) {
-            contentsImpl.updateLayout(true);
-        }
-    }
     
     /**
      * Gets the current page number (1-indexed).

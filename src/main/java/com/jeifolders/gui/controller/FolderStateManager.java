@@ -41,7 +41,6 @@ public class FolderStateManager {
     
     // ----- UI State (instance specific) -----
     private FolderButton activeFolder = null;
-    private Folder lastActiveFolder = null;
     private final List<FolderButton> folderButtons = new ArrayList<>();
     private boolean foldersVisible = true;
     
@@ -104,7 +103,6 @@ public class FolderStateManager {
         if (button != null) {
             button.setActive(true);
             activeFolder = button;
-            lastActiveFolder = button.getFolder();
             
             // Update transient state
             lastActiveFolderId = button.getFolder().getId();
@@ -535,14 +533,16 @@ public class FolderStateManager {
     }
     
     /**
-     * Refreshes the bookmark display with the latest data
+     * Centralized method for refreshing bookmark displays.
+     * This method is the single source of truth for bookmark refresh operations.
      * 
+     * @param folder The folder to refresh contents for
+     * @param forceLayout Whether to force layout update
      * @return true if the refresh was successful
      */
-    public boolean refreshBookmarkDisplay() {
-        // Check if we have an active folder
-        if (activeFolder == null) {
-            ModLogger.debug("Cannot refresh bookmark display - no active folder");
+    public boolean refreshFolderBookmarks(Folder folder, boolean forceLayout) {
+        if (folder == null) {
+            ModLogger.debug("Cannot refresh bookmarks - no folder provided");
             return false;
         }
 
@@ -555,28 +555,82 @@ public class FolderStateManager {
         lastRefreshTime = currentTime;
 
         try {
-            // If the display is null, create a new one
+            // Ensure we have a bookmark display
             if (bookmarkDisplay == null) {
                 if (!createBookmarkDisplay(true)) {
                     return false;
                 }
             }
-            // Otherwise just refresh the current display
-            else {
-                Folder currentFolder = activeFolder.getFolder();
-                TypedIngredientHelper.refreshBookmarkDisplay(bookmarkDisplay, currentFolder, folderService);
-                bookmarkDisplay.updateBoundsFromCalculatedPositions();
+            
+            // Store the current page number before refreshing
+            int currentPageNumber = bookmarkDisplay.getCurrentPageNumber();
+            
+            // Load bookmarks from the folder and convert to ingredients
+            List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(
+                TypedIngredientHelper.loadBookmarksFromFolder(folderService, folder.getId(), true)
+            );
+            
+            // Set active folder and ingredients
+            bookmarkDisplay.setActiveFolder(folder);
+            bookmarkDisplay.setIngredients(bookmarkIngredients);
+            
+            // Force layout update if requested
+            if (forceLayout && bookmarkDisplay.getContentsImpl() != null) {
+                bookmarkDisplay.getContentsImpl().updateLayout(true);
+                
+                // Restore pagination
+                if (currentPageNumber > 1 && bookmarkDisplay.getPageCount() >= currentPageNumber) {
+                    bookmarkDisplay.goToPage(currentPageNumber);
+                    ModLogger.debug("Restored pagination to page {} after refresh", currentPageNumber);
+                }
             }
-
-            // Update the static state cache for GUI rebuilds
+            
+            // Update bounds
+            bookmarkDisplay.updateBoundsFromCalculatedPositions();
+            
+            // Update cache for GUI rebuilds
             safeUpdateBookmarkContents();
-
-            ModLogger.debug("Bookmark display refresh completed successfully");
+            
+            // Fire event
+            fireDisplayRefreshedEvent(folder);
+            
+            ModLogger.debug("Folder bookmarks refresh completed successfully for folder: {}", folder.getName());
             return true;
         } catch (Exception e) {
-            ModLogger.error("Error refreshing bookmark display: {}", e.getMessage(), e);
+            ModLogger.error("Error refreshing folder bookmarks: {}", e.getMessage(), e);
             return false;
         }
+    }
+    
+    /**
+     * Refreshes the current active folder's bookmarks
+     * 
+     * @param forceLayout Whether to force layout update
+     * @return true if the refresh was successful
+     */
+    public boolean refreshActiveFolder(boolean forceLayout) {
+        if (!hasActiveFolder()) {
+            ModLogger.debug("Cannot refresh active folder - no active folder");
+            return false;
+        }
+        
+        return refreshFolderBookmarks(activeFolder.getFolder(), forceLayout);
+    }
+
+    /**
+     * Refreshes the bookmark display with the latest data
+     * 
+     * @return true if the refresh was successful
+     */
+    public boolean refreshBookmarkDisplay() {
+        // Check if we have an active folder
+        if (activeFolder == null) {
+            ModLogger.debug("Cannot refresh bookmark display - no active folder");
+            return false;
+        }
+
+        // Delegate to our centralized refresh method
+        return refreshFolderBookmarks(activeFolder.getFolder(), true);
     }
 
     /**
@@ -600,6 +654,11 @@ public class FolderStateManager {
         // If the UI handled it, we're done
         if (handledByDisplay) {
             return true;
+        }
+        
+        // Check if the mouse is over the display area
+        if (!bookmarkDisplay.isMouseOver(mouseX, mouseY)) {
+            return false;
         }
         
         // Check for ingredient clicks that need business logic processing
@@ -643,144 +702,11 @@ public class FolderStateManager {
     }
     
     /**
-     * Gets the folder data service instance
-     */
-    public FolderStorageService getFolderService() {
-        return folderService;
-    }
-    
-    public List<FolderButton> getFolderButtons() {
-        return folderButtons;
-    }
-    
-    public FolderButton getActiveFolder() {
-        return activeFolder;
-    }
-    
-    public boolean hasActiveFolder() {
-        return activeFolder != null;
-    }
-    
-    public Integer getLastActiveFolderId() {
-        return lastActiveFolderId;
-    }
-    
-    public List<TypedIngredient> getLastBookmarkContents() {
-        return lastBookmarkContents;
-    }
-    
-    public Folder getLastActiveFolder() {
-        return lastActiveFolder;
-    }
-    
-    public void setLastActiveFolder(Folder folder) {
-        this.lastActiveFolder = folder;
-    }
-    
-    public FolderContentsView getBookmarkDisplay() {
-        if (bookmarkDisplay == null) {
-            createBookmarkDisplay(true);
-        }
-        return bookmarkDisplay;
-    }
-    
-    /**
-     * Handles a click on the "Add Folder" button.
-     * This method is used as a click handler for the "Add Folder" button.
-     * Since the button has no associated folder, the parameter is ignored.
+     * Central method for handling ingredient drops on a folder.
+     * This consolidates the logic previously duplicated across multiple classes.
      * 
-     * @param ignored This parameter is ignored since the Add button has no folder
-     */
-    public void handleAddFolderButtonClick(Folder ignored) {
-        // Fire event for other listeners
-        fireAddButtonClickedEvent();
-        
-        // Delegate dialog handling to the UI system
-        if (addFolderDialogHandler != null) {
-            addFolderDialogHandler.run();
-        } else {
-            ModLogger.error("Add folder dialog handler is not set");
-        }
-    }
-    
-    /**
-     * Sets the handler for showing the add folder dialog
-     * This should be called by the UI system that manages dialogs
-     * 
-     * @param handler The runnable that will show the add folder dialog
-     */
-    public void setAddFolderDialogHandler(Runnable handler) {
-        this.addFolderDialogHandler = handler;
-    }
-    
-    /**
-     * Initializes folder buttons based on the data from folder service
-     * 
-     * @param layoutService The layout service to use for positioning
-     * @param clickHandler The handler for folder clicks
-     * @return The button to activate (if any)
-     */
-    public FolderButton initializeFolderButtons(FolderLayoutService layoutService, Consumer<Folder> clickHandler) {
-        FolderButton buttonToActivate = null;
-        
-        // Create and position the folder buttons
-        List<FolderButton> buttons = layoutService.createAndPositionFolderButtons();
-        
-        // Find button to activate based on the last active folder ID
-        if (lastActiveFolderId != null) {
-            for (FolderButton button : buttons) {
-                if (button.getButtonType() == FolderButton.ButtonType.NORMAL && 
-                    button.getFolder() != null && 
-                    button.getFolder().getId() == lastActiveFolderId) {
-                    buttonToActivate = button;
-                    break;
-                }
-            }
-        }
-        
-        // Update folder button references and click handlers
-        for (FolderButton button : buttons) {
-            if (button.getButtonType() != FolderButton.ButtonType.ADD) {
-                button.setClickHandler(clickHandler);
-            }
-        }
-        
-        return buttonToActivate;
-    }
-    
-    /**
-     * Handles a click on a folder
-     * 
-     * @param folder The folder that was clicked
-     */
-    public void handleFolderClick(Folder folder) {
-        if (folder == null) {
-            return;
-        }
-        
-        // Find the button for the clicked folder
-        for (FolderButton button : folderButtons) {
-            if (button.getButtonType() == FolderButton.ButtonType.NORMAL && 
-                button.getFolder() != null && 
-                button.getFolder().getId() == folder.getId()) {
-                
-                if (button.isActive()) {
-                    // If clicking the active folder again, deactivate it
-                    deactivateActiveFolder();
-                } else {
-                    // Otherwise activate the clicked folder
-                    setActiveFolder(button);
-                }
-                break;
-            }
-        }
-    }
-    
-    /**
-     * Handles an ingredient being dropped on a specific folder
-     * 
-     * @param folder The folder the ingredient was dropped on
-     * @param ingredient The ingredient that was dropped
+     * @param folder The folder to add the ingredient to
+     * @param ingredient The ingredient being dropped
      * @return true if the drop was handled
      */
     public boolean handleIngredientDropOnFolder(Folder folder, Object ingredient) {
@@ -806,11 +732,27 @@ public class FolderStateManager {
             // Add the bookmark to the folder
             folderService.addBookmark(folder.getId(), key);
             
-            // Fire folder contents changed event
-            fireFolderContentsChangedEvent(folder);
+            // Fire appropriate event based on ingredient type
+            if (ingredient instanceof BookmarkIngredient) {
+                ModLogger.debug("Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
+                fireBookmarkAddedEvent(
+                    folder,
+                    (BookmarkIngredient)ingredient,
+                    key
+                );
+            } else {
+                // For non-BookmarkIngredient, fire a folder contents changed event
+                ModLogger.debug("Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
+                fireFolderContentsChangedEvent(folder);
+            }
             
-            // Save the data
+            // Save the changes
             folderService.saveData();
+            
+            // If this is the active folder, refresh the display
+            if (hasActiveFolder() && activeFolder.getFolder().getId() == folder.getId()) {
+                refreshActiveFolder(true);
+            }
             
             ModLogger.debug("Successfully added bookmark to folder: {}", folder.getName());
             return true;
@@ -923,5 +865,138 @@ public class FolderStateManager {
         return hasActiveFolder() && 
                getBookmarkDisplay() != null &&
                handleBookmarkDisplayClick(mouseX, mouseY, button);
+    }
+
+    /**
+     * Gets the folder data service instance
+     */
+    public FolderStorageService getFolderService() {
+        return folderService;
+    }
+    
+    /**
+     * Gets the list of folder buttons
+     */
+    public List<FolderButton> getFolderButtons() {
+        return folderButtons;
+    }
+    
+    /**
+     * Gets the currently active folder button
+     */
+    public FolderButton getActiveFolder() {
+        return activeFolder;
+    }
+    
+    /**
+     * Checks if there is an active folder
+     */
+    public boolean hasActiveFolder() {
+        return activeFolder != null;
+    }
+    
+    /**
+     * Gets the bookmark display, creating it if necessary
+     */
+    public FolderContentsView getBookmarkDisplay() {
+        if (bookmarkDisplay == null) {
+            createBookmarkDisplay(true);
+        }
+        return bookmarkDisplay;
+    }
+    
+    /**
+     * Handles a click on the "Add Folder" button.
+     * This method is used as a click handler for the "Add Folder" button.
+     * Since the button has no associated folder, the parameter is ignored.
+     * 
+     * @param ignored This parameter is ignored since the Add button has no folder
+     */
+    public void handleAddFolderButtonClick(Folder ignored) {
+        // Fire event for other listeners
+        fireAddButtonClickedEvent();
+        
+        // Delegate dialog handling to the UI system
+        if (addFolderDialogHandler != null) {
+            addFolderDialogHandler.run();
+        } else {
+            ModLogger.error("Add folder dialog handler is not set");
+        }
+    }
+    
+    /**
+     * Handles a click on a folder
+     * 
+     * @param folder The folder that was clicked
+     */
+    public void handleFolderClick(Folder folder) {
+        if (folder == null) {
+            return;
+        }
+        
+        // Find the button for the clicked folder
+        for (FolderButton button : folderButtons) {
+            if (button.getButtonType() == FolderButton.ButtonType.NORMAL && 
+                button.getFolder() != null && 
+                button.getFolder().getId() == folder.getId()) {
+                
+                if (button.isActive()) {
+                    // If clicking the active folder again, deactivate it
+                    deactivateActiveFolder();
+                } else {
+                    // Otherwise activate the clicked folder
+                    setActiveFolder(button);
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Initializes folder buttons based on the data from folder service
+     * 
+     * @param layoutService The layout service to use for positioning
+     * @param clickHandler The handler for folder clicks
+     * @return The button to activate (if any)
+     */
+    public FolderButton initializeFolderButtons(FolderLayoutService layoutService, Consumer<Folder> clickHandler) {
+        FolderButton buttonToActivate = null;
+        
+        // Create and position the folder buttons
+        List<FolderButton> buttons = layoutService.createAndPositionFolderButtons();
+        
+        // Find button to activate based on the last active folder ID
+        if (lastActiveFolderId != null) {
+            for (FolderButton button : buttons) {
+                if (button.getButtonType() == FolderButton.ButtonType.NORMAL && 
+                    button.getFolder() != null && 
+                    button.getFolder().getId() == lastActiveFolderId) {
+                    buttonToActivate = button;
+                    break;
+                }
+            }
+        }
+        
+        // Update folder button references and click handlers
+        for (FolderButton button : buttons) {
+            if (button.getButtonType() != FolderButton.ButtonType.ADD) {
+                button.setClickHandler(clickHandler);
+            }
+        }
+        
+        // Set the buttons in the state manager
+        setFolderButtons(buttons);
+        
+        return buttonToActivate;
+    }
+
+    /**
+     * Sets the handler for showing the add folder dialog
+     * This should be called by the UI system that manages dialogs
+     * 
+     * @param handler The runnable that will show the add folder dialog
+     */
+    public void setAddFolderDialogHandler(Runnable handler) {
+        this.addFolderDialogHandler = handler;
     }
 }
