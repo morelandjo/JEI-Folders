@@ -2,16 +2,12 @@ package com.jeifolders.gui.layout;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.gui.common.ExclusionHandler;
-import com.jeifolders.gui.common.LayoutConstants;
 import com.jeifolders.gui.view.buttons.FolderButton;
-import com.jeifolders.gui.view.buttons.FolderButtonTextures;
-import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
 import com.jeifolders.ui.interaction.FolderInteractionHandler;
 import com.jeifolders.util.ModLogger;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.Rect2i;
 
 import java.util.ArrayList;
@@ -19,58 +15,29 @@ import java.util.List;
 
 /**
  * Centralized service for managing all UI layout calculations.
- * Handles positioning of folders, buttons, and other UI elements.
- * Provides a responsive layout that adapts to screen size changes.
+ * Delegates core responsibilities to specialized components:
+ * - LayoutCalculator: Core position/dimension calculations
+ * - ExclusionManager: Manages JEI exclusion zones
+ * - LayoutCacheService: Handles caching of layout data
  */
 public class FolderLayoutService {
     // Singleton instance
     private static FolderLayoutService instance;
-
-    // Layout constants
-    private static final int PADDING_X = 10;
-    private static final int PADDING_Y = 10;
-    private static final int ICON_WIDTH = FolderButtonTextures.ICON_WIDTH;
-    private static final int ICON_HEIGHT = FolderButtonTextures.ICON_HEIGHT;
-    private static final int FOLDER_SPACING_Y = 30;
-    private static final int FOLDER_SPACING_X = 2;
-    private static final int EXCLUSION_PADDING = 10;
-    private static final int LAYOUT_RECALC_INTERVAL_MS = 1000;
-
-    // Screen dimensions caching
-    private int cachedScreenWidth = -1;
-    private int cachedScreenHeight = -1;
-    private long lastCalculationTime = 0;
-
-    // Layout calculations
-    private int foldersPerRow = 1;
-    private int cachedFolderCount = -1;
-    private int cachedRows = -1;
-    private int cachedGridWidth = -1;
-    private int cachedMaxExclusionWidth = -1;
-
-    // Position caching
-    private int[] cachedPositions = new int[100 * 2]; // Cache for up to 100 folder positions
-    private boolean positionsCacheValid = false;
+    
+    // Component architecture - new structure
+    private final LayoutCalculator layoutCalculator;
+    private final ExclusionManager exclusionManager;
+    private final LayoutCacheService cacheService;
     
     // Calculated positions
     private int calculatedNameY = -1;
     private int calculatedBookmarkDisplayY = -1;
     private int nameYOffset = 0;
-    private int[] cachedDeleteButtonPosition = new int[2];
-    private boolean deleteButtonCacheValid = false;
-    
-    // Exclusion zone
-    private final ExclusionHandler exclusionHandler = new ExclusionHandler();
-    private Rect2i exclusionZone = new Rect2i(0, 0, 0, 0);
-    private boolean exclusionZoneCacheValid = false;
-    private boolean lastFoldersVisible = true;
-    private boolean lastHasActiveFolder = false;
-    private int lastBookmarkDisplayHeight = 0;
     
     // State
     private boolean needsRebuild = true;
     
-    // Component architecture
+    // Component architecture - backward compatibility
     private FolderManager folderManager;
     private BookmarkDisplayManager displayManager;
     private FolderInteractionHandler interactionHandler;
@@ -79,6 +46,11 @@ public class FolderLayoutService {
      * Private constructor for singleton pattern
      */
     private FolderLayoutService() {
+        // Initialize new components
+        this.layoutCalculator = new LayoutCalculator();
+        this.cacheService = new LayoutCacheService();
+        this.exclusionManager = new ExclusionManager(layoutCalculator);
+        
         calculateInitialLayout();
     }
     
@@ -121,7 +93,7 @@ public class FolderLayoutService {
      * Performs initial layout calculations
      */
     private void calculateInitialLayout() {
-        calculateFoldersPerRow();
+        layoutCalculator.calculateFoldersPerRow();
     }
     
     /**
@@ -130,37 +102,15 @@ public class FolderLayoutService {
      * @return true if screen dimensions have changed or cache is invalid
      */
     public boolean needsRecalculation() {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.getWindow() == null) return true;
-        
-        int currentWidth = minecraft.getWindow().getGuiScaledWidth();
-        int currentHeight = minecraft.getWindow().getGuiScaledHeight();
-        long currentTime = System.currentTimeMillis();
-        
-        boolean changed = currentWidth != cachedScreenWidth || 
-                         currentHeight != cachedScreenHeight ||
-                         currentTime - lastCalculationTime > LAYOUT_RECALC_INTERVAL_MS;
-        
-        if (changed) {
-            cachedScreenWidth = currentWidth;
-            cachedScreenHeight = currentHeight;
-            lastCalculationTime = currentTime;
-            invalidateAllCaches();
-        }
-        
-        return changed;
+        return cacheService.needsRecalculation();
     }
     
     /**
      * Invalidates all cached calculations
      */
     public void invalidateAllCaches() {
-        positionsCacheValid = false;
-        deleteButtonCacheValid = false;
-        exclusionZoneCacheValid = false;
-        cachedRows = -1;
-        cachedGridWidth = -1;
-        cachedMaxExclusionWidth = -1;
+        cacheService.invalidateAllCaches();
+        exclusionManager.invalidateCache();
     }
     
     /**
@@ -189,36 +139,8 @@ public class FolderLayoutService {
      * based on the current screen width
      */
     public void calculateFoldersPerRow() {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen == null) {
-            foldersPerRow = 1;
-            return;
-        }
-
-        // Only recalculate if screen dimensions changed
-        if (!needsRecalculation() && foldersPerRow > 0) {
-            return;
-        }
-
-        // Calculate available width and determine folders per row
-        int screenWidth = minecraft.getWindow().getGuiScaledWidth();
-        int guiLeft = LayoutConstants.calculateGuiLeft(screenWidth);
-
-        int availableWidth = Math.max(1, guiLeft - PADDING_X);
-        int folderWidth = ICON_WIDTH + (2 * FOLDER_SPACING_X);
-        
-        int newFoldersPerRow = Math.max(1, availableWidth / folderWidth);
-        
-        if (newFoldersPerRow != foldersPerRow) {
-            foldersPerRow = newFoldersPerRow;
-            invalidateAllCaches();
-        }
-        
-        // Calculate and cache maxExclusionWidth
-        cachedMaxExclusionWidth = LayoutConstants.calculateMaxWidthBeforeGui(screenWidth);
-        
-        ModLogger.debug("Layout calculation: screen width: {}, available width: {}, folders per row: {}", 
-                      screenWidth, availableWidth, foldersPerRow);
+        // Delegate to the layout calculator
+        layoutCalculator.calculateFoldersPerRow();
     }
     
     /**
@@ -227,7 +149,7 @@ public class FolderLayoutService {
      * @return The current number of folders that can fit in a row
      */
     public int getFoldersPerRow() {
-        return foldersPerRow;
+        return layoutCalculator.getFoldersPerRow();
     }
     
     /**
@@ -238,30 +160,18 @@ public class FolderLayoutService {
      */
     public int[] calculateFolderPosition(int index) {
         // Use cached value if possible
-        if (positionsCacheValid && index * 2 < cachedPositions.length) {
-            int x = cachedPositions[index * 2];
-            int y = cachedPositions[index * 2 + 1];
-            
-            // Check if this position has been calculated
-            if (x > 0 || y > 0) {
-                return new int[] {x, y};
-            }
+        int[] cachedPosition = cacheService.getCachedPosition(index);
+        if (cachedPosition != null) {
+            return cachedPosition;
         }
         
-        // Calculate position
-        int row = index / foldersPerRow;
-        int col = index % foldersPerRow;
+        // Calculate via the layout calculator
+        int[] position = layoutCalculator.calculateFolderPosition(index);
         
-        int x = PADDING_X + col * (ICON_WIDTH + (2 * FOLDER_SPACING_X));
-        int y = PADDING_Y + row * FOLDER_SPACING_Y;
+        // Cache the result
+        cacheService.setCachedPosition(index, position[0], position[1]);
         
-        // Cache result if possible
-        if (index * 2 < cachedPositions.length) {
-            cachedPositions[index * 2] = x;
-            cachedPositions[index * 2 + 1] = y;
-        }
-        
-        return new int[] {x, y};
+        return position;
     }
     
     /**
@@ -281,15 +191,14 @@ public class FolderLayoutService {
      * @return Number of rows including the add button
      */
     private int calculateRows(int folderCount) {
-        if (cachedRows >= 0 && folderCount == cachedFolderCount) {
-            return cachedRows;
+        // Use cached value if possible
+        if (cacheService.hasRowsCached(folderCount)) {
+            return cacheService.getCachedRows();
         }
         
-        // Calculate how many rows we need, including the Add button
-        int effectiveButtonCount = folderCount + 1;
-        cachedRows = (int)Math.ceil((double)effectiveButtonCount / foldersPerRow);
-        cachedFolderCount = folderCount;
-        return cachedRows;
+        int rows = layoutCalculator.calculateRows(folderCount);
+        cacheService.setCachedRows(folderCount, rows);
+        return rows;
     }
     
     /**
@@ -300,10 +209,10 @@ public class FolderLayoutService {
     public void updateLayoutPositions(int folderCount) {
         int rows = calculateRows(folderCount);
         
-        nameYOffset = rows * FOLDER_SPACING_Y;
-        calculatedNameY = PADDING_Y + nameYOffset + 5;
-        // Reduce the vertical offset from 35 to 25 to position the bookmarks closer to the folder name
-        calculatedBookmarkDisplayY = calculatedNameY + 25;
+        // Calculate vertical positions
+        nameYOffset = rows * layoutCalculator.getFolderSpacingY();
+        calculatedNameY = layoutCalculator.calculateFolderNameY(rows);
+        calculatedBookmarkDisplayY = layoutCalculator.calculateBookmarkDisplayY(calculatedNameY);
         
         // Debug logging for position calculation
         ModLogger.debug("[POSITION-DEBUG] FolderLayoutService calculated positions: rows={}, nameYOffset={}, nameY={}, bookmarkDisplayY={}", 
@@ -318,8 +227,8 @@ public class FolderLayoutService {
         }
         
         // Invalidate caches that depend on these positions
-        deleteButtonCacheValid = false;
-        exclusionZoneCacheValid = false;
+        cacheService.invalidateDeleteButtonCache();
+        exclusionManager.invalidateCache();
     }
     
     /**
@@ -327,9 +236,8 @@ public class FolderLayoutService {
      */
     public void updateLayoutPositions() {
         // Calculate folder name and bookmark display positions
-        calculatedNameY = PADDING_Y + nameYOffset + 5;
-        // Reduce the vertical offset from 35 to 25 to position the bookmarks closer to the folder name
-        calculatedBookmarkDisplayY = calculatedNameY + 25;
+        calculatedNameY = layoutCalculator.getPaddingY() + nameYOffset + 5;
+        calculatedBookmarkDisplayY = layoutCalculator.calculateBookmarkDisplayY(calculatedNameY);
         
         ModLogger.debug("[POSITION-DEBUG-TRACE] Calculated positions in FolderLayoutService: nameY={}, displayY={}, nameYOffset={}", 
                       calculatedNameY, calculatedBookmarkDisplayY, nameYOffset);
@@ -340,8 +248,8 @@ public class FolderLayoutService {
         }
         
         // Invalidate dependent caches
-        deleteButtonCacheValid = false;
-        exclusionZoneCacheValid = false;
+        cacheService.invalidateDeleteButtonCache();
+        exclusionManager.invalidateCache();
     }
     
     /**
@@ -357,7 +265,7 @@ public class FolderLayoutService {
         if (displayManager != null && folderManager != null && folderManager.getUIStateManager().hasActiveFolder()) {
             displayManager.refreshActiveFolder(true);
             ModLogger.debug("[POSITION-DEBUG-TRACE] Forced refresh of active folder display");
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Position recalculation completed with current folders per row: {}", foldersPerRow);
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Position recalculation completed with current folders per row: {}", layoutCalculator.getFoldersPerRow());
         } else {
             ModLogger.debug("[POSITION-DEBUG-TRACE] No active folder to refresh or components are null");
         }
@@ -398,9 +306,10 @@ public class FolderLayoutService {
             }
             
             // Update the exclusion zone
-            updateExclusionZone(folderCount, foldersVisible, hasActiveFolder, bookmarkDisplayHeight);
+            exclusionManager.updateExclusionZone(folderCount, foldersVisible, hasActiveFolder, bookmarkDisplayHeight);
             ModLogger.debug("[POSITION-DEBUG-TRACE] Updated exclusion zone - width: {}, height: {}", 
-                           exclusionZone.getWidth(), exclusionZone.getHeight());
+                           exclusionManager.getExclusionZone().getWidth(), 
+                           exclusionManager.getExclusionZone().getHeight());
         } else {
             ModLogger.debug("[POSITION-DEBUG-TRACE] Could not update exclusion zone - folderManager is null");
         }
@@ -413,7 +322,7 @@ public class FolderLayoutService {
         
         // Mark as needing rebuild to ensure full UI refresh
         markNeedsRebuild();
-        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update completed with folders per row: {}", foldersPerRow);
+        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update completed with folders per row: {}", layoutCalculator.getFoldersPerRow());
     }
     
     /**
@@ -422,12 +331,15 @@ public class FolderLayoutService {
      * @return Width of the folder grid
      */
     private int calculateGridWidth() {
+        // Use cached value if possible
+        int cachedGridWidth = cacheService.getCachedGridWidth();
         if (cachedGridWidth > 0) {
             return cachedGridWidth;
         }
         
-        cachedGridWidth = foldersPerRow * (ICON_WIDTH + (2 * FOLDER_SPACING_X));
-        return cachedGridWidth;
+        int gridWidth = layoutCalculator.calculateGridWidth();
+        cacheService.setCachedGridWidth(gridWidth);
+        return gridWidth;
     }
     
     /**
@@ -436,37 +348,20 @@ public class FolderLayoutService {
      * @return int[] array with [x, y] coordinates
      */
     public int[] calculateDeleteButtonPosition() {
-        if (deleteButtonCacheValid) {
-            return cachedDeleteButtonPosition;
+        // Use cached value if possible
+        int[] cachedPosition = cacheService.getCachedDeleteButtonPosition();
+        if (cachedPosition != null) {
+            return cachedPosition;
         }
         
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen == null) {
-            cachedDeleteButtonPosition[0] = -1;
-            cachedDeleteButtonPosition[1] = -1;
-            return cachedDeleteButtonPosition;
-        }
+        // Calculate through the layout calculator
+        int gridWidth = calculateGridWidth();
+        int[] position = layoutCalculator.calculateDeleteButtonPosition(calculatedNameY, gridWidth);
         
-        // Use cached maxExclusionWidth if available
-        int maxExclusionWidth = cachedMaxExclusionWidth > 0 ? 
-            cachedMaxExclusionWidth : LayoutConstants.calculateMaxWidthBeforeGui(minecraft.getWindow().getGuiScaledWidth());
-            
-        maxExclusionWidth = Math.max(40, maxExclusionWidth - 10);
+        // Cache the result
+        cacheService.setCachedDeleteButtonPosition(position[0], position[1]);
         
-        // Calculate exclusion width
-        int exclusionWidth = Math.min(maxExclusionWidth, ICON_WIDTH + (EXCLUSION_PADDING * 2));
-        if (foldersPerRow > 1) {
-            int gridWidth = calculateGridWidth();
-            exclusionWidth = Math.min(maxExclusionWidth, 
-                                    Math.max(exclusionWidth, gridWidth + (EXCLUSION_PADDING * 2)));
-        }
-        
-        // Position the delete button at the right edge of the exclusion zone
-        cachedDeleteButtonPosition[0] = 5 + exclusionWidth - 16 - 5;
-        cachedDeleteButtonPosition[1] = calculatedNameY - 4;
-        
-        deleteButtonCacheValid = true;
-        return cachedDeleteButtonPosition;
+        return position;
     }
     
     /**
@@ -480,81 +375,9 @@ public class FolderLayoutService {
      */
     public Rect2i updateExclusionZone(int folderCount, boolean foldersVisible, 
                                      boolean hasActiveFolder, int bookmarkDisplayHeight) {
-        // Check if we can use the cached value
-        if (exclusionZoneCacheValid && 
-            folderCount == cachedFolderCount &&
-            foldersVisible == lastFoldersVisible && 
-            hasActiveFolder == lastHasActiveFolder &&
-            bookmarkDisplayHeight == lastBookmarkDisplayHeight) {
-            return exclusionZone;
-        }
-        
-        // Update cache tracking variables
-        lastFoldersVisible = foldersVisible;
-        lastHasActiveFolder = hasActiveFolder;
-        lastBookmarkDisplayHeight = bookmarkDisplayHeight;
-        
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen == null) {
-            exclusionZone = new Rect2i(0, 0, 0, 0);
-            exclusionZoneCacheValid = true;
-            return exclusionZone;
-        }
-
-        // Use cached max exclusion width if available
-        int maxExclusionWidth = cachedMaxExclusionWidth > 0 ? 
-            cachedMaxExclusionWidth : LayoutConstants.calculateMaxWidthBeforeGui(minecraft.getWindow().getGuiScaledWidth());
-        
-        // Calculate width of the exclusion zone
-        int exclusionWidth;
-        
-        if (foldersVisible && folderCount > 0 && foldersPerRow > 1) {
-            // For multiple folders, calculate based on the grid width
-            int gridWidth = calculateGridWidth();
-            
-            // Add padding to the calculated width
-            exclusionWidth = Math.min(maxExclusionWidth, 
-                                    gridWidth + (2 * EXCLUSION_PADDING));
-        } else {
-            // For single column or no folders, just use the button width plus padding
-            exclusionWidth = Math.min(maxExclusionWidth, 
-                                    ICON_WIDTH + (2 * EXCLUSION_PADDING));
-        }
-
-        // Calculate the height of the exclusion zone
-        int exclusionHeight;
-        
-        if (foldersVisible && folderCount > 0) {
-            // Use cached rows if available
-            int rows = calculateRows(folderCount);
-            
-            // Height should include the rows of buttons
-            int buttonsHeight = rows * FOLDER_SPACING_Y;
-            
-            // Add the height for active folder name and optionally the bookmark display
-            if (hasActiveFolder) {
-                exclusionHeight = buttonsHeight + 20; // For folder name
-                
-                // Add bookmark display height if it exists
-                if (bookmarkDisplayHeight > 0) {
-                    exclusionHeight += bookmarkDisplayHeight + 10; // Add padding
-                }
-            } else {
-                exclusionHeight = buttonsHeight + 10; // Just add some padding
-            }
-        } else {
-            // If folders aren't visible or there are no folders, minimal height
-            exclusionHeight = ICON_HEIGHT + (2 * EXCLUSION_PADDING);
-        }
-        
-        // Create the exclusion zone
-        exclusionZone = new Rect2i(0, 0, exclusionWidth, exclusionHeight);
-        
-        // Update the ExclusionHandler
-        updateExclusionHandler(exclusionZone);
-        
-        exclusionZoneCacheValid = true;
-        return exclusionZone;
+        // Delegate to the exclusion manager
+        return exclusionManager.updateExclusionZone(
+            folderCount, foldersVisible, hasActiveFolder, bookmarkDisplayHeight);
     }
     
     /**
@@ -585,8 +408,8 @@ public class FolderLayoutService {
             }
         }
         
-        // Update the exclusion zone
-        Rect2i lastDrawnArea = updateExclusionZone(
+        // Update the exclusion zone via the manager
+        Rect2i lastDrawnArea = exclusionManager.updateExclusionZone(
             buttonCount, 
             foldersVisible, 
             hasActiveFolder,
@@ -608,30 +431,14 @@ public class FolderLayoutService {
      * @return The current exclusion zone as a Rect2i
      */
     public Rect2i getExclusionZone() {
-        return exclusionZone;
-    }
-    
-    /**
-     * Updates the exclusion handler with the current exclusion zone
-     * 
-     * @param zone The exclusion zone to update
-     */
-    private void updateExclusionHandler(Rect2i zone) {
-        if (zone.getWidth() <= 0 || zone.getHeight() <= 0) {
-            exclusionHandler.clearExclusionAreas();
-            return;
-        }
-        
-        exclusionHandler.clearExclusionAreas();
-        Rectangle2i rect = new Rectangle2i(zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());
-        exclusionHandler.addExclusionArea(rect);
+        return exclusionManager.getExclusionZone();
     }
     
     /**
      * Gets the exclusion handler for JEI integration
      */
     public ExclusionHandler getExclusionHandler() {
-        return exclusionHandler;
+        return exclusionManager.getExclusionHandler();
     }
     
     /**
@@ -704,5 +511,26 @@ public class FolderLayoutService {
      */
     public int getBookmarkDisplayY() {
         return calculatedBookmarkDisplayY;
+    }
+    
+    /**
+     * Gets the layout calculator
+     */
+    public LayoutCalculator getLayoutCalculator() {
+        return layoutCalculator;
+    }
+    
+    /**
+     * Gets the exclusion manager
+     */
+    public ExclusionManager getExclusionManager() {
+        return exclusionManager;
+    }
+    
+    /**
+     * Gets the cache service
+     */
+    public LayoutCacheService getCacheService() {
+        return cacheService;
     }
 }
