@@ -1,10 +1,10 @@
 package com.jeifolders.gui.view.contents;
 
 import com.jeifolders.data.Folder;
-import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.IngredientService;
+import com.jeifolders.events.FolderEventDispatcher;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.gui.overlay.IIngredientGridSource;
@@ -23,7 +23,7 @@ public class FolderBookmarkList {
     private Folder folder;
     private List<BookmarkIngredient> ingredients = new ArrayList<>();
     private final Map<String, BookmarkIngredient> ingredientMap = new HashMap<>();
-    private final FolderStateManager eventManager;
+    private final FolderEventDispatcher eventDispatcher;
 
     // Access services
     private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
@@ -37,8 +37,13 @@ public class FolderBookmarkList {
     // JEI integration - source list changed listeners
     private final List<IIngredientGridSource.SourceListChangedListener> sourceListChangedListeners = new ArrayList<>();
 
-    public FolderBookmarkList() {
-        this.eventManager = FolderStateManager.getInstance();
+    /**
+     * Creates a new bookmark list with the provided event dispatcher
+     * 
+     * @param eventDispatcher The folder event dispatcher to use for notifications
+     */
+    public FolderBookmarkList(FolderEventDispatcher eventDispatcher) {
+        this.eventDispatcher = eventDispatcher;
     }
 
     /**
@@ -121,7 +126,7 @@ public class FolderBookmarkList {
             notifyingListeners = true;
             
             if (folder != null) {
-                eventManager.fireFolderContentsChangedEvent(folder);
+                eventDispatcher.fireFolderContentsChangedEvent(folder);
             }
 
             // Notify JEI source list changed listeners
@@ -192,7 +197,7 @@ public class FolderBookmarkList {
         ingredients.add(ingredient);
         folder.addBookmarkKey(key);
 
-        eventManager.fireBookmarkAddedEvent(folder, ingredient, key);
+        eventDispatcher.fireBookmarkAddedEvent(folder, ingredient, key);
 
         return true;
     }
@@ -212,7 +217,7 @@ public class FolderBookmarkList {
             ingredients.remove(ingredient);
             folder.removeBookmarkKey(key);
 
-            eventManager.fireBookmarkRemovedEvent(folder, ingredient, key);
+            eventDispatcher.fireBookmarkRemovedEvent(folder, ingredient, key);
 
             return true;
         }
@@ -254,7 +259,7 @@ public class FolderBookmarkList {
         if (folder != null) {
             folder.clearBookmarks();
 
-            eventManager.fireBookmarksClearedEvent(folder);
+            eventDispatcher.fireBookmarksClearedEvent(folder);
         }
     }
 

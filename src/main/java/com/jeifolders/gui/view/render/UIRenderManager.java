@@ -2,10 +2,11 @@ package com.jeifolders.gui.view.render;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.gui.common.TooltipRenderer;
-import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.contents.FolderContentsView;
+import com.jeifolders.ui.display.BookmarkDisplayManager;
+import com.jeifolders.ui.state.FolderUIStateManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
@@ -17,7 +18,8 @@ import java.util.List;
  * This class separates rendering logic from data management and UI components.
  */
 public class UIRenderManager {
-    private final FolderStateManager stateManager;
+    private final FolderUIStateManager uiStateManager;
+    private final BookmarkDisplayManager displayManager;
     private final FolderLayoutService layoutService;
     private final ContentViewRenderer contentsRenderer;
     
@@ -28,11 +30,15 @@ public class UIRenderManager {
     /**
      * Creates a new UI render manager
      * 
-     * @param stateManager The folder state manager
+     * @param uiStateManager The UI state manager component
+     * @param displayManager The bookmark display manager component
      * @param layoutService The layout service
      */
-    public UIRenderManager(FolderStateManager stateManager, FolderLayoutService layoutService) {
-        this.stateManager = stateManager;
+    public UIRenderManager(FolderUIStateManager uiStateManager, 
+                          BookmarkDisplayManager displayManager,
+                          FolderLayoutService layoutService) {
+        this.uiStateManager = uiStateManager;
+        this.displayManager = displayManager;
         this.layoutService = layoutService;
         this.contentsRenderer = new ContentViewRenderer();
     }
@@ -51,20 +57,20 @@ public class UIRenderManager {
         deleteHovered = false;
         
         // Render folder buttons if visible
-        if (stateManager.areFoldersVisible()) {
+        if (uiStateManager.areFoldersVisible()) {
             renderFolderButtons(graphics, mouseX, mouseY, partialTick);
         }
         
         // Render active folder details if there is an active folder
-        if (stateManager.hasActiveFolder()) {
+        if (uiStateManager.hasActiveFolder()) {
             renderActiveFolderDetails(graphics, mouseX, mouseY);
         } else {
             currentDeleteButtonX = -1;
         }
         
         // Render bookmark display if available using the content renderer
-        FolderContentsView bookmarkDisplay = stateManager.getBookmarkDisplay();
-        if (stateManager.hasActiveFolder() && bookmarkDisplay != null) {
+        FolderContentsView bookmarkDisplay = displayManager.getBookmarkDisplay();
+        if (uiStateManager.hasActiveFolder() && bookmarkDisplay != null) {
             contentsRenderer.renderContentsView(bookmarkDisplay, graphics, mouseX, mouseY, partialTick);
         }
         
@@ -76,7 +82,7 @@ public class UIRenderManager {
      * Renders all folder buttons
      */
     private void renderFolderButtons(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        List<FolderButton> buttons = stateManager.getFolderButtons();
+        List<FolderButton> buttons = uiStateManager.getFolderButtons();
         if (buttons == null || buttons.isEmpty()) {
             return;
         }
@@ -90,7 +96,7 @@ public class UIRenderManager {
      * Renders active folder details including name and delete button
      */
     public void renderActiveFolderDetails(GuiGraphics graphics, int mouseX, int mouseY) {
-        FolderButton activeButton = stateManager.getActiveFolder();
+        FolderButton activeButton = uiStateManager.getActiveFolder();
         if (activeButton == null || activeButton.getFolder() == null) {
             return;
         }

@@ -30,7 +30,6 @@ public class ExclusionHandler {
     }
     
     public void clearExclusionAreas() {
-        ModLogger.debug("Clearing all exclusion areas");
         exclusionAreas.clear();
     }
 

@@ -1,9 +1,9 @@
 package com.jeifolders.data;
 
-import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.util.SnbtFormat;
+import com.jeifolders.core.FolderManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.nbt.CompoundTag;
@@ -51,7 +51,7 @@ public class FolderStorageService {
     private static final String CONFIG_ROOT = "./config/jeifolders/";
     private static final int MIN_SAVE_INTERVAL_MS = 5000; // Minimum time between saves
     private long lastSaveTime = 0;
-    private FolderStateManager callbackManager;
+    private FolderManager callbackManager;
 
     // NBT Keys
     private static final String FOLDERS_KEY = "folders";
@@ -392,7 +392,7 @@ public class FolderStorageService {
      * 
      * @param manager The folder manager to notify of changes
      */
-    public void registerCallback(FolderStateManager manager) {
+    public void registerCallback(FolderManager manager) {
         this.callbackManager = manager;
         ModLogger.debug("Callback manager registered with FolderDataService");
     }

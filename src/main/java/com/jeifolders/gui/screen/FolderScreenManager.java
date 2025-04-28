@@ -1,7 +1,8 @@
 package com.jeifolders.gui.screen;
 
+import com.jeifolders.core.FolderManager;
 import com.jeifolders.gui.common.FolderNameInputScreen;
-import com.jeifolders.gui.controller.FolderStateManager;
+import com.jeifolders.ui.interaction.FolderInteractionHandler;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -13,15 +14,23 @@ import java.util.function.Consumer;
  * Handles transitions between screens and dialog creation.
  */
 public class FolderScreenManager {
-    private final FolderStateManager folderManager;
+    private final FolderManager folderManager;
+    private final FolderInteractionHandler interactionHandler;
     private final Consumer<String> folderCreationCallback;
     
-    public FolderScreenManager(FolderStateManager folderManager, Consumer<String> folderCreationCallback) {
+    /**
+     * Creates a new screen manager with components
+     * 
+     * @param folderManager The core folder manager
+     * @param folderCreationCallback Callback for folder creation
+     */
+    public FolderScreenManager(FolderManager folderManager, Consumer<String> folderCreationCallback) {
         this.folderManager = folderManager;
+        this.interactionHandler = folderManager.getInteractionHandler();
         this.folderCreationCallback = folderCreationCallback;
         
-        // Register the dialog handler with the folder manager
-        folderManager.setAddFolderDialogHandler(this::showFolderNameInputScreen);
+        // Register the dialog handler with the interaction handler
+        interactionHandler.setAddFolderDialogHandler(this::showFolderNameInputScreen);
     }
     
     /**

@@ -3,10 +3,12 @@ package com.jeifolders.gui.layout;
 import com.jeifolders.data.Folder;
 import com.jeifolders.gui.common.ExclusionHandler;
 import com.jeifolders.gui.common.LayoutConstants;
-import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.buttons.FolderButtonTextures;
 import com.jeifolders.integration.Rectangle2i;
+import com.jeifolders.core.FolderManager;
+import com.jeifolders.ui.display.BookmarkDisplayManager;
+import com.jeifolders.ui.interaction.FolderInteractionHandler;
 import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.Minecraft;
@@ -67,13 +69,16 @@ public class FolderLayoutService {
     
     // State
     private boolean needsRebuild = true;
-    private final FolderStateManager folderManager;
+    
+    // Component architecture
+    private FolderManager folderManager;
+    private BookmarkDisplayManager displayManager;
+    private FolderInteractionHandler interactionHandler;
     
     /**
      * Private constructor for singleton pattern
      */
     private FolderLayoutService() {
-        this.folderManager = FolderStateManager.getInstance();
         calculateInitialLayout();
     }
     
@@ -88,11 +93,28 @@ public class FolderLayoutService {
     }
     
     /**
-     * Initialize the layout service
+     * Initialize the layout service with the component architecture
+     */
+    public static void init(FolderManager folderManager) {
+        getInstance().setComponents(folderManager);
+        ModLogger.debug("FolderLayoutService initialized with component architecture");
+    }
+    
+    /**
+     * Backwards compatibility init
      */
     public static void init() {
         getInstance();
-        ModLogger.debug("FolderLayoutService initialized");
+        ModLogger.debug("FolderLayoutService initialized (legacy mode)");
+    }
+    
+    /**
+     * Sets the component architecture dependencies
+     */
+    public void setComponents(FolderManager folderManager) {
+        this.folderManager = folderManager;
+        this.displayManager = folderManager.getDisplayManager();
+        this.interactionHandler = folderManager.getInteractionHandler();
     }
     
     /**
@@ -280,17 +302,118 @@ public class FolderLayoutService {
         
         nameYOffset = rows * FOLDER_SPACING_Y;
         calculatedNameY = PADDING_Y + nameYOffset + 5;
-        calculatedBookmarkDisplayY = calculatedNameY + 20;
+        // Reduce the vertical offset from 35 to 25 to position the bookmarks closer to the folder name
+        calculatedBookmarkDisplayY = calculatedNameY + 25;
         
-        // Update the bookmark display positions in the folder manager
-        folderManager.setBookmarkDisplayPositions(calculatedNameY, calculatedBookmarkDisplayY);
+        // Debug logging for position calculation
+        ModLogger.debug("[POSITION-DEBUG] FolderLayoutService calculated positions: rows={}, nameYOffset={}, nameY={}, bookmarkDisplayY={}", 
+                      rows, nameYOffset, calculatedNameY, calculatedBookmarkDisplayY);
+        
+        // Update the bookmark display positions directly in the display manager
+        if (displayManager != null) {
+            displayManager.setBookmarkDisplayPositions(calculatedNameY, calculatedBookmarkDisplayY);
+            ModLogger.debug("[POSITION-DEBUG] Propagated positions to BookmarkDisplayManager");
+        } else {
+            ModLogger.debug("[POSITION-DEBUG] Cannot update display positions - displayManager is null");
+        }
         
         // Invalidate caches that depend on these positions
         deleteButtonCacheValid = false;
         exclusionZoneCacheValid = false;
+    }
+    
+    /**
+     * Updates vertical positions for folder names and bookmark display without recalculating rows
+     */
+    public void updateLayoutPositions() {
+        // Calculate folder name and bookmark display positions
+        calculatedNameY = PADDING_Y + nameYOffset + 5;
+        // Reduce the vertical offset from 35 to 25 to position the bookmarks closer to the folder name
+        calculatedBookmarkDisplayY = calculatedNameY + 25;
         
-        ModLogger.debug("Updated layout positions: nameY={}, bookmarkDisplayY={}", 
-                      calculatedNameY, calculatedBookmarkDisplayY);
+        ModLogger.debug("[POSITION-DEBUG-TRACE] Calculated positions in FolderLayoutService: nameY={}, displayY={}, nameYOffset={}", 
+                      calculatedNameY, calculatedBookmarkDisplayY, nameYOffset);
+        
+        // Propagate these positions to the bookmark display manager
+        if (displayManager != null) {
+            displayManager.setBookmarkDisplayPositions(calculatedNameY, calculatedBookmarkDisplayY);
+        }
+        
+        // Invalidate dependent caches
+        deleteButtonCacheValid = false;
+        exclusionZoneCacheValid = false;
+    }
+    
+    /**
+     * Forces a recalculation of all layout positions and propagates them to all components
+     */
+    public void forcePositionRecalculation() {
+        ModLogger.debug("[POSITION-DEBUG-TRACE] Force position recalculation requested");
+        invalidateAllCaches();
+        calculateFoldersPerRow();
+        updateLayoutPositions();
+        
+        // Also ensure the BookmarkDisplayManager updates its display
+        if (displayManager != null && folderManager != null && folderManager.getUIStateManager().hasActiveFolder()) {
+            displayManager.refreshActiveFolder(true);
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Forced refresh of active folder display");
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Position recalculation completed with current folders per row: {}", foldersPerRow);
+        } else {
+            ModLogger.debug("[POSITION-DEBUG-TRACE] No active folder to refresh or components are null");
+        }
+    }
+    
+    /**
+     * Forces a complete layout update including:
+     * - Cache invalidation
+     * - Recalculating folders per row
+     * - Updating positions
+     * - Refreshing the exclusion zone
+     * - Refreshing the active folder display
+     * 
+     * Use this method when the UI needs a complete refresh
+     */
+    public void forceLayoutUpdate() {
+        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update requested");
+        
+        // First invalidate all caches
+        invalidateAllCaches();
+        
+        // Recalculate fundamental layout parameters
+        calculateFoldersPerRow();
+        
+        // Update the positions for UI elements
+        updateLayoutPositions();
+        
+        // Update the exclusion zone
+        if (folderManager != null) {
+            // Get the number of folder buttons (excluding the add button)
+            int folderCount = folderManager.getStorageService().getAllFolders().size();
+            boolean foldersVisible = folderManager.getUIStateManager().areFoldersVisible();
+            boolean hasActiveFolder = folderManager.getUIStateManager().hasActiveFolder();
+            
+            int bookmarkDisplayHeight = 0;
+            if (displayManager != null && displayManager.getBookmarkDisplay() != null) {
+                bookmarkDisplayHeight = displayManager.getBookmarkDisplay().getHeight();
+            }
+            
+            // Update the exclusion zone
+            updateExclusionZone(folderCount, foldersVisible, hasActiveFolder, bookmarkDisplayHeight);
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Updated exclusion zone - width: {}, height: {}", 
+                           exclusionZone.getWidth(), exclusionZone.getHeight());
+        } else {
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Could not update exclusion zone - folderManager is null");
+        }
+        
+        // Refresh active folder display if needed
+        if (displayManager != null && folderManager != null && folderManager.getUIStateManager().hasActiveFolder()) {
+            displayManager.refreshActiveFolder(true);
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Refreshed active folder display");
+        }
+        
+        // Mark as needing rebuild to ensure full UI refresh
+        markNeedsRebuild();
+        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update completed with folders per row: {}", foldersPerRow);
     }
     
     /**
@@ -441,31 +564,39 @@ public class FolderLayoutService {
      * @return The updated exclusion zone
      */
     public Rect2i updateExclusionZoneAndUI() {
-        // Calculate bookmark display height
+        // Calculate button count and state information
+        int buttonCount = 0;
+        boolean foldersVisible = true;
+        boolean hasActiveFolder = false;
         int bookmarkDisplayHeight = 0;
-        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
-            bookmarkDisplayHeight = folderManager.getBookmarkDisplay().getHeight();
+        
+        if (folderManager != null) {
+            // Access folder buttons through UIStateManager
+            buttonCount = folderManager.getUIStateManager().getFolderButtons().size();
+            foldersVisible = folderManager.getUIStateManager().areFoldersVisible();
+            hasActiveFolder = folderManager.getUIStateManager().getActiveFolder() != null;
+            
+            if (hasActiveFolder && displayManager != null) {
+                // Access the bookmark display height through the display manager
+                var bookmarkDisplay = displayManager.getBookmarkDisplay();
+                if (bookmarkDisplay != null) {
+                    bookmarkDisplayHeight = bookmarkDisplay.getHeight();
+                }
+            }
         }
         
         // Update the exclusion zone
         Rect2i lastDrawnArea = updateExclusionZone(
-            folderManager.getFolderButtons().size(), 
-            folderManager.areFoldersVisible(), 
-            folderManager.hasActiveFolder(),
+            buttonCount, 
+            foldersVisible, 
+            hasActiveFolder,
             bookmarkDisplayHeight
         );
         
         // Update bookmark display bounds if active
-        if (folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null) {
-            Rect2i zone = getExclusionZone();
-            int bookmarkDisplayWidth = zone.getWidth() + 10;
-            
-            folderManager.getBookmarkDisplay().updateBounds(
-                0, 
-                getBookmarkDisplayY(), 
-                bookmarkDisplayWidth,
-                folderManager.getBookmarkDisplay().getHeight()
-            );
+        if (hasActiveFolder && displayManager != null && displayManager.getBookmarkDisplay() != null) {
+            var bookmarkDisplay = displayManager.getBookmarkDisplay();
+            bookmarkDisplay.updateBoundsFromCalculatedPositions();
         }
         
         return lastDrawnArea;
@@ -511,13 +642,25 @@ public class FolderLayoutService {
     public List<FolderButton> createAndPositionFolderButtons() {
         List<FolderButton> buttons = new ArrayList<>();
         
+        if (folderManager == null) {
+            ModLogger.warn("Cannot create folder buttons: folderManager is null");
+            return buttons;
+        }
+        
         // Get all folders from the folder manager
-        List<Folder> folders = folderManager.loadAllFolders();
+        List<Folder> folders = folderManager.getStorageService().getAllFolders();
         
         // Create an "Add Folder" button at index 0
         int[] addPos = calculateAddButtonPosition();
         FolderButton addButton = new FolderButton(addPos[0], addPos[1], FolderButton.ButtonType.ADD);
-        addButton.setClickHandler(folderManager::handleAddFolderButtonClick);
+        
+        // Use the interaction handler directly
+        // Add button needs to pass null as folder since it doesn't have one
+        addButton.setClickHandler(folder -> {
+            if (interactionHandler != null) {
+                interactionHandler.handleAddFolderButtonClick(null);
+            }
+        });
         buttons.add(addButton);
         
         // Create and position normal folder buttons
@@ -525,7 +668,13 @@ public class FolderLayoutService {
         for (Folder folder : folders) {
             int[] pos = calculateFolderPosition(buttonIndex);
             FolderButton button = new FolderButton(pos[0], pos[1], folder);
-            button.setClickHandler(folderManager::fireFolderClickedEvent);
+            
+            // Use the interaction handler directly
+            button.setClickHandler(folderClicked -> {
+                if (interactionHandler != null) {
+                    interactionHandler.handleFolderClick(folderClicked);
+                }
+            });
             buttons.add(button);
             buttonIndex++;
         }
@@ -534,7 +683,7 @@ public class FolderLayoutService {
         updateLayoutPositions(folders.size());
         
         // Update the folder manager with the new buttons
-        folderManager.setFolderButtons(buttons);
+        folderManager.getUIStateManager().setFolderButtons(buttons);
         
         return buttons;
     }

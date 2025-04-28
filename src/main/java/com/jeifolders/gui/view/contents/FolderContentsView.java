@@ -5,7 +5,6 @@ import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.gui.common.HitTestable;
 import com.jeifolders.gui.common.LayoutConstants;
 import com.jeifolders.gui.common.MouseHitUtil;
-import com.jeifolders.gui.controller.FolderStateManager;
 import com.jeifolders.gui.event.FolderEventListener;
 import com.jeifolders.gui.event.FolderEventType;
 import com.jeifolders.integration.BookmarkIngredient;
@@ -13,6 +12,9 @@ import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.integration.impl.JeiBookmarkAdapter;
 import com.jeifolders.integration.impl.JeiContentsImpl;
+import com.jeifolders.ui.display.BookmarkDisplayManager;
+import com.jeifolders.events.FolderEventDispatcher;
+import com.jeifolders.ui.interaction.FolderInteractionHandler;
 import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.Minecraft;
@@ -37,6 +39,11 @@ public class FolderContentsView implements HitTestable {
     private final FolderBookmarkList bookmarkList;
     private final JeiContentsImpl contentsImpl;
     
+    // Component architecture
+    private final FolderEventDispatcher eventDispatcher;
+    private final BookmarkDisplayManager displayManager;
+    private final FolderInteractionHandler interactionHandler;
+    
     // State tracking
     private Folder activeFolder;
     private Rectangle2i backgroundArea = Rectangle2i.EMPTY;
@@ -56,7 +63,6 @@ public class FolderContentsView implements HitTestable {
     private int calculatedDisplayY = -1;
     
     // Event system
-    private final FolderStateManager eventManager = FolderStateManager.getInstance();
     private final FolderEventListener folderChangedListener;
 
     /**
@@ -66,11 +72,17 @@ public class FolderContentsView implements HitTestable {
         FolderStorageService folderService, 
         FolderBookmarkList bookmarkList,
         JeiBookmarkAdapter bookmarkAdapter, 
-        JeiContentsImpl contentsImpl
+        JeiContentsImpl contentsImpl,
+        FolderEventDispatcher eventDispatcher,
+        BookmarkDisplayManager displayManager,
+        FolderInteractionHandler interactionHandler
     ) {
         this.folderService = folderService;
         this.bookmarkList = bookmarkList;
         this.contentsImpl = contentsImpl;
+        this.eventDispatcher = eventDispatcher;
+        this.displayManager = displayManager;
+        this.interactionHandler = interactionHandler;
         
         // Folder changed listener
         this.folderChangedListener = event -> {
@@ -81,7 +93,7 @@ public class FolderContentsView implements HitTestable {
         };
         
         // Register with event system
-        eventManager.addEventListener(FolderEventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
+        eventDispatcher.addEventListener(FolderEventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
     }
 
     /**
@@ -89,7 +101,12 @@ public class FolderContentsView implements HitTestable {
      * @param folderService The folder data service
      * @return An optional containing the new display if creation was successful
      */
-    public static Optional<FolderContentsView> create(FolderStorageService folderService) {
+    public static Optional<FolderContentsView> create(
+        FolderStorageService folderService,
+        FolderEventDispatcher eventDispatcher,
+        BookmarkDisplayManager displayManager,
+        FolderInteractionHandler interactionHandler
+    ) {
         try {
             // Get the JEI service and runtime directly
             var jeiService = JEIIntegrationFactory.getJEIService();
@@ -101,7 +118,7 @@ public class FolderContentsView implements HitTestable {
             }
             
             // Create a bookmark list
-            var bookmarkList = new FolderBookmarkList();
+            var bookmarkList = new FolderBookmarkList(eventDispatcher);
             var bookmarkAdapter = new JeiBookmarkAdapter(bookmarkList);
             var contentsImpl = new JeiContentsImpl(bookmarkAdapter, jeiRuntimeOpt.get());
             
@@ -110,7 +127,10 @@ public class FolderContentsView implements HitTestable {
                 folderService,
                 bookmarkList,
                 bookmarkAdapter,
-                contentsImpl
+                contentsImpl,
+                eventDispatcher,
+                displayManager,
+                interactionHandler
             );
             
             return Optional.of(display);
@@ -128,9 +148,12 @@ public class FolderContentsView implements HitTestable {
      */
     public static Optional<FolderContentsView> createForFolder(
         FolderStorageService folderService,
+        FolderEventDispatcher eventDispatcher,
+        BookmarkDisplayManager displayManager,
+        FolderInteractionHandler interactionHandler,
         Folder folder
     ) {
-        var displayOpt = create(folderService);
+        var displayOpt = create(folderService, eventDispatcher, displayManager, interactionHandler);
         
         displayOpt.ifPresent(display -> {
             display.setActiveFolder(folder);
@@ -143,10 +166,11 @@ public class FolderContentsView implements HitTestable {
      * Sets the active folder and ensures bookmarks are properly loaded
      */
     public void setActiveFolder(Folder folder) {
-        // Early return if the folder hasn't changed
-        if (this.activeFolder == folder) {
-            ModLogger.debug("setActiveFolder called with same folder - skipping update");
-            return;
+        // Check if the folder is the same
+        boolean isSameFolder = (this.activeFolder == folder);
+        
+        if (isSameFolder) {
+            ModLogger.debug("setActiveFolder called with same folder - will still update layout");
         }
         
         this.activeFolder = folder;
@@ -155,6 +179,12 @@ public class FolderContentsView implements HitTestable {
             ModLogger.debug("Setting active folder to: {} (ID: {})", folder.getName(), folder.getId());
             this.bookmarkList.setFolder(folder);
             refreshBookmarks();
+            
+            // Even if it's the same folder, force layout update
+            if (isSameFolder) {
+                // Force update of the layout positions
+                updateBoundsFromCalculatedPositions();
+            }
         } else {
             // Clear the current state if no folder is active
             ingredients.clear();
@@ -172,7 +202,7 @@ public class FolderContentsView implements HitTestable {
 
     /**
      * Refreshes bookmarks from the active folder.
-     * This now delegates to the central refresh method in FolderStateManager.
+     * This now uses displayManager directly instead of FolderStateManager.
      */
     public void refreshBookmarks() {
         if (activeFolder == null) {
@@ -188,8 +218,10 @@ public class FolderContentsView implements HitTestable {
 
         try {
             refreshingBookmarks = true;
-            // Delegate to the centralized method in FolderStateManager
-            eventManager.refreshFolderBookmarks(activeFolder, true);
+            // Use displayManager directly with proper method name
+            displayManager.refreshFolderBookmarks(activeFolder, true);
+        } catch (Exception e) {
+            ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
         } finally {
             refreshingBookmarks = false;
         }
@@ -199,9 +231,9 @@ public class FolderContentsView implements HitTestable {
      * Force a refresh of the contents and layout
      */
     public void forceRefresh() {
-        // Delegate to the centralized method in FolderStateManager
+        // Use displayManager directly
         if (activeFolder != null) {
-            eventManager.refreshFolderBookmarks(activeFolder, true);
+            displayManager.refreshFolderBookmarks(activeFolder, true);
         }
     }
 
@@ -385,7 +417,7 @@ public class FolderContentsView implements HitTestable {
     /**
      * Handles a click on the bookmark display
      * Only handles view-specific aspects like pagination
-     * All business logic is delegated to FolderStateManager
+     * Business logic is delegated to the interaction handler
      * 
      * @return true if the click was handled by pagination controls
      */
@@ -401,7 +433,7 @@ public class FolderContentsView implements HitTestable {
             return true;
         }
         
-        // Return false to let FolderStateManager handle business logic for bookmark clicks
+        // Return false to let the interaction handler handle business logic for bookmark clicks
         return false;
     }
     
@@ -425,43 +457,79 @@ public class FolderContentsView implements HitTestable {
             return false;
         }
         
-        // After validation, delegate to the central method in FolderStateManager
-        // which now handles all the shared logic, event firing, and refresh operations
-        return eventManager.handleIngredientDropOnFolder(activeFolder, ingredient);
+        // Use the interaction handler directly
+        return interactionHandler.handleIngredientDropOnFolder(activeFolder, ingredient);
     }
     
     /**
      * Updates the bounds of the display based on calculated positions
      */
     public void updateBoundsFromCalculatedPositions() {
-        // If positions haven't been calculated yet, use defaults
-        int displayY = calculatedDisplayY >= 0 ? calculatedDisplayY : y;
+        ModLogger.debug("[POSITION-DEBUG-TRACE] updateBoundsFromCalculatedPositions called");
         
-        // Check if bounds are actually changing
-        Rectangle2i newBounds = new Rectangle2i(x, displayY, width, height);
-        if (lastCalculatedBounds != null && 
-            lastCalculatedBounds.getX() == newBounds.getX() && 
-            lastCalculatedBounds.getY() == newBounds.getY() && 
-            lastCalculatedBounds.getWidth() == newBounds.getWidth() && 
-            lastCalculatedBounds.getHeight() == newBounds.getHeight()) {
+        // If we're already updating bounds, prevent recursion
+        if (updatingBounds) {
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Preventing recursive bounds update");
             return;
         }
         
-        // Update the bounds
-        updateBounds(newBounds.getX(), newBounds.getY(), newBounds.getWidth(), newBounds.getHeight());
-        
-        // Store the calculated bounds
-        lastCalculatedBounds = newBounds;
+        try {
+            updatingBounds = true;
+            
+            // Use the calculated displayY position only if it has been properly set
+            // If not properly set, use a better default position (50px from top)
+            int displayY = (calculatedDisplayY >= 0) ? calculatedDisplayY : 50;
+            
+            ModLogger.debug("[POSITION-DEBUG-TRACE] Using displayY={} (calculatedDisplayY={})", 
+                          displayY, calculatedDisplayY);
+            
+            // Calculate safe width to prevent GUI overlap
+            int safeWidth = getSafeDisplayWidth(this.width);
+            
+            Rectangle2i newBounds = new Rectangle2i(x, displayY, safeWidth, height);
+            
+            // Check if bounds are actually changing to avoid unnecessary updates
+            if (lastCalculatedBounds != null && lastCalculatedBounds.equals(newBounds)) {
+                ModLogger.debug("[POSITION-DEBUG-TRACE] Bounds unchanged, skipping update");
+                return;
+            }
+            
+            ModLogger.debug("[POSITION-DEBUG-TRACE] New bounds: x={}, y={}, w={}, h={}", 
+                          newBounds.getX(), newBounds.getY(), newBounds.getWidth(), newBounds.getHeight());
+            
+            // Update the bounds
+            this.x = newBounds.getX();
+            this.y = newBounds.getY();
+            this.width = newBounds.getWidth();
+            this.height = newBounds.getHeight();
+            this.bounds[0] = x;
+            this.bounds[1] = y;
+            this.bounds[2] = width;
+            this.bounds[3] = height;
+            this.backgroundArea = newBounds;
+            this.lastCalculatedBounds = newBounds;
+            
+            // Tell the contents implementation about the new bounds
+            if (contentsImpl != null) {
+                contentsImpl.updateBounds(newBounds);
+                ModLogger.debug("[POSITION-DEBUG-TRACE] Updated contentsImpl with new bounds");
+            }
+        } finally {
+            updatingBounds = false;
+        }
     }
     
     /**
-     * Sets the calculated positions for the display
+     * Sets the calculated position values for this view
+     * @param nameY Y position for the folder name
+     * @param displayY Y position for the bookmark display
      */
     public void setCalculatedPositions(int nameY, int displayY) {
+        ModLogger.debug("[POSITION-DEBUG-TRACE] FolderContentsView received positions: nameY={}, displayY={}", nameY, displayY);
         this.calculatedNameY = nameY;
         this.calculatedDisplayY = displayY;
         
-        // Update bounds based on new positions
+        // Force an update of the bounds when positions change
         updateBoundsFromCalculatedPositions();
     }
     

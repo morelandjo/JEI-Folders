@@ -1,5 +1,6 @@
 package com.jeifolders.gui.controller;
 
+import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.gui.interaction.IngredientDropTarget;
@@ -7,8 +8,12 @@ import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.gui.screen.FolderScreenManager;
 import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.gui.view.buttons.FolderButtonTextures;
+import com.jeifolders.gui.view.contents.FolderContentsView;
 import com.jeifolders.gui.view.render.UIRenderManager;
 import com.jeifolders.integration.JEIIntegrationFactory;
+import com.jeifolders.ui.display.BookmarkDisplayManager;
+import com.jeifolders.ui.interaction.FolderInteractionHandler;
+import com.jeifolders.ui.state.FolderUIStateManager;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -25,6 +30,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -43,11 +49,15 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     // Exclusion zone
     public static Rect2i lastDrawnArea = new Rect2i(0, 0, 0, 0);
     
-    // Component managers
-    private final FolderStateManager folderManager;
-    private final FolderLayoutService layoutService;
+    // New component-based architecture components
+    private final FolderManager coreFolderManager;
+    private final FolderUIStateManager uiStateManager;
+    private final BookmarkDisplayManager displayManager;
+    private final FolderInteractionHandler interactionHandler;
+    private final FolderStorageService storageService;
     
-    // Rendering component (directly using UIRenderManager instead of the facade)
+    // Layout and rendering components
+    private final FolderLayoutService layoutService;
     private final UIRenderManager renderManager;
     private final FolderScreenManager screenManager;
     
@@ -58,7 +68,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     private boolean firstTimeLoaded = true;
     private int ticksAfterInit = 0;
     private static final int FORCE_REFRESH_DELAY = 10; // Ticks to wait before forcing refresh
-    
+
     /**
      * Get the singleton instance
      */
@@ -99,15 +109,21 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         super(10, 10, FolderButtonTextures.ICON_WIDTH, FolderButtonTextures.ICON_HEIGHT, 
               Component.translatable("gui.jeifolders.folder"));
         
-        ModLogger.debug("Initializing FolderButton with refactored components");
+        ModLogger.debug("Initializing FolderButton with component-based architecture");
         
         // Initialize the component classes
-        this.folderManager = FolderStateManager.getInstance();
+        this.coreFolderManager = FolderManager.getInstance();
+        
+        // Access the new component services directly
+        this.uiStateManager = coreFolderManager.getUIStateManager();
+        this.displayManager = coreFolderManager.getDisplayManager();
+        this.interactionHandler = coreFolderManager.getInteractionHandler();
+        this.storageService = coreFolderManager.getStorageService();
         this.layoutService = FolderLayoutService.getInstance();
         
-        // Create the specialized components - directly use UIRenderManager
-        this.renderManager = new UIRenderManager(folderManager, layoutService);
-        this.screenManager = new FolderScreenManager(folderManager, this::createFolder);
+        // Create the specialized components - directly use UIRenderManager with components
+        this.renderManager = new UIRenderManager(this.uiStateManager, this.displayManager, layoutService);
+        this.screenManager = new FolderScreenManager(coreFolderManager, this::createFolder);
         
         // Initialize window size tracking
         Minecraft minecraft = Minecraft.getInstance();
@@ -124,14 +140,14 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         updateLayoutPositions();
         
         ModLogger.debug("FolderButtonSystem initialized with {} folders, visibility: {}, foldersPerRow: {}",
-            folderManager.getFolderButtons().size(), folderManager.areFoldersVisible(), layoutService.getFoldersPerRow());
+            uiStateManager.getFolderButtons().size(), uiStateManager.areFoldersVisible(), layoutService.getFoldersPerRow());
             
         // Set up JEI runtime initialization
         initializeJeiRuntime();
         
         // Restore the state if needed
-        if (folderManager.shouldRestoreFromStaticState()) {
-            folderManager.createBookmarkDisplay(true);
+        if (uiStateManager.shouldRestoreFromStaticState()) {
+            displayManager.createBookmarkDisplay(true);
         }
         
         ModLogger.debug("FolderButtonSystem initialization complete");
@@ -142,18 +158,76 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      */
     private void loadFolders() {
         // Check for null folder manager buttons list
-        if (folderManager.getFolderButtons() == null) {
+        if (uiStateManager.getFolderButtons() == null) {
             ModLogger.error("Folder manager's button list is null");
             return;
         }
         
         // Use the FolderLayoutService to create and initialize folder buttons
-        FolderButton buttonToActivate = folderManager.initializeFolderButtons(layoutService, this::onFolderClicked);
+        FolderButton buttonToActivate = initializeFolderButtons();
         
         // Set active folder if needed
         if (buttonToActivate != null) {
-            folderManager.setActiveFolder(buttonToActivate);
+            uiStateManager.setActiveFolder(buttonToActivate);
         }
+    }
+    
+    /**
+     * Initializes folder buttons directly using the new component architecture
+     * 
+     * @return The button to activate (if any)
+     */
+    private FolderButton initializeFolderButtons() {
+        FolderButton buttonToActivate = null;
+        
+        // Get all folders from the storage service
+        List<Folder> folders = storageService.getAllFolders();
+        if (folders == null) {
+            // Instead of assigning the result of loadData(), just call it and get folders again
+            storageService.loadData();
+            folders = storageService.getAllFolders();
+            // If still null, create an empty list as fallback
+            if (folders == null) {
+                folders = new ArrayList<>();
+            }
+        }
+        
+        // Create button list
+        List<FolderButton> buttons = new ArrayList<>();
+        
+        // Create an "Add Folder" button at index 0
+        int[] addPos = layoutService.calculateAddButtonPosition();
+        FolderButton addButton = new FolderButton(addPos[0], addPos[1], FolderButton.ButtonType.ADD);
+        addButton.setClickHandler(interactionHandler::handleAddFolderButtonClick);
+        buttons.add(addButton);
+        
+        // Create and position normal folder buttons
+        int buttonIndex = 1;
+        for (Folder folder : folders) {
+            int[] pos = layoutService.calculateFolderPosition(buttonIndex);
+            FolderButton button = new FolderButton(pos[0], pos[1], folder);
+            button.setClickHandler(this::onFolderClicked);
+            buttons.add(button);
+            buttonIndex++;
+        }
+        
+        // Find button to activate based on the last active folder ID
+        Integer lastActiveFolderId = uiStateManager.getLastActiveFolderId();
+        if (lastActiveFolderId != null) {
+            for (FolderButton button : buttons) {
+                if (button.getButtonType() == FolderButton.ButtonType.NORMAL && 
+                    button.getFolder() != null && 
+                    button.getFolder().getId() == lastActiveFolderId) {
+                    buttonToActivate = button;
+                    break;
+                }
+            }
+        }
+        
+        // Set the buttons in the state manager
+        uiStateManager.setFolderButtons(buttons);
+        
+        return buttonToActivate;
     }
     
     /**
@@ -164,10 +238,10 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         
         try {
             // Always reset data paths first to ensure we're reading from the correct location
-            FolderStorageService.getInstance().resetDataPaths();
+            storageService.resetDataPaths();
             
             // Clear existing folder buttons
-            folderManager.getFolderButtons().clear();
+            uiStateManager.getFolderButtons().clear();
             
             // Reload folder data and create new buttons
             loadFolders();
@@ -176,11 +250,11 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             updateLayoutPositions();
             
             // Update bookmark display
-            if (folderManager.hasActiveFolder()) {
+            if (uiStateManager.hasActiveFolder()) {
                 refreshBookmarkDisplay();
             }
             
-            ModLogger.info("Folder UI rebuild complete with {} folders", folderManager.getFolderButtons().size());
+            ModLogger.info("Folder UI rebuild complete with {} folders", uiStateManager.getFolderButtons().size());
         } catch (Exception e) {
             ModLogger.error("Error during folder UI rebuild: {}", e.getMessage());
             e.printStackTrace();
@@ -191,15 +265,15 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * Updates the vertical positions for folder names and bookmark display
      */
     private void updateLayoutPositions() {
-        layoutService.updateLayoutPositions(folderManager.getFolderButtons().size());
+        layoutService.updateLayoutPositions(uiStateManager.getFolderButtons().size());
     }
     
     /**
      * Called when a folder is clicked
      */
     private void onFolderClicked(Folder folder) {
-        // Delegate folder click handling to FolderStateManager
-        folderManager.handleFolderClick(folder);
+        // Use the interaction handler directly
+        interactionHandler.handleFolderClick(folder);
     }
     
     @Override
@@ -207,7 +281,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Reset first time loading flag since we're rendering now
         firstTimeLoaded = false;
         
-        // Directly use the UIRenderManager instead of the facade
+        // Directly use the UIRenderManager
         renderManager.renderUI(graphics, mouseX, mouseY, partialTick);
         
         // Update the exclusion zone via the layout service
@@ -233,8 +307,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         }
         
         // Update animations for folder buttons
-        if (folderManager.areFoldersVisible()) {
-            folderManager.tickFolderButtons();
+        if (uiStateManager.areFoldersVisible()) {
+            uiStateManager.tickFolderButtons();
         }
     }
     
@@ -263,8 +337,8 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             updateLayoutPositions();
             
             // Force update bookmark display after window resize
-            if (folderManager.hasActiveFolder()) {
-                folderManager.refreshBookmarkDisplay();
+            if (uiStateManager.hasActiveFolder()) {
+                refreshBookmarkDisplay();
                 ModLogger.info("Updated bookmark display after resize");
             }
         }
@@ -276,15 +350,10 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * @return true if the refresh was successful
      */
     public boolean refreshBookmarkDisplay() {
-        return folderManager.refreshBookmarkDisplay();
-    }
-    
-    /**
-     * Gets the folder state manager instance
-     * @return The folder state manager
-     */
-    public FolderStateManager getFolderManager() {
-        return folderManager;
+        if (uiStateManager.hasActiveFolder()) {
+            return displayManager.refreshActiveFolder(true);
+        }
+        return false;
     }
     
     /**
@@ -295,10 +364,18 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         return layoutService;
     }
     
+    /**
+     * Gets the core folder manager instance
+     * @return The core folder manager
+     */
+    public FolderManager getCoreFolderManager() {
+        return coreFolderManager;
+    }
+    
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Delegate all mouse click handling to FolderStateManager
-        return folderManager.handleMouseClick(mouseX, mouseY, button, 
+        // Use interactionHandler directly
+        return interactionHandler.handleMouseClick(mouseX, mouseY, button, 
                                              renderManager.isDeleteButtonHovered(),
                                              renderManager.getCurrentDeleteButtonX());
     }
@@ -310,12 +387,12 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             return false;
         }
         
-        if (!folderManager.areFoldersVisible()) {
+        if (!uiStateManager.areFoldersVisible()) {
             ModLogger.debug("Cannot handle ingredient drop: folders not visible");
             return false;
         }
         
-        return folderManager.handleIngredientDrop(mouseX, mouseY, ingredient, folderManager.areFoldersVisible());
+        return interactionHandler.handleIngredientDrop(mouseX, mouseY, ingredient, uiStateManager.areFoldersVisible());
     }
     
     @Override
@@ -325,22 +402,23 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     @Override
     public List<FolderButton> getFolderButtons() {
-        return folderManager.getFolderButtons();
+        return uiStateManager.getFolderButtons();
     }
 
     @Override
     public boolean isBookmarkAreaAvailable() {
-        return folderManager.hasActiveFolder() && folderManager.getBookmarkDisplay() != null;
+        return uiStateManager.hasActiveFolder() && displayManager.getBookmarkDisplay() != null;
     }
 
     @Override
     public Rect2i getBookmarkDisplayArea() {
-        if (folderManager.getBookmarkDisplay() != null) {
+        FolderContentsView display = displayManager.getBookmarkDisplay();
+        if (display != null) {
             return new Rect2i(
-                folderManager.getBookmarkDisplay().getX(),
-                folderManager.getBookmarkDisplay().getY(),
-                folderManager.getBookmarkDisplay().getWidth(),
-                folderManager.getBookmarkDisplay().getHeight()
+                display.getX(),
+                display.getY(),
+                display.getWidth(),
+                display.getHeight()
             );
         }
         return new Rect2i(0, 0, 0, 0);
@@ -352,11 +430,11 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * @return The newly created folder
      */
     public Folder createFolder(String name) {
-        // Delegate folder creation to the FolderStateManager
-        Folder folder = folderManager.createFolder(name);
+        // Use interactionHandler instead of folderManager
+        Folder folder = interactionHandler.createFolder(name);
         
         // Handle UI updates after folder creation
-        folderManager.setFoldersVisible(true);
+        uiStateManager.setFoldersVisible(true);
         
         // Reload folder buttons from data
         loadFolders();
@@ -407,7 +485,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             event.addListener(folderButton);
             
             // Force rebuild folders if this is the first screen after login
-            if (folderButton.firstTimeLoaded && folderButton.getFolderManager().getFolderButtons().size() <= 1) {
+            if (folderButton.firstTimeLoaded && folderButton.getFolderButtons().size() <= 1) {
                 ModLogger.info("First GUI init detected, scheduling folder rebuild");
                 // Reset the counter so we force a refresh soon
                 folderButton.ticksAfterInit = 0;
@@ -463,5 +541,29 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      */
     public FolderScreenManager getScreenManager() {
         return screenManager;
+    }
+    
+    /**
+     * Gets the UI state manager
+     * @return The UI state manager
+     */
+    public FolderUIStateManager getUIStateManager() {
+        return uiStateManager;
+    }
+    
+    /**
+     * Gets the display manager
+     * @return The display manager
+     */
+    public BookmarkDisplayManager getDisplayManager() {
+        return displayManager;
+    }
+    
+    /**
+     * Gets the interaction handler
+     * @return The interaction handler
+     */
+    public FolderInteractionHandler getInteractionHandler() {
+        return interactionHandler;
     }
 }
