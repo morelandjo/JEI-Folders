@@ -221,6 +221,9 @@ public class JeiContentsImpl {
 
     /**
      * Draws tooltips for the grid.
+     * This method exists for compatibility with JEI's tooltip system.
+     * It's recommended to use TooltipRenderer.renderIngredientTooltip instead 
+     * of calling this directly.
      */
     public void drawTooltips(Minecraft minecraft, GuiGraphics graphics, int mouseX, int mouseY) {
         try {

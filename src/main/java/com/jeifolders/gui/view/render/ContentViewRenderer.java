@@ -1,5 +1,6 @@
 package com.jeifolders.gui.view.render;
 
+import com.jeifolders.gui.common.TooltipRenderer;
 import com.jeifolders.gui.view.contents.FolderContentsView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -36,7 +37,14 @@ public class ContentViewRenderer {
                 
                 // Only draw tooltips if mouse is over the display
                 if (contentsView.isMouseOver(mouseX, mouseY)) {
-                    contentsView.getContentsImpl().drawTooltips(Minecraft.getInstance(), graphics, mouseX, mouseY);
+                    // Use the centralized TooltipRenderer instead of calling drawTooltips directly
+                    TooltipRenderer.renderIngredientTooltip(
+                        Minecraft.getInstance(),
+                        graphics,
+                        mouseX,
+                        mouseY,
+                        () -> contentsView.getContentsImpl().drawTooltips(Minecraft.getInstance(), graphics, mouseX, mouseY)
+                    );
                 }
             } catch (Exception e) {
                 ModLogger.error("Error rendering bookmark display: {}", e.getMessage(), e);
