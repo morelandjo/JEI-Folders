@@ -2,6 +2,7 @@ package com.jeifolders.gui.view.contents;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.gui.common.HitTestable;
 import com.jeifolders.gui.common.LayoutConstants;
 import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.gui.controller.FolderStateManager;
@@ -24,7 +25,7 @@ import java.util.Optional;
  * Manages folder contents data, layout, and interaction.
  * Rendering is now handled by the ContentViewRenderer for better separation.
  */
-public class FolderContentsView {
+public class FolderContentsView implements HitTestable {
     // Constants
     private static final int MIN_CONTENT_HEIGHT = 40;
     private static final int MIN_CONTENT_WIDTH = 80;
@@ -337,24 +338,44 @@ public class FolderContentsView {
 
     /**
      * Checks if mouse coordinates are over this display.
-     * For drag operations, we use a more generous hit area.
+     * Implementation of the HitTestable interface.
+     * 
+     * @param mouseX X coordinate of the mouse
+     * @param mouseY Y coordinate of the mouse
+     * @return true if the mouse is over this component
      */
+    @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
+        // Basic hit test using the primary dimensions
+        return MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
+    }
+    
+    /**
+     * Checks if mouse coordinates are over this display's extended area.
+     * For drag operations, we use a more generous hit area.
+     * This overrides the default implementation in HitTestable.
+     * 
+     * @param mouseX X coordinate of the mouse
+     * @param mouseY Y coordinate of the mouse
+     * @return true if the mouse is over the extended hit area
+     */
+    @Override
+    public boolean isMouseOverExtended(double mouseX, double mouseY) {
         boolean result = MouseHitUtil.isMouseOverContentView(
             mouseX, mouseY, x, y, width, height, backgroundArea);
         
         if (result) {
-            ModLogger.debug("Mouse is over folder contents view");
+            ModLogger.debug("Mouse is over folder contents view (extended)");
         }
         
         return result;
     }
-
+    
     /**
      * Gets the bookmark key at the given coordinates, if any.
      */
     public Optional<String> getBookmarkKeyAt(double mouseX, double mouseY) {
-        if (activeFolder == null || !isMouseOver(mouseX, mouseY)) {
+        if (activeFolder == null || !isMouseOverExtended(mouseX, mouseY)) {
             return Optional.empty();
         }
         
@@ -397,8 +418,8 @@ public class FolderContentsView {
             return false;
         }
 
-        // Only process drops that are over this display
-        if (!isMouseOver(mouseX, mouseY)) {
+        // Only process drops that are over this display (use extended area for easier drops)
+        if (!isMouseOverExtended(mouseX, mouseY)) {
             ModLogger.info("[DROP-DEBUG] Ingredient drop not over display area: ({}, {}) not in ({}, {}, {}, {})", 
                           mouseX, mouseY, x, y, width, height);
             return false;

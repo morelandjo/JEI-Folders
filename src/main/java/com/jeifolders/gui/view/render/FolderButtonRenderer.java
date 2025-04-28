@@ -33,8 +33,8 @@ public class FolderButtonRenderer {
         int height = button.getHeight();
         boolean isActive = button.isActive();
         
-        // Check hover state and update the button's hover state
-        boolean isHovered = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
+        // Check hover state using the HitTestable interface implementation
+        boolean isHovered = MouseHitUtil.isMouseOver(mouseX, mouseY, button);
         button.setHovered(isHovered);
         
         // Get hover animation progress
@@ -117,8 +117,11 @@ public class FolderButtonRenderer {
         // Render the delete button
         FolderButtonTextures.renderDeleteFolderIcon(graphics, x, y);
         
-        // Show tooltip when hovering over delete button
-        boolean isHovered = MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, 16, 16);
+        // Create a temporary "button" just for hit testing
+        FolderButton deleteButton = new FolderButton(x, y, FolderButton.ButtonType.DELETE);
+        
+        // Show tooltip when hovering over delete button using standardized hit test
+        boolean isHovered = MouseHitUtil.isMouseOver(mouseX, mouseY, deleteButton);
         if (isHovered) {
             TooltipRenderer.renderTooltip(graphics, "tooltip.jeifolders.delete_folder", mouseX, mouseY);
         }
@@ -128,6 +131,8 @@ public class FolderButtonRenderer {
      * Checks if mouse is over a delete button
      */
     public static boolean isMouseOverDeleteButton(int mouseX, int mouseY, int buttonX, int buttonY) {
-        return MouseHitUtil.isMouseOverRect(mouseX, mouseY, buttonX, buttonY, 16, 16);
+        // Create a temporary button just for hit testing
+        FolderButton deleteButton = new FolderButton(buttonX, buttonY, FolderButton.ButtonType.DELETE);
+        return MouseHitUtil.isMouseOver(mouseX, mouseY, deleteButton);
     }
 }

@@ -31,6 +31,32 @@ public final class MouseHitUtil {
     }
     
     /**
+     * Checks if mouse coordinates are over a HitTestable component.
+     * 
+     * @param mouseX X coordinate of the mouse
+     * @param mouseY Y coordinate of the mouse
+     * @param component Any component implementing the HitTestable interface
+     * @return true if the mouse is over the component
+     */
+    public static boolean isMouseOver(double mouseX, double mouseY, HitTestable component) {
+        if (component == null) return false;
+        return component.isMouseOver(mouseX, mouseY);
+    }
+    
+    /**
+     * Checks if mouse coordinates are over a HitTestable component with extended hit area.
+     * 
+     * @param mouseX X coordinate of the mouse
+     * @param mouseY Y coordinate of the mouse
+     * @param component Any component implementing the HitTestable interface
+     * @return true if the mouse is over the component's extended hit area
+     */
+    public static boolean isMouseOverExtended(double mouseX, double mouseY, HitTestable component) {
+        if (component == null) return false;
+        return component.isMouseOverExtended(mouseX, mouseY);
+    }
+    
+    /**
      * Checks if mouse coordinates are over a folder button.
      * 
      * @param mouseX X coordinate of the mouse

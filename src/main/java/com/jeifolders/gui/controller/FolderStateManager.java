@@ -445,7 +445,8 @@ public class FolderStateManager {
      */
     public FolderButton getFolderButtonAt(double mouseX, double mouseY) {
         for (FolderButton button : folderButtons) {
-            if (MouseHitUtil.isMouseOverButton(mouseX, mouseY, button)) {
+            // Use our standardized hit detection through MouseHitUtil
+            if (MouseHitUtil.isMouseOver(mouseX, mouseY, button)) {
                 return button;
             }
         }
@@ -840,7 +841,8 @@ public class FolderStateManager {
         // Check folder button clicks
         if (areFoldersVisible()) {
             for (FolderButton folderButton : getFolderButtons()) {
-                if (MouseHitUtil.isMouseOverButton(mouseX, mouseY, folderButton)) {
+                // Use our standardized hit detection approach
+                if (MouseHitUtil.isMouseOver(mouseX, mouseY, folderButton)) {
                     // Handle different button types
                     switch (folderButton.getButtonType()) {
                         case ADD:

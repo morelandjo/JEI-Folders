@@ -1,6 +1,7 @@
 package com.jeifolders.gui.view.buttons;
 
 import com.jeifolders.data.Folder;
+import com.jeifolders.gui.common.HitTestable;
 import com.jeifolders.gui.common.MouseHitUtil;
 
 import java.util.function.Consumer;
@@ -9,7 +10,7 @@ import java.util.function.Consumer;
  * A button that represents a folder in the UI.
  * This class is now a pure data object without rendering logic.
  */
-public class FolderButton {
+public class FolderButton implements HitTestable {
     // Position and dimensions
     private int x;
     private int y;
@@ -105,7 +106,7 @@ public class FolderButton {
      * @return true if the click was processed
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height)) {
+        if (isMouseOver(mouseX, mouseY)) {
             // Only respond to left clicks (button == 0)
             if (button == 0 && clickHandler != null) {
                 // Call the click handler with the folder
@@ -114,6 +115,33 @@ public class FolderButton {
             }
         }
         return false;
+    }
+    
+    /**
+     * Determines if the mouse coordinates are over this button.
+     * Implementation of the HitTestable interface.
+     * 
+     * @param mouseX X coordinate of the mouse
+     * @param mouseY Y coordinate of the mouse
+     * @return true if the mouse is over this button
+     */
+    @Override
+    public boolean isMouseOver(double mouseX, double mouseY) {
+        return MouseHitUtil.isMouseOverRect(mouseX, mouseY, x, y, width, height);
+    }
+    
+    /**
+     * Determines if the mouse coordinates are over the extended area of this button.
+     * This implementation adds a small margin to make drag and drop operations easier.
+     * 
+     * @param mouseX X coordinate of the mouse
+     * @param mouseY Y coordinate of the mouse
+     * @return true if the mouse is over the extended hit area of this button
+     */
+    @Override
+    public boolean isMouseOverExtended(double mouseX, double mouseY) {
+        // Use the drag-drop margin for the extended hit area
+        return MouseHitUtil.isMouseOverDragDropArea(mouseX, mouseY, x, y, width, height);
     }
     
     /**
