@@ -57,9 +57,16 @@ public class JEIFolders {
         ModLogger.info("Client setup complete");
     }
 
-    private void onWorldLoad(LevelEvent.Load event) {
-        if (event.getLevel().isClientSide() && !dataLoaded) {
-            ModLogger.debug("Loading folder data on world load");
+    /**
+     * Helper method to load data when needed and avoid code duplication
+     * 
+     * @param source The source of the data load request for logging
+     * @param shouldCheck Whether to check the dataLoaded flag before loading
+     * @return True if data was loaded, false otherwise
+     */
+    private boolean loadDataIfNeeded(String source, boolean shouldCheck) {
+        if (!shouldCheck || !dataLoaded) {
+            ModLogger.debug("Loading folder data on {}", source);
             FolderStorageService.getInstance().loadData();
             dataLoaded = true;
             
@@ -67,6 +74,14 @@ public class JEIFolders {
             if (FolderUIController.isInitialized()) {
                 FolderUIController.getInstance().refreshBookmarkDisplay();
             }
+            return true;
+        }
+        return false;
+    }
+
+    private void onWorldLoad(LevelEvent.Load event) {
+        if (event.getLevel().isClientSide()) {
+            loadDataIfNeeded("world load", true);
         }
     }
 
@@ -79,15 +94,6 @@ public class JEIFolders {
     }
     
     private void onPlayerLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (!dataLoaded) {
-            ModLogger.debug("Loading folder data on player login");
-            FolderStorageService.getInstance().loadData();
-            dataLoaded = true;
-            
-            // Refresh UI after data load if system is initialized
-            if (FolderUIController.isInitialized()) {
-                FolderUIController.getInstance().refreshBookmarkDisplay();
-            }
-        }
+        loadDataIfNeeded("player login", true);
     }
 }

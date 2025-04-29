@@ -3,7 +3,6 @@ package com.jeifolders.data;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.util.SnbtFormat;
-import com.jeifolders.core.FolderManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.nbt.CompoundTag;
@@ -33,7 +32,7 @@ public class FolderStorageService {
 
     // Data collections
     private final Map<Integer, Folder> folders = new HashMap<>();
-    private final Map<String, Object> ingredientCache = new HashMap<>();
+    private final IngredientCache ingredientCache = new IngredientCache();
 
     // Runtime state
     private Integer lastActiveFolderId = null;
@@ -51,11 +50,78 @@ public class FolderStorageService {
     private static final String CONFIG_ROOT = "./config/jeifolders/";
     private static final int MIN_SAVE_INTERVAL_MS = 5000; // Minimum time between saves
     private long lastSaveTime = 0;
-    private FolderManager callbackManager;
 
     // NBT Keys
     private static final String FOLDERS_KEY = "folders";
     private static final String ACTIVE_FOLDER_KEY = "activeFolder";
+    
+    /**
+     * Specialized cache for ingredients with better management features
+     */
+    private static class IngredientCache {
+        private final Map<String, Object> cache = new HashMap<>();
+        
+        /**
+         * Gets a cached ingredient by key
+         * 
+         * @param key The ingredient key
+         * @return The cached ingredient, or null if not found
+         */
+        public Object get(String key) {
+            return cache.get(key);
+        }
+        
+        /**
+         * Caches an ingredient
+         * 
+         * @param key The ingredient key
+         * @param ingredient The ingredient to cache
+         */
+        public void put(String key, Object ingredient) {
+            if (key != null && ingredient != null) {
+                cache.put(key, ingredient);
+            }
+        }
+        
+        /**
+         * Clears all cached ingredients
+         */
+        public void clear() {
+            cache.clear();
+        }
+        
+        /**
+         * Gets the number of cached ingredients
+         * 
+         * @return The number of cached ingredients
+         */
+        public int size() {
+            return cache.size();
+        }
+        
+        /**
+         * Removes all unused keys from the cache
+         * 
+         * @param activeKeys The keys that should be kept in the cache
+         * @return The number of removed entries
+         */
+        public int pruneUnused(Collection<String> activeKeys) {
+            int initialSize = cache.size();
+            if (activeKeys.isEmpty()) {
+                clear();
+                return initialSize;
+            }
+            
+            Set<String> keysToRemove = new HashSet<>(cache.keySet());
+            keysToRemove.removeAll(activeKeys);
+            
+            for (String key : keysToRemove) {
+                cache.remove(key);
+            }
+            
+            return keysToRemove.size();
+        }
+    }
 
     /**
      * Private constructor for singleton pattern
@@ -154,60 +220,19 @@ public class FolderStorageService {
      */
     private String determineWorldFolder() {
         try {
-            // Try multiple strategies to find the world name
-            String worldName = null;
-            
             // Get the Minecraft instance safely
             Minecraft minecraft = getMinecraftSafe();
             
-            // Strategy 1: Get directly from ServerLifecycleHooks (most reliable for servers)
-            try {
-                MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-                if (server != null) {
-                    // This is safe because WorldData is the interface that server.getWorldData() returns
-                    worldName = server.getWorldData().getLevelName();
-                    ModLogger.debug("Got world name from ServerLifecycleHooks: {}", worldName);
-                }
-            } catch (Exception e) {
-                ModLogger.debug("Could not get world name from ServerLifecycleHooks: {}", e.getMessage());
+            // Try each strategy in order of reliability
+            String worldName = tryGetWorldNameFromServerHooks();
+            
+            if (worldName == null) {
+                worldName = tryGetWorldNameFromIntegratedServer(minecraft);
             }
             
-           
-            
-            // Strategy 3: Try to get from integrated server
-            if (worldName == null && minecraft != null) {
-                try {
-                    IntegratedServer integratedServer = minecraft.getSingleplayerServer();
-                    if (integratedServer != null) {
-                        // This is safe because WorldData is the interface that integrated server uses
-                        worldName = integratedServer.getWorldData().getLevelName();
-                        ModLogger.debug("Got world name from integrated server: {}", worldName);
-                    }
-                } catch (Exception e) {
-                    ModLogger.debug("Could not get world name from integrated server: {}", e.getMessage());
-                }
+            if (worldName == null) {
+                worldName = tryGetMultiplayerServerName(minecraft);
             }
-            
-            // Strategy 4: For multiplayer, try to get server address
-            if (worldName == null && minecraft != null && minecraft.getCurrentServer() != null) {
-                try {
-                    String serverName = minecraft.getCurrentServer().name;
-                    String serverIP = minecraft.getCurrentServer().ip;
-                    
-                    // Use server name if available, otherwise use IP
-                    if (serverName != null && !serverName.isEmpty()) {
-                        worldName = "mp_" + serverName.replace(' ', '_');
-                        ModLogger.debug("Using multiplayer server name as world name: {}", worldName);
-                    } else if (serverIP != null && !serverIP.isEmpty()) {
-                        worldName = "mp_" + serverIP.replace(':', '_');
-                        ModLogger.debug("Using multiplayer server address as world name: {}", worldName);
-                    }
-                } catch (Exception e) {
-                    ModLogger.debug("Could not get server info for multiplayer: {}", e.getMessage());
-                }
-            }
-            
-            
             
             // If we have a world name, sanitize and return it
             if (worldName != null && !worldName.trim().isEmpty()) {
@@ -226,6 +251,89 @@ public class FolderStorageService {
         // Default to the "all" folder if we can't determine the world
         ModLogger.info("Using default 'all' data folder (no specific world detected)");
         return ALL_WORLDS_FOLDER;
+    }
+    
+    /**
+     * Strategy 1: Try to get world name from ServerLifecycleHooks
+     * 
+     * @return The world name, or null if not available
+     */
+    private String tryGetWorldNameFromServerHooks() {
+        try {
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            if (server != null) {
+                String worldName = server.getWorldData().getLevelName();
+                if (worldName != null) {
+                    ModLogger.debug("Got world name from ServerLifecycleHooks: {}", worldName);
+                    return worldName;
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.debug("Could not get world name from ServerLifecycleHooks: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Strategy 2: Try to get world name from integrated server
+     * 
+     * @param minecraft The Minecraft client instance
+     * @return The world name, or null if not available
+     */
+    private String tryGetWorldNameFromIntegratedServer(Minecraft minecraft) {
+        if (minecraft == null) {
+            return null;
+        }
+        
+        try {
+            IntegratedServer integratedServer = minecraft.getSingleplayerServer();
+            if (integratedServer != null) {
+                String worldName = integratedServer.getWorldData().getLevelName();
+                if (worldName != null) {
+                    ModLogger.debug("Got world name from integrated server: {}", worldName);
+                    return worldName;
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.debug("Could not get world name from integrated server: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Strategy 3: Try to get server name or address for multiplayer
+     * 
+     * @param minecraft The Minecraft client instance
+     * @return The server name or address formatted as a directory name, or null if not available
+     */
+    private String tryGetMultiplayerServerName(Minecraft minecraft) {
+        if (minecraft == null) {
+            return null;
+        }
+        
+        try {
+            var currentServer = minecraft.getCurrentServer();
+            if (currentServer == null) {
+                return null;
+            }
+            
+            String serverName = currentServer.name;
+            String serverIP = currentServer.ip;
+            
+            // Use server name if available, otherwise use IP
+            if (serverName != null && !serverName.isEmpty()) {
+                String worldName = "mp_" + serverName.replace(' ', '_');
+                ModLogger.debug("Using multiplayer server name as world name: {}", worldName);
+                return worldName;
+            } else if (serverIP != null && !serverIP.isEmpty()) {
+                String worldName = "mp_" + serverIP.replace(':', '_');
+                ModLogger.debug("Using multiplayer server address as world name: {}", worldName);
+                return worldName;
+            }
+        } catch (Exception e) {
+            ModLogger.debug("Could not get server info for multiplayer: {}", e.getMessage());
+        }
+        return null;
     }
     
     /**
@@ -315,6 +423,9 @@ public class FolderStorageService {
                 loadIngredientsForFolder(folder);
             }
 
+            // Prune any unused ingredients from the cache
+            pruneUnusedIngredients();
+
             isLoaded = true;
             isDirty = false;
             
@@ -388,16 +499,6 @@ public class FolderStorageService {
     }
 
     /**
-     * Registers a callback manager to notify of data changes
-     * 
-     * @param manager The folder manager to notify of changes
-     */
-    public void registerCallback(FolderManager manager) {
-        this.callbackManager = manager;
-        ModLogger.debug("Callback manager registered with FolderDataService");
-    }
-
-    /**
      * Loads ingredient data for a specific folder
      * 
      * @param folder The folder to load ingredients for
@@ -438,15 +539,29 @@ public class FolderStorageService {
     }
     
     /**
+     * Ensures data is loaded before performing an operation
+     */
+    private void ensureDataLoaded() {
+        if (!isLoaded) {
+            loadData();
+        }
+    }
+    
+    /**
+     * Marks data as dirty and triggers a save
+     */
+    private void markDirtyAndSave() {
+        isDirty = true;
+        saveData();
+    }
+    
+    /**
      * Get all folders
      * 
      * @return List of all folders
      */
     public List<Folder> getAllFolders() {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         return new ArrayList<>(folders.values());
     }
     
@@ -457,10 +572,7 @@ public class FolderStorageService {
      * @return Optional containing the folder, or empty if not found
      */
     public Optional<Folder> getFolder(int id) {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         return Optional.ofNullable(folders.get(id));
     }
     
@@ -470,10 +582,7 @@ public class FolderStorageService {
      * @return The last active folder ID, or null if none was active
      */
     public Integer getLastActiveFolderId() {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         return lastActiveFolderId;
     }
     
@@ -484,8 +593,7 @@ public class FolderStorageService {
      */
     public void setLastActiveFolderId(Integer id) {
         lastActiveFolderId = id;
-        isDirty = true;
-        saveData();
+        markDirtyAndSave();
     }
     
     /**
@@ -495,10 +603,7 @@ public class FolderStorageService {
      * @return The newly created folder
      */
     public Folder createFolder(String name) {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         
         // Find the next available ID
         int nextId = 1;
@@ -510,9 +615,7 @@ public class FolderStorageService {
         Folder folder = new Folder(nextId, name);
         folders.put(nextId, folder);
         
-        // Mark as dirty and save
-        isDirty = true;
-        saveData();
+        markDirtyAndSave();
         
         ModLogger.info("Created new folder: {} (ID: {})", name, nextId);
         return folder;
@@ -525,10 +628,7 @@ public class FolderStorageService {
      * @return true if the folder was deleted, false if it didn't exist
      */
     public boolean deleteFolder(int id) {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         
         // Remove the folder
         Folder removed = folders.remove(id);
@@ -538,9 +638,7 @@ public class FolderStorageService {
                 lastActiveFolderId = null;
             }
             
-            // Mark as dirty and save
-            isDirty = true;
-            saveData();
+            markDirtyAndSave();
             
             ModLogger.info("Deleted folder: {} (ID: {})", removed.getName(), id);
             return true;
@@ -557,10 +655,7 @@ public class FolderStorageService {
      * @return true if the folder was updated, false if it didn't exist
      */
     public boolean updateFolderName(int id, String newName) {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         
         // Get the folder
         Folder folder = folders.get(id);
@@ -568,9 +663,7 @@ public class FolderStorageService {
             // Update the name
             folder.setName(newName);
             
-            // Mark as dirty and save
-            isDirty = true;
-            saveData();
+            markDirtyAndSave();
             
             ModLogger.info("Updated folder name: {} (ID: {})", newName, id);
             return true;
@@ -587,19 +680,14 @@ public class FolderStorageService {
      * @return true if the bookmark was added, false if the folder doesn't exist
      */
     public boolean addBookmark(int folderId, String bookmarkKey) {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         
         // Get the folder
         Folder folder = folders.get(folderId);
         if (folder != null) {
             // Add the bookmark
             if (folder.addBookmarkKey(bookmarkKey)) {
-                // Mark as dirty and save
-                isDirty = true;
-                saveData();
+                markDirtyAndSave();
                 
                 ModLogger.debug("Added bookmark to folder {} (ID: {}): {}", folder.getName(), folderId, bookmarkKey);
                 return true;
@@ -617,19 +705,17 @@ public class FolderStorageService {
      * @return true if the bookmark was removed, false if the folder doesn't exist or didn't contain the bookmark
      */
     public boolean removeBookmark(int folderId, String bookmarkKey) {
-        // Make sure data is loaded
-        if (!isLoaded) {
-            loadData();
-        }
+        ensureDataLoaded();
         
         // Get the folder
         Folder folder = folders.get(folderId);
         if (folder != null) {
             // Remove the bookmark
             if (folder.removeBookmarkKey(bookmarkKey)) {
-                // Mark as dirty and save
-                isDirty = true;
-                saveData();
+                markDirtyAndSave();
+                
+                // Prune the cache to remove any unused ingredients
+                pruneUnusedIngredients();
                 
                 ModLogger.debug("Removed bookmark from folder {} (ID: {}): {}", folder.getName(), folderId, bookmarkKey);
                 return true;
@@ -682,5 +768,25 @@ public class FolderStorageService {
      */
     public boolean isUsingFallbackDir() {
         return usingFallbackDir;
+    }
+
+    /**
+     * Prunes unused ingredients from the cache
+     * 
+     * @return The number of pruned ingredients
+     */
+    public int pruneUnusedIngredients() {
+        // Collect all active bookmark keys
+        Set<String> activeKeys = new HashSet<>();
+        for (Folder folder : folders.values()) {
+            activeKeys.addAll(folder.getBookmarkKeys());
+        }
+        
+        // Prune the cache
+        int prunedCount = ingredientCache.pruneUnused(activeKeys);
+        if (prunedCount > 0) {
+            ModLogger.debug("Pruned {} unused ingredients from cache", prunedCount);
+        }
+        return prunedCount;
     }
 }

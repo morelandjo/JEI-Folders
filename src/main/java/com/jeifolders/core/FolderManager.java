@@ -37,9 +37,6 @@ public class FolderManager {
         this.displayManager = new BookmarkDisplayManager(this);
         this.interactionHandler = new FolderInteractionHandler(this);
         
-        // Set up bidirectional connections
-        this.storageService.registerCallback(this);
-        
         ModLogger.debug("FolderManager initialized");
     }
     
