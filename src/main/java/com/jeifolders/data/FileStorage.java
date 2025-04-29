@@ -13,7 +13,6 @@ import java.util.Optional;
 
 /**
  * Handles low-level file operations for the folder storage system.
- * Centralizes file I/O operations that were previously scattered in FolderStorageService.
  */
 public class FileStorage {
     // Singleton instance

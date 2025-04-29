@@ -13,7 +13,6 @@ import java.util.List;
 
 /**
  * Central facade for folder management functionality.
- * Coordinates between different components of the folder system.
  */
 public class FolderManager {
     // Singleton instance
@@ -142,7 +141,6 @@ public class FolderManager {
     
     /**
      * Sets the handler for showing the add folder dialog
-     * This should be called by the UI system that manages dialogs
      * 
      * @param handler The runnable that will show the add folder dialog
      */
@@ -151,8 +149,7 @@ public class FolderManager {
     }
     
     /**
-     * Sets a folder as active. This is a convenience method that coordinates
-     * between the different components.
+     * Sets a folder as active.
      * 
      * @param button The folder button to activate
      */
@@ -161,7 +158,6 @@ public class FolderManager {
             return;
         }
         
-        // Process the folder activation through a series of focused operations
         updateActiveFolder(button);
         notifyFolderActivation(button);
         refreshBookmarksDisplay(button);

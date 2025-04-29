@@ -6,7 +6,6 @@ import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.events.FolderEvent;
 import com.jeifolders.ui.events.FolderEventBus;
-import com.jeifolders.ui.events.FolderEventListener;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.ui.util.RefreshCoordinator;
 import com.jeifolders.util.ModLogger;
@@ -45,35 +44,12 @@ public class FolderEventDispatcher {
     }
     
     /**
-     * Add a legacy listener for backward compatibility
-     * 
-     * @param type Event type to listen for
-     * @param listener Legacy listener that will be called when event occurs
-     */
-    public void addEventListener(FolderEventType type, FolderEventListener listener) {
-        if (listener != null) {
-            eventBus.register(type, event -> listener.onFolderEvent(event));
-        }
-    }
-    
-    /**
      * Add a listener for all event types
      * 
      * @param listener Listener that will be called for all events
      */
     public void addGlobalEventListener(Consumer<FolderEvent> listener) {
         eventBus.registerGlobal(listener);
-    }
-    
-    /**
-     * Add a legacy listener for all event types (backward compatibility)
-     * 
-     * @param listener Listener that will be called for all events
-     */
-    public void addGlobalEventListener(FolderEventListener listener) {
-        if (listener != null) {
-            eventBus.registerGlobal(event -> listener.onFolderEvent(event));
-        }
     }
     
     /**

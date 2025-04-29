@@ -8,7 +8,6 @@ import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.integration.impl.JeiBookmarkAdapter;
 import com.jeifolders.integration.impl.JeiContentsImpl;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
-import com.jeifolders.ui.events.FolderEventListener;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.events.FolderEventDispatcher;
 import com.jeifolders.ui.interaction.FolderInteractionHandler;
@@ -16,12 +15,14 @@ import com.jeifolders.ui.util.HitTestable;
 import com.jeifolders.ui.util.LayoutConstants;
 import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
+import com.jeifolders.ui.events.FolderEvent;
 
 import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Manages folder contents data, layout, and interaction.
@@ -63,7 +64,7 @@ public class FolderContentsView implements HitTestable {
     private int calculatedDisplayY = -1;
     
     // Event system
-    private final FolderEventListener folderChangedListener;
+    private final Consumer<FolderEvent> folderChangedListener;
 
     /**
      * Creates a new unified folder contents display

@@ -2,8 +2,6 @@ package com.jeifolders.data;
 
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -17,7 +15,6 @@ import java.util.Objects;
 
 /**
  * Handles resolving file paths and determining world folder names for the folder storage system.
- * Centralizes path resolution logic that was previously scattered in FolderStorageService.
  */
 public class ConfigPathResolver {
     // Constants
@@ -128,7 +125,6 @@ public class ConfigPathResolver {
     
     /**
      * Determines the world-specific folder name based on server information
-     * with centralized logging to prevent duplicate messages
      */
     public String determineWorldFolder() {
         ModLogger.debug("[WORLD-DEBUG] Beginning world folder determination");
@@ -173,7 +169,6 @@ public class ConfigPathResolver {
     
     /**
      * Centralized method for logging world folder changes and returning the folder name
-     * This prevents duplicate logging and ensures consistent messaging
      */
     private String logAndReturnWorldFolder(String worldFolder) {
         // If this is the same folder we last logged about, don't log again
@@ -195,17 +190,6 @@ public class ConfigPathResolver {
     }
     
     /**
-     * Helper method to use the default world folder with appropriate logging
-     */
-    private String useDefaultWorldFolder() {
-        String defaultFolder = getDefaultWorldFolderName();
-        // Update the cache
-        cachedWorldName = defaultFolder;
-        worldNameDeterminedAt = System.currentTimeMillis();
-        return logAndReturnWorldFolder(defaultFolder);
-    }
-    
-    /**
      * Tries all world name determination strategies in order of reliability
      * 
      * @param minecraft The Minecraft instance
@@ -224,13 +208,6 @@ public class ConfigPathResolver {
         ModLogger.debug("[WORLD-DEBUG] World name from level: {}", fromLevel != null ? fromLevel : "null");
         if (fromLevel != null) {
             return fromLevel;
-        }
-        
-        // Strategy 3: Try to get world name from screen
-        String fromScreen = tryGetWorldNameFromScreen();
-        ModLogger.debug("[WORLD-DEBUG] World name from screen: {}", fromScreen != null ? fromScreen : "null");
-        if (fromScreen != null) {
-            return fromScreen;
         }
         
         ModLogger.debug("[WORLD-DEBUG] All strategies failed to determine world name");
@@ -308,38 +285,6 @@ public class ConfigPathResolver {
             }
         } catch (Exception e) {
             ModLogger.debug("[WORLD-DEBUG] Error getting name from client level: {}", e.getMessage());
-        }
-        return null;
-    }
-    
-    /**
-     * Strategy 3: Try to get world name from current screen (SelectWorldScreen)
-     */
-    private String tryGetWorldNameFromScreen() {
-        try {
-            Minecraft minecraft = getMinecraftSafe();
-            if (minecraft != null && minecraft.screen instanceof SelectWorldScreen) {
-                Screen screen = minecraft.screen;
-                // This is just a hint that we're on the world selection screen
-                // We can't directly get the selected world name from here in most cases
-                ModLogger.debug("[WORLD-DEBUG] Detected world selection screen");
-                
-                // Try to get server info for multiplayer
-                if (minecraft.getCurrentServer() != null) {
-                    String serverName = minecraft.getCurrentServer().name;
-                    String serverIP = minecraft.getCurrentServer().ip;
-                    
-                    if (serverName != null && !serverName.isEmpty()) {
-                        ModLogger.debug("[WORLD-DEBUG] Using multiplayer server name: {}", serverName);
-                        return "mp_" + serverName;
-                    } else if (serverIP != null && !serverIP.isEmpty()) {
-                        ModLogger.debug("[WORLD-DEBUG] Using multiplayer server address: {}", serverIP);
-                        return "mp_" + serverIP;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            ModLogger.debug("[WORLD-DEBUG] Error getting world name from screen: {}", e.getMessage());
         }
         return null;
     }

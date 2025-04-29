@@ -11,7 +11,6 @@ import java.util.Optional;
 
 /**
  * Handles serialization and deserialization of folder data to/from NBT format.
- * Centralizes data conversion logic that was previously scattered in FolderStorageService.
  */
 public class DataSerializer {
     // Singleton instance

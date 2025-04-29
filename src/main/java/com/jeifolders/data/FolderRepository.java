@@ -1,13 +1,11 @@
 package com.jeifolders.data;
 
 import com.jeifolders.util.ModLogger;
-import net.minecraft.nbt.CompoundTag;
 
 import java.util.*;
 
 /**
  * Repository for managing folder data and state.
- * Centralizes folder data operations that were previously scattered in FolderStorageService.
  */
 public class FolderRepository {
     // Singleton instance

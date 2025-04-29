@@ -7,7 +7,6 @@ import java.util.*;
 
 /**
  * Central facade for managing folder data and persistence.
- * Coordinates between specialized components for folder data management.
  */
 public class FolderStorageService {
     // Singleton instance
@@ -232,7 +231,7 @@ public class FolderStorageService {
      * @return true if data was saved successfully, false otherwise
      */
     public boolean saveData() {
-        // Check if we need to save (throttling to avoid excessive writes)
+        // Check if we need to save
         long currentTime = System.currentTimeMillis();
         if (!folderRepository.isDirty() || currentTime - lastSaveTime < MIN_SAVE_INTERVAL_MS) {
             return true;
@@ -275,7 +274,7 @@ public class FolderStorageService {
      */
     private void ensureDataLoaded() {
         if (!folderRepository.isLoaded()) {
-            loadDataIfNeeded(); // Use the improved method that checks if loading is needed
+            loadDataIfNeeded();
         }
     }
     

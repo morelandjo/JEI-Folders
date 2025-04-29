@@ -11,7 +11,6 @@ import java.util.Set;
 
 /**
  * Manages caching of ingredient objects for the folder storage system.
- * Centralizes ingredient cache logic that was previously embedded in FolderStorageService.
  */
 public class IngredientCacheManager {
     // Singleton instance
