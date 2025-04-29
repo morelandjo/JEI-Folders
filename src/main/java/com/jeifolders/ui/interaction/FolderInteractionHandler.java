@@ -2,11 +2,11 @@ package com.jeifolders.ui.interaction;
 
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
-import com.jeifolders.gui.common.MouseHitUtil;
-import com.jeifolders.gui.controller.FolderUIController;
-import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
+import com.jeifolders.ui.components.buttons.FolderButton;
+import com.jeifolders.ui.controllers.FolderUIController;
+import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 

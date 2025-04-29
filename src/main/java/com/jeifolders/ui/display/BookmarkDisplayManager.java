@@ -3,10 +3,10 @@ package com.jeifolders.ui.display;
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.gui.view.contents.FolderContentsView;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
+import com.jeifolders.ui.components.contents.FolderContentsView;
 import com.jeifolders.util.ModLogger;
 
 import java.util.ArrayList;

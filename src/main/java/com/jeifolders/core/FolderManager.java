@@ -3,8 +3,8 @@ package com.jeifolders.core;
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.events.FolderEventDispatcher;
-import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.integration.TypedIngredient;
+import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
 import com.jeifolders.ui.interaction.FolderInteractionHandler;
 import com.jeifolders.ui.state.FolderUIStateManager;
@@ -92,8 +92,8 @@ public class FolderManager {
      * Gets the layout service from the UI controller
      * @return The layout service
      */
-    public com.jeifolders.gui.layout.FolderLayoutService getLayoutService() {
-        return com.jeifolders.gui.controller.FolderUIController.getInstance().getLayoutService();
+    public com.jeifolders.ui.layout.FolderLayoutService getLayoutService() {
+        return com.jeifolders.ui.controllers.FolderUIController.getInstance().getLayoutService();
     }
     
     /**

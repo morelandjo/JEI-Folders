@@ -1,10 +1,10 @@
 package com.jeifolders.integration.impl;
 
-import com.jeifolders.gui.common.MouseHitUtil;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.integration.Rectangle2i;
+import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
 
 import mezz.jei.api.helpers.IColorHelper;

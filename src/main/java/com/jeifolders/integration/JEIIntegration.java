@@ -2,9 +2,9 @@ package com.jeifolders.integration;
 
 import com.jeifolders.JEIFolders;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.gui.common.ExclusionHandler;
-import com.jeifolders.gui.common.IngredientDragManager;
-import com.jeifolders.gui.controller.FolderUIController;
+import com.jeifolders.ui.controllers.FolderUIController;
+import com.jeifolders.ui.util.ExclusionHandler;
+import com.jeifolders.ui.util.IngredientDragManager;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -263,7 +263,7 @@ public class JEIIntegration implements IModPlugin {
         }
 
         private <I> Target<I> createFolderTarget(
-                com.jeifolders.gui.view.buttons.FolderButton folderRowButton,
+                com.jeifolders.ui.components.buttons.FolderButton folderRowButton,
                 FolderUIController folderButton,
                 ITypedIngredient<I> ingredient) {
 

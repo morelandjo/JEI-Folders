@@ -1,9 +1,9 @@
 package com.jeifolders;
 
 import com.jeifolders.integration.JEIIntegration;
+import com.jeifolders.ui.controllers.FolderUIController;
+import com.jeifolders.ui.layout.FolderLayoutService;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.gui.controller.FolderUIController;
-import com.jeifolders.gui.layout.FolderLayoutService;
 import com.jeifolders.util.ModLogger;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;

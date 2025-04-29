@@ -1,7 +1,7 @@
 package com.jeifolders.integration;
 
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.gui.view.contents.FolderContentsView;
+import com.jeifolders.ui.components.contents.FolderContentsView;
 import com.jeifolders.data.Folder;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.ingredients.ITypedIngredient;

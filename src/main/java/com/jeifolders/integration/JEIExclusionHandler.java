@@ -7,7 +7,7 @@ import net.minecraft.client.renderer.Rect2i;
 import java.util.Collection;
 import java.util.Optional;
 
-import com.jeifolders.gui.common.ExclusionHandler;
+import com.jeifolders.ui.util.ExclusionHandler;
 
 /**
  * JEI-specific implementation of the ExclusionHandlerInterface.

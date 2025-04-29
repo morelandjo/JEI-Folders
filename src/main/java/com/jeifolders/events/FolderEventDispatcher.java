@@ -1,13 +1,13 @@
 package com.jeifolders.events;
 
 import com.jeifolders.data.Folder;
-import com.jeifolders.gui.event.FolderEvent;
-import com.jeifolders.gui.event.FolderEventBus;
-import com.jeifolders.gui.event.FolderEventListener;
-import com.jeifolders.gui.event.FolderEventType;
-import com.jeifolders.gui.view.buttons.FolderButton;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
+import com.jeifolders.ui.components.buttons.FolderButton;
+import com.jeifolders.ui.events.FolderEvent;
+import com.jeifolders.ui.events.FolderEventBus;
+import com.jeifolders.ui.events.FolderEventListener;
+import com.jeifolders.ui.events.FolderEventType;
 
 import java.util.function.Consumer;
 

@@ -1,7 +1,7 @@
 package com.jeifolders.ui.state;
 
 import com.jeifolders.integration.TypedIngredient;
-import com.jeifolders.gui.view.buttons.FolderButton;
+import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.util.ModLogger;
 
 import java.util.ArrayList;
