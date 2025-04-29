@@ -18,20 +18,43 @@ public class JEIFolders {
     
     // Track whether data has been loaded this session to prevent double-loading
     private boolean dataLoaded = false;
+    
+    /**
+     * Centralizes event registration logic to reduce boilerplate in the main class
+     */
+    private static class EventRegistration {
+        private final JEIFolders mod;
+        private final IEventBus modEventBus;
+        
+        EventRegistration(JEIFolders mod, IEventBus modEventBus) {
+            this.mod = mod;
+            this.modEventBus = modEventBus;
+        }
+        
+        void registerAll() {
+            registerModEvents();
+            registerForgeEvents();
+            
+            ModLogger.info("JEI Folders events registered");
+        }
+        
+        void registerModEvents() {
+            modEventBus.addListener(mod::commonSetup);
+            modEventBus.addListener(mod::clientSetup);
+        }
+        
+        void registerForgeEvents() {
+            NeoForge.EVENT_BUS.addListener(mod::onWorldLoad);
+            NeoForge.EVENT_BUS.addListener(mod::onWorldUnload);
+            NeoForge.EVENT_BUS.addListener(mod::onPlayerLoggedIn);
+        }
+    }
 
     public JEIFolders(IEventBus modEventBus) {
         ModLogger.info("JEI Folders initializing");
         
-        // Register setup methods
-        modEventBus.addListener(this::commonSetup);
-        modEventBus.addListener(this::clientSetup);
-        
-        // Register NeoForge events
-        NeoForge.EVENT_BUS.addListener(this::onWorldLoad);
-        NeoForge.EVENT_BUS.addListener(this::onWorldUnload);
-        NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedIn);
-        
-        ModLogger.info("JEI Folders events registered");
+        // Use the event registration class to centralize event handling
+        new EventRegistration(this, modEventBus).registerAll();
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
