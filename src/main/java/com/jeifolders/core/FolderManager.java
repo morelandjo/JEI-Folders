@@ -109,13 +109,35 @@ public class FolderManager {
      * @return The newly created folder representation
      */
     public Folder createFolder(String folderName) {
-        Folder folder = storageService.createFolder(folderName);
-        ModLogger.debug("Created folder: {} (ID: {})", folder.getName(), folder.getId());
+        // Create the folder in storage
+        Folder folder = createFolderInStorage(folderName);
         
-        // Fire folder created event
-        eventDispatcher.fireFolderCreatedEvent(folder);
+        // Notify system about the new folder
+        notifyFolderCreated(folder);
         
         return folder;
+    }
+    
+    /**
+     * Creates a folder in the storage service
+     * 
+     * @param folderName Name for the new folder
+     * @return The newly created folder
+     */
+    private Folder createFolderInStorage(String folderName) {
+        Folder folder = storageService.createFolder(folderName);
+        ModLogger.debug("Created folder: {} (ID: {})", folder.getName(), folder.getId());
+        return folder;
+    }
+    
+    /**
+     * Notifies the system that a new folder has been created
+     * 
+     * @param folder The folder that was created
+     */
+    private void notifyFolderCreated(Folder folder) {
+        // Fire folder created event
+        eventDispatcher.fireFolderCreatedEvent(folder);
     }
     
     /**
@@ -139,13 +161,44 @@ public class FolderManager {
             return;
         }
         
+        // Process the folder activation through a series of focused operations
+        updateActiveFolder(button);
+        notifyFolderActivation(button);
+        refreshBookmarksDisplay(button);
+    }
+    
+    /**
+     * Updates internal UI state for the newly activated folder
+     * 
+     * @param button The folder button to set as active
+     */
+    private void updateActiveFolder(FolderButton button) {
         // Update state in UI state manager
         uiStateManager.setActiveFolder(button);
         
+        // Also update the last active folder ID in storage if this is a real folder
+        if (button.getFolder() != null) {
+            storageService.setLastActiveFolderId(button.getFolder().getId());
+        }
+    }
+    
+    /**
+     * Notifies the system that a folder has been activated via events
+     * 
+     * @param button The folder button that was activated
+     */
+    private void notifyFolderActivation(FolderButton button) {
         // Fire event through the event dispatcher
         eventDispatcher.fireFolderActivatedEvent(button);
-        
-        // Update bookmark display
+    }
+    
+    /**
+     * Refreshes the bookmarks display for the activated folder
+     * 
+     * @param button The folder button that was activated
+     */
+    private void refreshBookmarksDisplay(FolderButton button) {
+        // Update bookmark display if the button has an associated folder
         if (button.getFolder() != null) {
             displayManager.refreshFolderBookmarks(button.getFolder(), true);
         }

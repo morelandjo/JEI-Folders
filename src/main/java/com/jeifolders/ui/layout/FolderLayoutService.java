@@ -284,6 +284,24 @@ public class FolderLayoutService {
     public void forceLayoutUpdate() {
         ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update requested");
         
+        // First invalidate all caches and recalculate basic layout parameters
+        resetAndRecalculateLayout();
+        
+        // Update the exclusion zone if possible
+        updateExclusionZoneWithCurrentState();
+        
+        // Refresh active folder display if needed
+        refreshActiveFolderDisplayIfNeeded();
+        
+        // Mark as needing rebuild to ensure full UI refresh
+        markNeedsRebuild();
+        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update completed with folders per row: {}", layoutCalculator.getFoldersPerRow());
+    }
+    
+    /**
+     * Resets caches and recalculates basic layout parameters
+     */
+    private void resetAndRecalculateLayout() {
         // First invalidate all caches
         invalidateAllCaches();
         
@@ -292,37 +310,56 @@ public class FolderLayoutService {
         
         // Update the positions for UI elements
         updateLayoutPositions();
-        
-        // Update the exclusion zone
-        if (folderManager != null) {
-            // Get the number of folder buttons (excluding the add button)
-            int folderCount = folderManager.getStorageService().getAllFolders().size();
-            boolean foldersVisible = folderManager.getUIStateManager().areFoldersVisible();
-            boolean hasActiveFolder = folderManager.getUIStateManager().hasActiveFolder();
-            
-            int bookmarkDisplayHeight = 0;
-            if (displayManager != null && displayManager.getBookmarkDisplay() != null) {
-                bookmarkDisplayHeight = displayManager.getBookmarkDisplay().getHeight();
-            }
-            
-            // Update the exclusion zone
-            exclusionManager.updateExclusionZone(folderCount, foldersVisible, hasActiveFolder, bookmarkDisplayHeight);
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Updated exclusion zone - width: {}, height: {}", 
-                           exclusionManager.getExclusionZone().getWidth(), 
-                           exclusionManager.getExclusionZone().getHeight());
-        } else {
+    }
+    
+    /**
+     * Updates the exclusion zone using current UI state
+     */
+    private void updateExclusionZoneWithCurrentState() {
+        if (folderManager == null) {
             ModLogger.debug("[POSITION-DEBUG-TRACE] Could not update exclusion zone - folderManager is null");
+            return;
         }
         
-        // Refresh active folder display if needed
-        if (displayManager != null && folderManager != null && folderManager.getUIStateManager().hasActiveFolder()) {
+        // Get the number of folder buttons (excluding the add button)
+        int folderCount = folderManager.getStorageService().getAllFolders().size();
+        boolean foldersVisible = folderManager.getUIStateManager().areFoldersVisible();
+        boolean hasActiveFolder = folderManager.getUIStateManager().hasActiveFolder();
+        
+        int bookmarkDisplayHeight = getBookmarkDisplayHeight();
+        
+        // Update the exclusion zone
+        exclusionManager.updateExclusionZone(folderCount, foldersVisible, hasActiveFolder, bookmarkDisplayHeight);
+        
+        ModLogger.debug("[POSITION-DEBUG-TRACE] Updated exclusion zone - width: {}, height: {}", 
+                       exclusionManager.getExclusionZone().getWidth(), 
+                       exclusionManager.getExclusionZone().getHeight());
+    }
+    
+    /**
+     * Gets the current bookmark display height if available, or 0 if not
+     * 
+     * @return The height of the bookmark display, or 0 if not available
+     */
+    private int getBookmarkDisplayHeight() {
+        if (displayManager != null && displayManager.getBookmarkDisplay() != null) {
+            return displayManager.getBookmarkDisplay().getHeight();
+        }
+        return 0;
+    }
+    
+    /**
+     * Refreshes the active folder display if there is an active folder
+     */
+    private void refreshActiveFolderDisplayIfNeeded() {
+        if (displayManager == null || folderManager == null) {
+            return;
+        }
+        
+        if (folderManager.getUIStateManager().hasActiveFolder()) {
             displayManager.refreshActiveFolder(true);
             ModLogger.debug("[POSITION-DEBUG-TRACE] Refreshed active folder display");
         }
-        
-        // Mark as needing rebuild to ensure full UI refresh
-        markNeedsRebuild();
-        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update completed with folders per row: {}", layoutCalculator.getFoldersPerRow());
     }
     
     /**
@@ -387,42 +424,70 @@ public class FolderLayoutService {
      * @return The updated exclusion zone
      */
     public Rect2i updateExclusionZoneAndUI() {
-        // Calculate button count and state information
+        // Gather current UI state information
+        UIStateInfo stateInfo = gatherUIStateInfo();
+        
+        // Update the exclusion zone via the manager
+        Rect2i lastDrawnArea = exclusionManager.updateExclusionZone(
+            stateInfo.buttonCount, 
+            stateInfo.foldersVisible, 
+            stateInfo.hasActiveFolder,
+            stateInfo.bookmarkDisplayHeight
+        );
+        
+        // Update bookmark display bounds if necessary
+        updateBookmarkDisplayBoundsIfNeeded(stateInfo.hasActiveFolder);
+        
+        return lastDrawnArea;
+    }
+    
+    /**
+     * Gathers current UI state information needed for exclusion zone calculations
+     * 
+     * @return A UIStateInfo object containing current state
+     */
+    private UIStateInfo gatherUIStateInfo() {
+        UIStateInfo info = new UIStateInfo();
+        
+        if (folderManager != null) {
+            // Access folder buttons through UIStateManager
+            info.buttonCount = folderManager.getUIStateManager().getFolderButtons().size();
+            info.foldersVisible = folderManager.getUIStateManager().areFoldersVisible();
+            info.hasActiveFolder = folderManager.getUIStateManager().getActiveFolder() != null;
+            
+            // Get bookmark display height if available
+            if (info.hasActiveFolder) {
+                info.bookmarkDisplayHeight = getBookmarkDisplayHeight();
+            }
+        }
+        
+        return info;
+    }
+    
+    /**
+     * Updates bookmark display bounds if there is an active folder with a display
+     * 
+     * @param hasActiveFolder Whether there's an active folder
+     */
+    private void updateBookmarkDisplayBoundsIfNeeded(boolean hasActiveFolder) {
+        if (!hasActiveFolder || displayManager == null) {
+            return;
+        }
+        
+        var bookmarkDisplay = displayManager.getBookmarkDisplay();
+        if (bookmarkDisplay != null) {
+            bookmarkDisplay.updateBoundsFromCalculatedPositions();
+        }
+    }
+    
+    /**
+     * Simple data class to hold UI state information for exclusion zone calculations
+     */
+    private static class UIStateInfo {
         int buttonCount = 0;
         boolean foldersVisible = true;
         boolean hasActiveFolder = false;
         int bookmarkDisplayHeight = 0;
-        
-        if (folderManager != null) {
-            // Access folder buttons through UIStateManager
-            buttonCount = folderManager.getUIStateManager().getFolderButtons().size();
-            foldersVisible = folderManager.getUIStateManager().areFoldersVisible();
-            hasActiveFolder = folderManager.getUIStateManager().getActiveFolder() != null;
-            
-            if (hasActiveFolder && displayManager != null) {
-                // Access the bookmark display height through the display manager
-                var bookmarkDisplay = displayManager.getBookmarkDisplay();
-                if (bookmarkDisplay != null) {
-                    bookmarkDisplayHeight = bookmarkDisplay.getHeight();
-                }
-            }
-        }
-        
-        // Update the exclusion zone via the manager
-        Rect2i lastDrawnArea = exclusionManager.updateExclusionZone(
-            buttonCount, 
-            foldersVisible, 
-            hasActiveFolder,
-            bookmarkDisplayHeight
-        );
-        
-        // Update bookmark display bounds if active
-        if (hasActiveFolder && displayManager != null && displayManager.getBookmarkDisplay() != null) {
-            var bookmarkDisplay = displayManager.getBookmarkDisplay();
-            bookmarkDisplay.updateBoundsFromCalculatedPositions();
-        }
-        
-        return lastDrawnArea;
     }
     
     /**
@@ -457,34 +522,9 @@ public class FolderLayoutService {
         // Get all folders from the folder manager
         List<Folder> folders = folderManager.getStorageService().getAllFolders();
         
-        // Create an "Add Folder" button at index 0
-        int[] addPos = calculateAddButtonPosition();
-        FolderButton addButton = new FolderButton(addPos[0], addPos[1], FolderButton.ButtonType.ADD);
-        
-        // Use the interaction handler directly
-        // Add button needs to pass null as folder since it doesn't have one
-        addButton.setClickHandler(folder -> {
-            if (interactionHandler != null) {
-                interactionHandler.handleAddFolderButtonClick(null);
-            }
-        });
-        buttons.add(addButton);
-        
-        // Create and position normal folder buttons
-        int buttonIndex = 1;
-        for (Folder folder : folders) {
-            int[] pos = calculateFolderPosition(buttonIndex);
-            FolderButton button = new FolderButton(pos[0], pos[1], folder);
-            
-            // Use the interaction handler directly
-            button.setClickHandler(folderClicked -> {
-                if (interactionHandler != null) {
-                    interactionHandler.handleFolderClick(folderClicked);
-                }
-            });
-            buttons.add(button);
-            buttonIndex++;
-        }
+        // Create and add buttons
+        createAddButton(buttons);
+        createFolderButtons(folders, buttons);
         
         // Update layout positions based on folder count
         updateLayoutPositions(folders.size());
@@ -493,6 +533,82 @@ public class FolderLayoutService {
         folderManager.getUIStateManager().setFolderButtons(buttons);
         
         return buttons;
+    }
+    
+    /**
+     * Creates and adds the "Add Folder" button to the buttons list
+     * 
+     * @param buttons The list to add the button to
+     */
+    private void createAddButton(List<FolderButton> buttons) {
+        int[] addPos = calculateAddButtonPosition();
+        FolderButton addButton = new FolderButton(addPos[0], addPos[1], FolderButton.ButtonType.ADD);
+        
+        // Set up click handler for the add button
+        configureAddButtonClickHandler(addButton);
+        
+        buttons.add(addButton);
+    }
+    
+    /**
+     * Configures the click handler for the Add Folder button
+     * 
+     * @param addButton The Add Folder button to configure
+     */
+    private void configureAddButtonClickHandler(FolderButton addButton) {
+        // Add button needs to pass null as folder since it doesn't have one
+        addButton.setClickHandler(folder -> {
+            if (interactionHandler != null) {
+                interactionHandler.handleAddFolderButtonClick(null);
+            }
+        });
+    }
+    
+    /**
+     * Creates and adds buttons for each folder to the buttons list
+     * 
+     * @param folders The folders to create buttons for
+     * @param buttons The list to add the buttons to
+     */
+    private void createFolderButtons(List<Folder> folders, List<FolderButton> buttons) {
+        int buttonIndex = 1;
+        
+        for (Folder folder : folders) {
+            // Create a button for this folder
+            FolderButton button = createFolderButton(folder, buttonIndex);
+            buttons.add(button);
+            buttonIndex++;
+        }
+    }
+    
+    /**
+     * Creates a button for a specific folder
+     * 
+     * @param folder The folder to create a button for
+     * @param buttonIndex The index for position calculation
+     * @return The created FolderButton
+     */
+    private FolderButton createFolderButton(Folder folder, int buttonIndex) {
+        int[] pos = calculateFolderPosition(buttonIndex);
+        FolderButton button = new FolderButton(pos[0], pos[1], folder);
+        
+        // Set up click handler for the folder button
+        configureFolderButtonClickHandler(button);
+        
+        return button;
+    }
+    
+    /**
+     * Configures the click handler for a folder button
+     * 
+     * @param button The folder button to configure
+     */
+    private void configureFolderButtonClickHandler(FolderButton button) {
+        button.setClickHandler(folderClicked -> {
+            if (interactionHandler != null) {
+                interactionHandler.handleFolderClick(folderClicked);
+            }
+        });
     }
     
     /**

@@ -145,35 +145,52 @@ public class FolderStorageService {
      */
     private void setupConfigDir() {
         try {
-            // Base config directory
-            configDir = Paths.get(CONFIG_ROOT);
+            setupBaseConfigDirectory();
+            setupWorldSpecificDirectory();
+        } catch (Exception e) {
+            setupFallbackDir("Error setting up config directory: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Sets up the base configuration directory
+     * 
+     * @throws IOException If directory creation fails
+     */
+    private void setupBaseConfigDirectory() throws IOException {
+        // Base config directory
+        configDir = Paths.get(CONFIG_ROOT);
 
-            // Create the config directory if it doesn't exist
-            if (!Files.exists(configDir)) {
-                Files.createDirectories(configDir);
-                ModLogger.debug("Created config directory: {}", configDir);
-            }
-
-            // Always try to get a world-specific folder first
+        // Create the config directory if it doesn't exist
+        if (!Files.exists(configDir)) {
+            Files.createDirectories(configDir);
+            ModLogger.debug("Created config directory: {}", configDir);
+        }
+    }
+    
+    /**
+     * Sets up a world-specific directory for data storage
+     * 
+     * @throws IOException If directory creation fails
+     */
+    private void setupWorldSpecificDirectory() throws IOException {
+        try {
+            // Try to get a world-specific folder name
             String worldFolderName = determineWorldFolder();
             Path worldDir = configDir.resolve(worldFolderName);
 
-            try {
-                // Create the world-specific directory if it doesn't exist
-                if (!Files.exists(worldDir)) {
-                    Files.createDirectories(worldDir);
-                    ModLogger.debug("Created world-specific directory: {}", worldDir);
-                }
-
-                // Set the data file path
-                dataFile = worldDir.resolve(DATA_FILENAME).toFile();
-                ModLogger.debug("Data file path set to: {}", dataFile.getAbsolutePath());
-                usingFallbackDir = worldFolderName.equals(ALL_WORLDS_FOLDER);
-            } catch (Exception e) {
-                setupFallbackDir("Error creating world directory: " + e.getMessage());
+            // Create the world-specific directory if it doesn't exist
+            if (!Files.exists(worldDir)) {
+                Files.createDirectories(worldDir);
+                ModLogger.debug("Created world-specific directory: {}", worldDir);
             }
+
+            // Set the data file path
+            dataFile = worldDir.resolve(DATA_FILENAME).toFile();
+            ModLogger.debug("Data file path set to: {}", dataFile.getAbsolutePath());
+            usingFallbackDir = worldFolderName.equals(ALL_WORLDS_FOLDER);
         } catch (Exception e) {
-            setupFallbackDir("Error setting up config directory: " + e.getMessage());
+            setupFallbackDir("Error creating world directory: " + e.getMessage());
         }
     }
 
@@ -223,23 +240,12 @@ public class FolderStorageService {
             // Get the Minecraft instance safely
             Minecraft minecraft = getMinecraftSafe();
             
-            // Try each strategy in order of reliability
-            String worldName = tryGetWorldNameFromServerHooks();
+            // Try each world name strategy in order of reliability
+            String worldName = tryWorldNameStrategies(minecraft);
             
-            if (worldName == null) {
-                worldName = tryGetWorldNameFromIntegratedServer(minecraft);
-            }
-            
-            if (worldName == null) {
-                worldName = tryGetMultiplayerServerName(minecraft);
-            }
-            
-            // If we have a world name, sanitize and return it
+            // Process the world name if we found one
             if (worldName != null && !worldName.trim().isEmpty()) {
-                // Sanitize the world name for use as a directory name
-                worldName = worldName.replaceAll("[^a-zA-Z0-9_\\-.]", "_");
-                ModLogger.info("Using world-specific data folder: {}", worldName);
-                return worldName;
+                return sanitizeWorldName(worldName);
             } else {
                 ModLogger.warn("Failed to determine world name after trying all strategies");
             }
@@ -249,6 +255,50 @@ public class FolderStorageService {
         }
         
         // Default to the "all" folder if we can't determine the world
+        return getDefaultWorldFolderName();
+    }
+    
+    /**
+     * Tries all world name determination strategies in order of reliability
+     * 
+     * @param minecraft The Minecraft instance
+     * @return The world name, or null if none could be determined
+     */
+    private String tryWorldNameStrategies(Minecraft minecraft) {
+        // Strategy 1: Try to get world name from ServerLifecycleHooks
+        String worldName = tryGetWorldNameFromServerHooks();
+        if (worldName != null) {
+            return worldName;
+        }
+        
+        // Strategy 2: Try to get world name from integrated server
+        worldName = tryGetWorldNameFromIntegratedServer(minecraft);
+        if (worldName != null) {
+            return worldName;
+        }
+        
+        // Strategy 3: Try to get server name or address for multiplayer
+        return tryGetMultiplayerServerName(minecraft);
+    }
+    
+    /**
+     * Sanitizes a world name for use as a directory name
+     * 
+     * @param worldName The world name to sanitize
+     * @return The sanitized world name
+     */
+    private String sanitizeWorldName(String worldName) {
+        String sanitized = worldName.replaceAll("[^a-zA-Z0-9_\\-.]", "_");
+        ModLogger.info("Using world-specific data folder: {}", sanitized);
+        return sanitized;
+    }
+    
+    /**
+     * Gets the default world folder name when no specific world can be determined
+     * 
+     * @return The default world folder name
+     */
+    private String getDefaultWorldFolderName() {
         ModLogger.info("Using default 'all' data folder (no specific world detected)");
         return ALL_WORLDS_FOLDER;
     }
@@ -355,9 +405,7 @@ public class FolderStorageService {
         isLoaded = false;
         
         // Clear any existing data
-        folders.clear();
-        ingredientCache.clear();
-        lastActiveFolderId = null;
+        clearAllData();
 
         // Make sure we have a valid data file path
         setupConfigDir();
@@ -371,16 +419,10 @@ public class FolderStorageService {
             return true;
         }
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(dataFile))) {
-            // Read the full file content
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-
+        try {
+            String snbtData = readDataFile();
+            
             // Check if the file is empty
-            String snbtData = sb.toString().trim();
             if (snbtData.isEmpty()) {
                 ModLogger.info("Data file is empty, treating as no data");
                 isLoaded = true;
@@ -388,57 +430,130 @@ public class FolderStorageService {
             }
 
             // Parse the SNBT data to NBT
-            CompoundTag rootTag = TagParser.parseTag(snbtData);
+            CompoundTag rootTag = parseSnbt(snbtData);
+            
+            // Process the parsed data
+            processLoadedData(rootTag);
 
-            // Load folders
-            if (rootTag.contains(FOLDERS_KEY, Tag.TAG_LIST)) {
-                ListTag foldersList = rootTag.getList(FOLDERS_KEY, Tag.TAG_COMPOUND);
-                ModLogger.debug("Found {} folders in data file", foldersList.size());
-
-                for (int i = 0; i < foldersList.size(); i++) {
-                    CompoundTag folderTag = foldersList.getCompound(i);
-                    
-                    // Parse folder from NBT
-                    Folder folder = Folder.fromNbt(folderTag);
-                    
-                    if (folder != null) {
-                        folders.put(folder.getId(), folder);
-                        ModLogger.debug("Loaded folder: {} (ID: {})", folder.getName(), folder.getId());
-                    } else {
-                        ModLogger.warn("Failed to load folder at index {}", i);
-                    }
-                }
-
-                ModLogger.info("Successfully loaded {} folders", folders.size());
-            }
-
-            // Load active folder ID
-            if (rootTag.contains(ACTIVE_FOLDER_KEY, Tag.TAG_INT)) {
-                lastActiveFolderId = rootTag.getInt(ACTIVE_FOLDER_KEY);
-                ModLogger.debug("Loaded active folder ID: {}", lastActiveFolderId);
-            }
-
-            // Load cached ingredients (for each folder's bookmarks)
-            for (Folder folder : folders.values()) {
-                loadIngredientsForFolder(folder);
-            }
-
-            // Prune any unused ingredients from the cache
-            pruneUnusedIngredients();
-
+            // Mark as loaded and not dirty
             isLoaded = true;
             isDirty = false;
             
             ModLogger.info("Data loaded successfully from {}", dataFile.getAbsolutePath());
             return true;
         } catch (Exception e) {
-            ModLogger.error("Error loading data from {}: {}", dataFile.getAbsolutePath(), e.getMessage());
-            e.printStackTrace();
+            handleLoadError(e);
         }
 
         // Default loading state to true even if there was an error, to avoid repeated load attempts
         isLoaded = true;
         return false;
+    }
+    
+    /**
+     * Clears all internal data collections
+     */
+    private void clearAllData() {
+        folders.clear();
+        ingredientCache.clear();
+        lastActiveFolderId = null;
+    }
+    
+    /**
+     * Reads the raw data from the data file
+     * 
+     * @return The file contents as a string
+     * @throws IOException If there's an error reading the file
+     */
+    private String readDataFile() throws IOException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(dataFile))) {
+            // Read the full file content
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            return sb.toString().trim();
+        }
+    }
+    
+    /**
+     * Parses a string containing SNBT data into an NBT CompoundTag
+     * 
+     * @param snbtData The SNBT data to parse
+     * @return The parsed CompoundTag
+     * @throws CommandSyntaxException If there's an error parsing the SNBT
+     */
+    private CompoundTag parseSnbt(String snbtData) throws Exception {
+        return TagParser.parseTag(snbtData);
+    }
+    
+    /**
+     * Processes the parsed NBT data to populate folders and other state
+     * 
+     * @param rootTag The root NBT tag to process
+     */
+    private void processLoadedData(CompoundTag rootTag) {
+        // Load folders
+        if (rootTag.contains(FOLDERS_KEY, Tag.TAG_LIST)) {
+            loadFoldersFromNbt(rootTag.getList(FOLDERS_KEY, Tag.TAG_COMPOUND));
+        }
+
+        // Load active folder ID
+        if (rootTag.contains(ACTIVE_FOLDER_KEY, Tag.TAG_INT)) {
+            lastActiveFolderId = rootTag.getInt(ACTIVE_FOLDER_KEY);
+            ModLogger.debug("Loaded active folder ID: {}", lastActiveFolderId);
+        }
+
+        // Load cached ingredients for each folder
+        loadIngredientsForAllFolders();
+        
+        // Prune any unused ingredients from the cache
+        pruneUnusedIngredients();
+    }
+    
+    /**
+     * Loads folder data from the provided NBT list
+     * 
+     * @param foldersList The NBT list containing folder data
+     */
+    private void loadFoldersFromNbt(ListTag foldersList) {
+        ModLogger.debug("Found {} folders in data file", foldersList.size());
+        
+        for (int i = 0; i < foldersList.size(); i++) {
+            CompoundTag folderTag = foldersList.getCompound(i);
+            
+            // Parse folder from NBT
+            Folder folder = Folder.fromNbt(folderTag);
+            
+            if (folder != null) {
+                folders.put(folder.getId(), folder);
+                ModLogger.debug("Loaded folder: {} (ID: {})", folder.getName(), folder.getId());
+            } else {
+                ModLogger.warn("Failed to load folder at index {}", i);
+            }
+        }
+        
+        ModLogger.info("Successfully loaded {} folders", folders.size());
+    }
+    
+    /**
+     * Loads ingredients for all folders
+     */
+    private void loadIngredientsForAllFolders() {
+        for (Folder folder : folders.values()) {
+            loadIngredientsForFolder(folder);
+        }
+    }
+    
+    /**
+     * Handles an error during data loading
+     * 
+     * @param e The exception that occurred
+     */
+    private void handleLoadError(Exception e) {
+        ModLogger.error("Error loading data from {}: {}", dataFile.getAbsolutePath(), e.getMessage());
+        e.printStackTrace();
     }
     
     /**
@@ -449,7 +564,7 @@ public class FolderStorageService {
     public boolean saveData() {
         // Throttle saves to avoid excessive writes
         long currentTime = System.currentTimeMillis();
-        if (!isDirty || currentTime - lastSaveTime < MIN_SAVE_INTERVAL_MS) {
+        if (shouldSkipSave(currentTime)) {
             return true;
         }
         
@@ -459,43 +574,105 @@ public class FolderStorageService {
         ModLogger.debug("Saving data to {}", dataFile.getAbsolutePath());
         
         try {
-            // Create parent directories if they don't exist
-            File parentDir = dataFile.getParentFile();
-            if (parentDir != null && !parentDir.exists()) {
-                parentDir.mkdirs();
-            }
+            ensureParentDirectoriesExist();
             
-            // Create tag structure
-            CompoundTag rootTag = new CompoundTag();
-            
-            // Save folders
-            ListTag foldersList = new ListTag();
-            for (Folder folder : folders.values()) {
-                CompoundTag folderTag = folder.toNbt();
-                foldersList.add(folderTag);
-            }
-            rootTag.put(FOLDERS_KEY, foldersList);
-            
-            // Save active folder ID
-            if (lastActiveFolderId != null) {
-                rootTag.putInt(ACTIVE_FOLDER_KEY, lastActiveFolderId);
-            }
-            
-            // Convert to SNBT and write to file
+            // Create and serialize the data
+            CompoundTag rootTag = createRootTag();
             String snbt = SnbtFormat.format(rootTag);
             
-            try (FileWriter writer = new FileWriter(dataFile)) {
-                writer.write(snbt);
-            }
+            // Write to file
+            writeDataToFile(snbt);
             
-            isDirty = false;
-            lastSaveTime = currentTime;
+            updateSaveState(currentTime);
             ModLogger.info("Data saved successfully to {}", dataFile.getAbsolutePath());
             return true;
         } catch (Exception e) {
             ModLogger.error("Error saving data to {}: {}", dataFile.getAbsolutePath(), e.getMessage());
             return false;
         }
+    }
+    
+    /**
+     * Determines if the save operation should be skipped (throttling)
+     *
+     * @param currentTime Current time in milliseconds
+     * @return true if the save should be skipped, false otherwise
+     */
+    private boolean shouldSkipSave(long currentTime) {
+        return !isDirty || currentTime - lastSaveTime < MIN_SAVE_INTERVAL_MS;
+    }
+    
+    /**
+     * Ensures that all parent directories for the data file exist
+     * 
+     * @throws IOException If directory creation fails
+     */
+    private void ensureParentDirectoriesExist() throws IOException {
+        File parentDir = dataFile.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            boolean created = parentDir.mkdirs();
+            if (!created) {
+                throw new IOException("Failed to create parent directories for data file");
+            }
+        }
+    }
+    
+    /**
+     * Creates the root CompoundTag containing all data to be saved
+     * 
+     * @return The root tag with all data
+     */
+    private CompoundTag createRootTag() {
+        CompoundTag rootTag = new CompoundTag();
+        
+        // Save folders
+        ListTag foldersList = createFoldersListTag();
+        rootTag.put(FOLDERS_KEY, foldersList);
+        
+        // Save active folder ID
+        if (lastActiveFolderId != null) {
+            rootTag.putInt(ACTIVE_FOLDER_KEY, lastActiveFolderId);
+        }
+        
+        return rootTag;
+    }
+    
+    /**
+     * Creates a ListTag containing all folder data
+     * 
+     * @return The folders list tag
+     */
+    private ListTag createFoldersListTag() {
+        ListTag foldersList = new ListTag();
+        
+        for (Folder folder : folders.values()) {
+            CompoundTag folderTag = folder.toNbt();
+            foldersList.add(folderTag);
+        }
+        
+        return foldersList;
+    }
+    
+    /**
+     * Writes the data string to the data file
+     * 
+     * @param snbt The SNBT data to write
+     * @throws IOException If writing fails
+     */
+    private void writeDataToFile(String snbt) throws IOException {
+        try (FileWriter writer = new FileWriter(dataFile)) {
+            writer.write(snbt);
+        }
+    }
+    
+    /**
+     * Updates the save state after a successful save
+     * 
+     * @param currentTime The current time in milliseconds
+     */
+    private void updateSaveState(long currentTime) {
+        isDirty = false;
+        lastSaveTime = currentTime;
     }
 
     /**
