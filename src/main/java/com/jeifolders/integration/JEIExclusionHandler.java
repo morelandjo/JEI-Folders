@@ -5,9 +5,11 @@ import mezz.jei.api.runtime.IClickableIngredient;
 import net.minecraft.client.renderer.Rect2i;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Optional;
 
 import com.jeifolders.ui.util.ExclusionHandler;
+import com.jeifolders.util.ModLogger;
 
 /**
  * JEI-specific implementation of the ExclusionHandlerInterface.
@@ -22,7 +24,17 @@ public class JEIExclusionHandler implements IGlobalGuiHandler {
     
     @Override
     public Collection<Rect2i> getGuiExtraAreas() {
-        return exclusionHandler.getExclusionAreas();
+        Collection<Rect2i> areas = exclusionHandler.getExclusionAreas();
+        
+        // Debug log to verify exclusion areas
+        if (!areas.isEmpty()) {
+            for (Rect2i area : areas) {
+                ModLogger.debug("JEI exclusion area provided: x={}, y={}, width={}, height={}", 
+                    area.getX(), area.getY(), area.getWidth(), area.getHeight());
+            }
+        }
+        
+        return areas;
     }
     
     @Override

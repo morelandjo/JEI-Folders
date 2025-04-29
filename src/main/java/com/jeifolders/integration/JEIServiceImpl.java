@@ -69,12 +69,9 @@ public class JEIServiceImpl implements JEIService {
                 // Also set the JEI helpers to access the codecHelper for ingredient serialization
                 IJeiHelpers jeiHelpers = ijeiRuntime.getJeiHelpers();
                 jeiIngredientService.setJeiHelpers(jeiHelpers);
-                
-                ModLogger.info("Initialized JEIIngredientService with ingredient manager and codec helper");
             }
             
             // Notify all callbacks
-            ModLogger.info("JEI runtime set, notifying {} callbacks", runtimeCallbacks.size());
             List<Consumer<Object>> callbacksCopy = new ArrayList<>(runtimeCallbacks);
             runtimeCallbacks.clear();
             

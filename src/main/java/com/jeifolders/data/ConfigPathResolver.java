@@ -2,6 +2,8 @@ package com.jeifolders.data;
 
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -11,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Objects;
 
 /**
  * Handles resolving file paths and determining world folder names for the folder storage system.
@@ -27,6 +30,14 @@ public class ConfigPathResolver {
     
     // Class state
     private Path configDir;
+    
+    // Cache the last determined world name to avoid excessive determination
+    private String cachedWorldName = null;
+    private long worldNameDeterminedAt = 0;
+    private static final long WORLD_NAME_CACHE_DURATION_MS = 30000; // 30 seconds
+    
+    // Track the last logged world folder to prevent duplicate log messages
+    private String lastLoggedWorldFolder = null;
     
     /**
      * Private constructor for singleton pattern
@@ -117,28 +128,81 @@ public class ConfigPathResolver {
     
     /**
      * Determines the world-specific folder name based on server information
+     * with centralized logging to prevent duplicate messages
      */
     public String determineWorldFolder() {
+        ModLogger.debug("[WORLD-DEBUG] Beginning world folder determination");
+        
+        // Check if we have a recent cached world name
+        long currentTime = System.currentTimeMillis();
+        if (cachedWorldName != null && 
+            currentTime - worldNameDeterminedAt < WORLD_NAME_CACHE_DURATION_MS) {
+            ModLogger.debug("[WORLD-DEBUG] Using cached world name: {} (age: {} ms)",
+                cachedWorldName, currentTime - worldNameDeterminedAt);
+            return cachedWorldName;
+        }
+        
         try {
             // Get the Minecraft instance safely
             Minecraft minecraft = getMinecraftSafe();
+            if (minecraft == null) {
+                ModLogger.debug("[WORLD-DEBUG] Could not get Minecraft instance");
+                return logAndReturnWorldFolder(getDefaultWorldFolderName());
+            }
             
             // Try each world name strategy in order of reliability
             String worldName = tryWorldNameStrategies(minecraft);
             
             // Process the world name if we found one
             if (worldName != null && !worldName.trim().isEmpty()) {
-                return sanitizeWorldName(worldName);
+                String sanitized = sanitizeWorldName(worldName);
+                // Update the cache
+                cachedWorldName = sanitized;
+                worldNameDeterminedAt = currentTime;
+                return logAndReturnWorldFolder(sanitized);
             } else {
-                ModLogger.warn("Failed to determine world name after trying all strategies");
+                ModLogger.warn("[WORLD-DEBUG] Failed to determine world name after trying all strategies");
+                return logAndReturnWorldFolder(getDefaultWorldFolderName());
             }
         } catch (Exception e) {
-            ModLogger.error("Error determining world folder: {}", e.getMessage());
+            ModLogger.error("[WORLD-DEBUG] Error determining world folder: {}", e.getMessage());
             e.printStackTrace();
+            return logAndReturnWorldFolder(getDefaultWorldFolderName());
+        }
+    }
+    
+    /**
+     * Centralized method for logging world folder changes and returning the folder name
+     * This prevents duplicate logging and ensures consistent messaging
+     */
+    private String logAndReturnWorldFolder(String worldFolder) {
+        // If this is the same folder we last logged about, don't log again
+        if (Objects.equals(worldFolder, lastLoggedWorldFolder)) {
+            return worldFolder;
         }
         
-        // Default to the "all" folder if we can't determine the world
-        return getDefaultWorldFolderName();
+        // Update the last logged folder
+        lastLoggedWorldFolder = worldFolder;
+        
+        // Log the appropriate message based on whether it's the default folder
+        if (worldFolder.equals(ALL_WORLDS_FOLDER)) {
+            ModLogger.warn("Using default 'all' data folder (no specific world detected)");
+        } else {
+            ModLogger.debug("Using world-specific data folder: {}", worldFolder);
+        }
+        
+        return worldFolder;
+    }
+    
+    /**
+     * Helper method to use the default world folder with appropriate logging
+     */
+    private String useDefaultWorldFolder() {
+        String defaultFolder = getDefaultWorldFolderName();
+        // Update the cache
+        cachedWorldName = defaultFolder;
+        worldNameDeterminedAt = System.currentTimeMillis();
+        return logAndReturnWorldFolder(defaultFolder);
     }
     
     /**
@@ -148,20 +212,144 @@ public class ConfigPathResolver {
      * @return The world name, or null if none could be determined
      */
     private String tryWorldNameStrategies(Minecraft minecraft) {
-        // Strategy 1: Try to get world name from ServerLifecycleHooks
-        String worldName = tryGetWorldNameFromServerHooks();
-        if (worldName != null) {
-            return worldName;
+        // Strategy 1: Try to get world name from current server
+        String fromServer = tryGetCurrentServerWorldName();
+        ModLogger.debug("[WORLD-DEBUG] World name from server: {}", fromServer != null ? fromServer : "null");
+        if (fromServer != null) {
+            return fromServer;
         }
         
-        // Strategy 2: Try to get world name from integrated server
-        worldName = tryGetWorldNameFromIntegratedServer(minecraft);
-        if (worldName != null) {
-            return worldName;
+        // Strategy 2: Try to get world name from level
+        String fromLevel = tryGetCurrentLevelWorldName();
+        ModLogger.debug("[WORLD-DEBUG] World name from level: {}", fromLevel != null ? fromLevel : "null");
+        if (fromLevel != null) {
+            return fromLevel;
         }
         
-        // Strategy 3: Try to get server name or address for multiplayer
-        return tryGetMultiplayerServerName(minecraft);
+        // Strategy 3: Try to get world name from screen
+        String fromScreen = tryGetWorldNameFromScreen();
+        ModLogger.debug("[WORLD-DEBUG] World name from screen: {}", fromScreen != null ? fromScreen : "null");
+        if (fromScreen != null) {
+            return fromScreen;
+        }
+        
+        ModLogger.debug("[WORLD-DEBUG] All strategies failed to determine world name");
+        return null;
+    }
+    
+    /**
+     * Strategy 1: Try to get world name from server hooks or integrated server
+     */
+    private String tryGetCurrentServerWorldName() {
+        try {
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            if (server != null && server.getWorldData() != null) {
+                String worldName = server.getWorldData().getLevelName();
+                if (worldName != null && !worldName.isEmpty()) {
+                    ModLogger.debug("[WORLD-DEBUG] Got world name from server hooks: {}", worldName);
+                    return worldName;
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.debug("[WORLD-DEBUG] Error getting world name from server hooks: {}", e.getMessage());
+        }
+        
+        try {
+            Minecraft minecraft = getMinecraftSafe();
+            if (minecraft != null) {
+                IntegratedServer integratedServer = minecraft.getSingleplayerServer();
+                if (integratedServer != null && integratedServer.getWorldData() != null) {
+                    String worldName = integratedServer.getWorldData().getLevelName();
+                    if (worldName != null && !worldName.isEmpty()) {
+                        ModLogger.debug("[WORLD-DEBUG] Got world name from integrated server: {}", worldName);
+                        return worldName;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.debug("[WORLD-DEBUG] Error getting world name from integrated server: {}", e.getMessage());
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Strategy 2: Try to get world name from current level
+     */
+    private String tryGetCurrentLevelWorldName() {
+        try {
+            Minecraft minecraft = getMinecraftSafe();
+            if (minecraft != null && minecraft.level != null) {
+                // Try to access from level properties directly when available
+                try {
+                    // Try to use the server name if we're in an integrated server
+                    if (minecraft.getSingleplayerServer() != null &&
+                        minecraft.getSingleplayerServer().getWorldData() != null) {
+                        String worldName = minecraft.getSingleplayerServer().getWorldData().getLevelName();
+                        if (worldName != null && !worldName.isEmpty()) {
+                            ModLogger.debug("[WORLD-DEBUG] Got world name from integrated server via level: {}", worldName);
+                            return worldName;
+                        }
+                    }
+                } catch (Exception e) {
+                    ModLogger.debug("[WORLD-DEBUG] Could not access integrated server through level: {}", e.getMessage());
+                }
+                
+                // Try the dimension path as an identifier
+                try {
+                    String dimensionKey = minecraft.level.dimension().location().toString();
+                    if (dimensionKey != null && !dimensionKey.isEmpty()) {
+                        ModLogger.debug("[WORLD-DEBUG] Using dimension key as fallback: {}", dimensionKey);
+                        return "world_" + dimensionKey.replace(':', '_');
+                    }
+                } catch (Exception e) {
+                    ModLogger.debug("[WORLD-DEBUG] Could not access dimension key: {}", e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.debug("[WORLD-DEBUG] Error getting name from client level: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Strategy 3: Try to get world name from current screen (SelectWorldScreen)
+     */
+    private String tryGetWorldNameFromScreen() {
+        try {
+            Minecraft minecraft = getMinecraftSafe();
+            if (minecraft != null && minecraft.screen instanceof SelectWorldScreen) {
+                Screen screen = minecraft.screen;
+                // This is just a hint that we're on the world selection screen
+                // We can't directly get the selected world name from here in most cases
+                ModLogger.debug("[WORLD-DEBUG] Detected world selection screen");
+                
+                // Try to get server info for multiplayer
+                if (minecraft.getCurrentServer() != null) {
+                    String serverName = minecraft.getCurrentServer().name;
+                    String serverIP = minecraft.getCurrentServer().ip;
+                    
+                    if (serverName != null && !serverName.isEmpty()) {
+                        ModLogger.debug("[WORLD-DEBUG] Using multiplayer server name: {}", serverName);
+                        return "mp_" + serverName;
+                    } else if (serverIP != null && !serverIP.isEmpty()) {
+                        ModLogger.debug("[WORLD-DEBUG] Using multiplayer server address: {}", serverIP);
+                        return "mp_" + serverIP;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.debug("[WORLD-DEBUG] Error getting world name from screen: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Invalidates the world name cache, forcing a fresh determination next time
+     */
+    public void invalidateWorldNameCache() {
+        ModLogger.debug("[WORLD-DEBUG] World name cache invalidated");
+        cachedWorldName = null;
     }
     
     /**
@@ -171,7 +359,7 @@ public class ConfigPathResolver {
         try {
             return Minecraft.getInstance();
         } catch (Exception e) {
-            ModLogger.error("Error accessing Minecraft instance: {}", e.getMessage());
+            ModLogger.error("[WORLD-DEBUG] Error accessing Minecraft instance: {}", e.getMessage());
             return null;
         }
     }
@@ -183,9 +371,7 @@ public class ConfigPathResolver {
      * @return The sanitized world name
      */
     private String sanitizeWorldName(String worldName) {
-        String sanitized = worldName.replaceAll("[^a-zA-Z0-9_\\-.]", "_");
-        ModLogger.info("Using world-specific data folder: {}", sanitized);
-        return sanitized;
+        return worldName.replaceAll("[^a-zA-Z0-9_\\-.]", "_");
     }
     
     /**
@@ -194,90 +380,6 @@ public class ConfigPathResolver {
      * @return The default world folder name
      */
     public String getDefaultWorldFolderName() {
-        ModLogger.info("Using default 'all' data folder (no specific world detected)");
         return ALL_WORLDS_FOLDER;
-    }
-    
-    /**
-     * Strategy 1: Try to get world name from ServerLifecycleHooks
-     * 
-     * @return The world name, or null if not available
-     */
-    private String tryGetWorldNameFromServerHooks() {
-        try {
-            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server != null) {
-                String worldName = server.getWorldData().getLevelName();
-                if (worldName != null) {
-                    ModLogger.debug("Got world name from ServerLifecycleHooks: {}", worldName);
-                    return worldName;
-                }
-            }
-        } catch (Exception e) {
-            ModLogger.debug("Could not get world name from ServerLifecycleHooks: {}", e.getMessage());
-        }
-        return null;
-    }
-    
-    /**
-     * Strategy 2: Try to get world name from integrated server
-     * 
-     * @param minecraft The Minecraft client instance
-     * @return The world name, or null if not available
-     */
-    private String tryGetWorldNameFromIntegratedServer(Minecraft minecraft) {
-        if (minecraft == null) {
-            return null;
-        }
-        
-        try {
-            IntegratedServer integratedServer = minecraft.getSingleplayerServer();
-            if (integratedServer != null) {
-                String worldName = integratedServer.getWorldData().getLevelName();
-                if (worldName != null) {
-                    ModLogger.debug("Got world name from integrated server: {}", worldName);
-                    return worldName;
-                }
-            }
-        } catch (Exception e) {
-            ModLogger.debug("Could not get world name from integrated server: {}", e.getMessage());
-        }
-        return null;
-    }
-    
-    /**
-     * Strategy 3: Try to get server name or address for multiplayer
-     * 
-     * @param minecraft The Minecraft client instance
-     * @return The server name or address formatted as a directory name, or null if not available
-     */
-    private String tryGetMultiplayerServerName(Minecraft minecraft) {
-        if (minecraft == null) {
-            return null;
-        }
-        
-        try {
-            var currentServer = minecraft.getCurrentServer();
-            if (currentServer == null) {
-                return null;
-            }
-            
-            String serverName = currentServer.name;
-            String serverIP = currentServer.ip;
-            
-            // Use server name if available, otherwise use IP
-            if (serverName != null && !serverName.isEmpty()) {
-                String worldName = "mp_" + serverName.replace(' ', '_');
-                ModLogger.debug("Using multiplayer server name as world name: {}", worldName);
-                return worldName;
-            } else if (serverIP != null && !serverIP.isEmpty()) {
-                String worldName = "mp_" + serverIP.replace(':', '_');
-                ModLogger.debug("Using multiplayer server address as world name: {}", worldName);
-                return worldName;
-            }
-        } catch (Exception e) {
-            ModLogger.debug("Could not get server info for multiplayer: {}", e.getMessage());
-        }
-        return null;
     }
 }

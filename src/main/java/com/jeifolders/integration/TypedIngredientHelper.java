@@ -161,7 +161,7 @@ public class TypedIngredientHelper {
             
             // Get bookmark keys to log the count
             List<String> bookmarkKeys = folder.getBookmarkKeys();
-            ModLogger.info("Loading {} bookmarks from folder ID {}", bookmarkKeys.size(), folderId);
+            ModLogger.debug("Loading {} bookmarks from folder ID {}", bookmarkKeys.size(), folderId);
             
             // Get fresh ingredients from ingredient service
             IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();

@@ -60,7 +60,6 @@ public class JEIIntegration implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
-        ModLogger.info("JEI runtime available, initializing");
         
         // Initialize the runtime directly instead of using JeiRuntimeHelper
         initializeJeiRuntime(runtime);
@@ -77,7 +76,6 @@ public class JEIIntegration implements IModPlugin {
      * @param runtime The JEI runtime instance
      */
     private void initializeJeiRuntime(IJeiRuntime runtime) {
-        ModLogger.info("Initializing JEI runtime");
         
         // Set the runtime in the JEIService
         jeiService.setJeiRuntime(runtime);
@@ -88,7 +86,6 @@ public class JEIIntegration implements IModPlugin {
         // Force a UI refresh to make folders visible immediately
         Minecraft.getInstance().execute(() -> {
             if (FolderUIController.isInitialized()) {
-                ModLogger.info("JEI runtime available - forcing folder UI refresh");
                 FolderUIController.getInstance().rebuildFolders();
             }
         });

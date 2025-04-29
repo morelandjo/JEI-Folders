@@ -87,7 +87,7 @@ public class FolderContentsView implements HitTestable {
         // Folder changed listener
         this.folderChangedListener = event -> {
             if (activeFolder != null && event.getFolderId() == activeFolder.getId()) {
-                ModLogger.info("FolderEventManager: Active folder {} was modified, refreshing display", event.getFolderId());
+                ModLogger.debug("FolderEventManager: Active folder {} was modified, refreshing display", event.getFolderId());
                 needsRefresh = true;
             }
         };
@@ -442,17 +442,17 @@ public class FolderContentsView implements HitTestable {
      * @return true if the drop was handled
      */
     public boolean handleIngredientDrop(double mouseX, double mouseY, Object ingredient) {
-        ModLogger.info("[DROP-DEBUG] UnifiedFolderContentsDisplay.handleIngredientDrop called with ingredient type: {}", 
+        ModLogger.debug("[DROP-DEBUG] UnifiedFolderContentsDisplay.handleIngredientDrop called with ingredient type: {}", 
             ingredient != null ? ingredient.getClass().getName() : "null");
 
         if (ingredient == null) {
-            ModLogger.info("[DROP-DEBUG] Ingredient drop rejected: null ingredient");
+            ModLogger.debug("[DROP-DEBUG] Ingredient drop rejected: null ingredient");
             return false;
         }
 
         // Only process drops that are over this display (use extended area for easier drops)
         if (!isMouseOverExtended(mouseX, mouseY)) {
-            ModLogger.info("[DROP-DEBUG] Ingredient drop not over display area: ({}, {}) not in ({}, {}, {}, {})", 
+            ModLogger.debug("[DROP-DEBUG] Ingredient drop not over display area: ({}, {}) not in ({}, {}, {}, {})", 
                           mouseX, mouseY, x, y, width, height);
             return false;
         }
@@ -465,11 +465,11 @@ public class FolderContentsView implements HitTestable {
      * Updates the bounds of the display based on calculated positions
      */
     public void updateBoundsFromCalculatedPositions() {
-        ModLogger.debug("[POSITION-DEBUG-TRACE] updateBoundsFromCalculatedPositions called");
+        ModLogger.debug("[POSITION-DEBUG-FORCE] FolderContentsView.updateBoundsFromCalculatedPositions called");
         
         // If we're already updating bounds, prevent recursion
         if (updatingBounds) {
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Preventing recursive bounds update");
+            ModLogger.debug("[POSITION-DEBUG-FORCE] Preventing recursive bounds update");
             return;
         }
         
@@ -479,8 +479,7 @@ public class FolderContentsView implements HitTestable {
             // Use the calculated displayY position only if it has been properly set
             // If not properly set, use a better default position (50px from top)
             int displayY = (calculatedDisplayY >= 0) ? calculatedDisplayY : 50;
-            
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Using displayY={} (calculatedDisplayY={})", 
+            ModLogger.debug("[POSITION-DEBUG-FORCE] Using displayY={} (calculatedDisplayY={})", 
                           displayY, calculatedDisplayY);
             
             // Calculate safe width to prevent GUI overlap
@@ -490,11 +489,11 @@ public class FolderContentsView implements HitTestable {
             
             // Check if bounds are actually changing to avoid unnecessary updates
             if (lastCalculatedBounds != null && lastCalculatedBounds.equals(newBounds)) {
-                ModLogger.debug("[POSITION-DEBUG-TRACE] Bounds unchanged, skipping update");
+                ModLogger.debug("[POSITION-DEBUG-FORCE] Bounds unchanged, skipping update");
                 return;
             }
             
-            ModLogger.debug("[POSITION-DEBUG-TRACE] New bounds: x={}, y={}, w={}, h={}", 
+            ModLogger.debug("[POSITION-DEBUG-FORCE] New bounds: x={}, y={}, w={}, h={}", 
                           newBounds.getX(), newBounds.getY(), newBounds.getWidth(), newBounds.getHeight());
             
             // Update the bounds
@@ -512,7 +511,7 @@ public class FolderContentsView implements HitTestable {
             // Tell the contents implementation about the new bounds
             if (contentsImpl != null) {
                 contentsImpl.updateBounds(newBounds);
-                ModLogger.debug("[POSITION-DEBUG-TRACE] Updated contentsImpl with new bounds");
+                ModLogger.debug("[POSITION-DEBUG-FORCE] Updated contentsImpl with new bounds");
             }
         } finally {
             updatingBounds = false;
@@ -525,7 +524,7 @@ public class FolderContentsView implements HitTestable {
      * @param displayY Y position for the bookmark display
      */
     public void setCalculatedPositions(int nameY, int displayY) {
-        ModLogger.debug("[POSITION-DEBUG-TRACE] FolderContentsView received positions: nameY={}, displayY={}", nameY, displayY);
+        ModLogger.debug("[POSITION-DEBUG-FORCE] FolderContentsView.setCalculatedPositions received positions: nameY={}, displayY={}", nameY, displayY);
         this.calculatedNameY = nameY;
         this.calculatedDisplayY = displayY;
         

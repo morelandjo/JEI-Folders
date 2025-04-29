@@ -7,5 +7,6 @@
   "gui.jeifolders.confirm": "Confirm",
   "gui.jeifolders.cancel": "Cancel",
   "gui.jeifolders.delete_folder": "Delete Folder",
-  "gui.jeifolders.folder": "Add Folder"
+  "gui.jeifolders.folder": "Add Folder",
+  "tooltip.jeifolders.add_folder": "Create a new folder"
 }

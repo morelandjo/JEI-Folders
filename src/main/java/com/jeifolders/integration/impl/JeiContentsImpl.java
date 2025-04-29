@@ -103,7 +103,6 @@ public class JeiContentsImpl {
                 ingredientManager
             );
 
-            ModLogger.info("Successfully created JEI ingredient grid for folder display");
         } catch (Exception e) {
             ModLogger.error("Failed to create JEI ingredient grid: {}", e.getMessage());
             throw new RuntimeException("Failed to initialize JEI contents implementation", e);
@@ -114,7 +113,7 @@ public class JeiContentsImpl {
      * Sets the ingredients to be displayed.
      */
     public void setIngredients(List<BookmarkIngredient> bookmarkIngredients) {
-        ModLogger.info("Setting {} ingredients in JEI contents implementation", bookmarkIngredients.size());
+        ModLogger.debug("Setting {} ingredients in JEI contents implementation", bookmarkIngredients.size());
         
         try {
             // Clear existing bookmarks first

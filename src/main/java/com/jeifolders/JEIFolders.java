@@ -1,5 +1,6 @@
 package com.jeifolders;
 
+import com.jeifolders.core.FolderManager;
 import com.jeifolders.integration.JEIIntegration;
 import com.jeifolders.ui.controllers.FolderUIController;
 import com.jeifolders.ui.layout.FolderLayoutService;
@@ -58,26 +59,29 @@ public class JEIFolders {
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        ModLogger.info("JEI Folders common setup");
     }
 
     private void clientSetup(final FMLClientSetupEvent event) {
         ModLogger.info("Setting up JEI Folders client");
         
-        // Initialize the layout service first
-        FolderLayoutService.init();
+        // Initialize FolderManager first and ensure it's fully initialized
+        FolderManager folderManager = FolderManager.getInstance();
+        ModLogger.error("[INIT-DEBUG] FolderManager initialized in JEIFolders.clientSetup");
         
-        // Initialize the folder button system 
-        FolderUIController.init();
+        // Initialize the layout service with the FolderManager instance
+        FolderLayoutService.init(folderManager);
+        
+        // Initialize the folder button system with the same FolderManager instance
+        FolderUIController.init(folderManager);
         
         // Initialize JEI integration
         JEIIntegration.registerRuntimeAvailableCallback(jeiRuntime -> {
-            ModLogger.info("JEI Runtime available, initializing JEI-Folders integration");
+            ModLogger.debug("JEI Runtime available, initializing JEI-Folders integration");
             // Pass the JEI runtime to our main controller
             FolderUIController.getInstance().setJeiRuntime(jeiRuntime);
         });
         
-        ModLogger.info("Client setup complete");
+        ModLogger.error("[INIT-DEBUG] JEI Folders client setup complete");
     }
 
     /**

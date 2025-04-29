@@ -113,7 +113,7 @@ public class FolderRepository {
         
         markDirty();
         
-        ModLogger.info("Created new folder: {} (ID: {})", name, nextId);
+        ModLogger.debug("Created new folder: {} (ID: {})", name, nextId);
         return folder;
     }
     
@@ -134,7 +134,7 @@ public class FolderRepository {
             
             markDirty();
             
-            ModLogger.info("Deleted folder: {} (ID: {})", removed.getName(), id);
+            ModLogger.debug("Deleted folder: {} (ID: {})", removed.getName(), id);
             return true;
         }
         
@@ -157,7 +157,7 @@ public class FolderRepository {
             
             markDirty();
             
-            ModLogger.info("Updated folder name: {} (ID: {})", newName, id);
+            ModLogger.debug("Updated folder name: {} (ID: {})", newName, id);
             return true;
         }
         

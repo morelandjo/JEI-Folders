@@ -57,8 +57,6 @@ public class JEIIngredientService implements IngredientService {
      */
     public void setIngredientManager(IIngredientManager ingredientManager) {
         this.ingredientManager = ingredientManager;
-        ModLogger.info("Ingredient manager set in JEIIngredientService");
-        
         // Clear the cache when the ingredient manager changes
         clearCache();
     }
@@ -68,7 +66,6 @@ public class JEIIngredientService implements IngredientService {
      */
     public void setJeiHelpers(IJeiHelpers jeiHelpers) {
         this.codecHelper = jeiHelpers.getCodecHelper();
-        ModLogger.info("Codec helper set in JEIIngredientService");
     }
     
     @Override
@@ -221,7 +218,7 @@ public class JEIIngredientService implements IngredientService {
                 if (targetUid.equals(uid)) {
                     Optional<ITypedIngredient<T>> typedIngredient = ingredientManager.createTypedIngredient(type, ingredient);
                     if (typedIngredient.isPresent()) {
-                        ModLogger.info("Found exact match for key '{}': {}", targetKey, uid);
+                        ModLogger.debug("Found exact match for key '{}': {}", targetKey, uid);
                         return typedIngredient.get();
                     }
                 }
@@ -231,7 +228,7 @@ public class JEIIngredientService implements IngredientService {
                 if (typedIngredient.isPresent()) {
                     String key = getKeyForIngredient(typedIngredient.get());
                     if (targetKey.equals(key)) {
-                        ModLogger.info("Found key match for '{}': {}", targetKey, key);
+                        ModLogger.debug("Found key match for '{}': {}", targetKey, key);
                         return typedIngredient.get();
                     }
                     

@@ -50,8 +50,6 @@ public class FolderLayoutService {
         this.layoutCalculator = new LayoutCalculator();
         this.cacheService = new LayoutCacheService();
         this.exclusionManager = new ExclusionManager(layoutCalculator);
-        
-        calculateInitialLayout();
     }
     
     /**
@@ -65,10 +63,17 @@ public class FolderLayoutService {
     }
     
     /**
-     * Initialize the layout service with the component architecture
+     * Initializes the layout service with the component architecture
      */
     public static void init(FolderManager folderManager) {
-        getInstance().setComponents(folderManager);
+        ModLogger.debug("FolderLayoutService.init called with folderManager");
+        
+        FolderLayoutService layoutService = getInstance();
+        layoutService.setComponents(folderManager);
+        
+        // Now that we have all components, do initial calculations
+        layoutService.calculateInitialLayout();
+        
         ModLogger.debug("FolderLayoutService initialized with component architecture");
     }
     
@@ -76,23 +81,42 @@ public class FolderLayoutService {
      * Backwards compatibility init
      */
     public static void init() {
+        ModLogger.debug("FolderLayoutService legacy init called WITHOUT folderManager - deferring calculations");
         getInstance();
-        ModLogger.debug("FolderLayoutService initialized (legacy mode)");
     }
     
     /**
      * Sets the component architecture dependencies
      */
     public void setComponents(FolderManager folderManager) {
+        ModLogger.debug("Setting components on FolderLayoutService with folderManager={}", 
+            folderManager != null ? "not null" : "null");
+            
         this.folderManager = folderManager;
-        this.displayManager = folderManager.getDisplayManager();
-        this.interactionHandler = folderManager.getInteractionHandler();
+        
+        if (folderManager != null) {
+            this.displayManager = folderManager.getDisplayManager();
+            this.interactionHandler = folderManager.getInteractionHandler();
+            
+            ModLogger.debug("Components set: displayManager={}, interactionHandler={}", 
+                displayManager != null ? "not null" : "null",
+                interactionHandler != null ? "not null" : "null");
+        } else {
+            ModLogger.warn("Cannot set components - folderManager is null");
+        }
     }
     
     /**
      * Performs initial layout calculations
      */
     private void calculateInitialLayout() {
+        // Defer layout calculations until we have the necessary components
+        if (folderManager == null) {
+            ModLogger.debug("Deferring initial layout calculations - folderManager is null");
+            return;
+        }
+        
+        ModLogger.debug("Performing initial layout calculations");
         layoutCalculator.calculateFoldersPerRow();
     }
     
@@ -214,16 +238,19 @@ public class FolderLayoutService {
         calculatedNameY = layoutCalculator.calculateFolderNameY(rows);
         calculatedBookmarkDisplayY = layoutCalculator.calculateBookmarkDisplayY(calculatedNameY);
         
-        // Debug logging for position calculation
-        ModLogger.debug("[POSITION-DEBUG] FolderLayoutService calculated positions: rows={}, nameYOffset={}, nameY={}, bookmarkDisplayY={}", 
-                      rows, nameYOffset, calculatedNameY, calculatedBookmarkDisplayY);
-        
         // Update the bookmark display positions directly in the display manager
         if (displayManager != null) {
             displayManager.setBookmarkDisplayPositions(calculatedNameY, calculatedBookmarkDisplayY);
-            ModLogger.debug("[POSITION-DEBUG] Propagated positions to BookmarkDisplayManager");
         } else {
-            ModLogger.debug("[POSITION-DEBUG] Cannot update display positions - displayManager is null");
+            // Try to get displayManager from folderManager if it's null
+            if (folderManager != null) {
+                displayManager = folderManager.getDisplayManager();
+                
+                // Try again with the newly retrieved displayManager
+                if (displayManager != null) {
+                    displayManager.setBookmarkDisplayPositions(calculatedNameY, calculatedBookmarkDisplayY);
+                }
+            }
         }
         
         // Invalidate caches that depend on these positions
@@ -239,9 +266,6 @@ public class FolderLayoutService {
         calculatedNameY = layoutCalculator.getPaddingY() + nameYOffset + 5;
         calculatedBookmarkDisplayY = layoutCalculator.calculateBookmarkDisplayY(calculatedNameY);
         
-        ModLogger.debug("[POSITION-DEBUG-TRACE] Calculated positions in FolderLayoutService: nameY={}, displayY={}, nameYOffset={}", 
-                      calculatedNameY, calculatedBookmarkDisplayY, nameYOffset);
-        
         // Propagate these positions to the bookmark display manager
         if (displayManager != null) {
             displayManager.setBookmarkDisplayPositions(calculatedNameY, calculatedBookmarkDisplayY);
@@ -256,7 +280,6 @@ public class FolderLayoutService {
      * Forces a recalculation of all layout positions and propagates them to all components
      */
     public void forcePositionRecalculation() {
-        ModLogger.debug("[POSITION-DEBUG-TRACE] Force position recalculation requested");
         invalidateAllCaches();
         calculateFoldersPerRow();
         updateLayoutPositions();
@@ -264,10 +287,6 @@ public class FolderLayoutService {
         // Also ensure the BookmarkDisplayManager updates its display
         if (displayManager != null && folderManager != null && folderManager.getUIStateManager().hasActiveFolder()) {
             displayManager.refreshActiveFolder(true);
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Forced refresh of active folder display");
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Position recalculation completed with current folders per row: {}", layoutCalculator.getFoldersPerRow());
-        } else {
-            ModLogger.debug("[POSITION-DEBUG-TRACE] No active folder to refresh or components are null");
         }
     }
     
@@ -282,8 +301,6 @@ public class FolderLayoutService {
      * Use this method when the UI needs a complete refresh
      */
     public void forceLayoutUpdate() {
-        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update requested");
-        
         // First invalidate all caches and recalculate basic layout parameters
         resetAndRecalculateLayout();
         
@@ -295,7 +312,6 @@ public class FolderLayoutService {
         
         // Mark as needing rebuild to ensure full UI refresh
         markNeedsRebuild();
-        ModLogger.debug("[POSITION-DEBUG-TRACE] Force layout update completed with folders per row: {}", layoutCalculator.getFoldersPerRow());
     }
     
     /**
@@ -317,7 +333,6 @@ public class FolderLayoutService {
      */
     private void updateExclusionZoneWithCurrentState() {
         if (folderManager == null) {
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Could not update exclusion zone - folderManager is null");
             return;
         }
         
@@ -330,10 +345,6 @@ public class FolderLayoutService {
         
         // Update the exclusion zone
         exclusionManager.updateExclusionZone(folderCount, foldersVisible, hasActiveFolder, bookmarkDisplayHeight);
-        
-        ModLogger.debug("[POSITION-DEBUG-TRACE] Updated exclusion zone - width: {}, height: {}", 
-                       exclusionManager.getExclusionZone().getWidth(), 
-                       exclusionManager.getExclusionZone().getHeight());
     }
     
     /**
@@ -358,7 +369,6 @@ public class FolderLayoutService {
         
         if (folderManager.getUIStateManager().hasActiveFolder()) {
             displayManager.refreshActiveFolder(true);
-            ModLogger.debug("[POSITION-DEBUG-TRACE] Refreshed active folder display");
         }
     }
     

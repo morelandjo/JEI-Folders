@@ -239,7 +239,7 @@ public class IngredientServiceImpl implements IngredientService {
 
         // If all ingredients were in cache, return immediately
         if (keysToProcess.isEmpty()) {
-            ModLogger.info("All {} ingredients were retrieved from cache in {}ms", 
+            ModLogger.debug("All {} ingredients were retrieved from cache in {}ms", 
                 result.size(), (System.currentTimeMillis() - startTime));
             return result;
         }
@@ -283,7 +283,7 @@ public class IngredientServiceImpl implements IngredientService {
         }
 
         long totalTime = System.currentTimeMillis() - startTime;
-        ModLogger.info("Retrieved {} ingredients ({} from cache, {} newly processed) in {}ms", 
+        ModLogger.debug("Retrieved {} ingredients ({} from cache, {} newly processed) in {}ms", 
             result.size(), cacheHits, (result.size() - cacheHits), totalTime);
 
         return result;
@@ -310,7 +310,7 @@ public class IngredientServiceImpl implements IngredientService {
         
         // Cache the processed ingredients
         folderIngredientsCache.put(folderId, new ArrayList<>(ingredients));
-        ModLogger.info("Cached {} ingredients for folder ID: {}", ingredients.size(), folderId);
+        ModLogger.debug("Cached {} ingredients for folder ID: {}", ingredients.size(), folderId);
         
         return ingredients;
     }
@@ -325,7 +325,7 @@ public class IngredientServiceImpl implements IngredientService {
     public void clearCache() {
         keyToIngredientCache.clear();
         folderIngredientsCache.clear();
-        ModLogger.info("Cleared all ingredient caches");
+        ModLogger.debug("Cleared all ingredient caches");
     }
     
     private ITypedIngredient<?> findIngredientByKey(String key, IIngredientManager ingredientManager) {
@@ -351,7 +351,7 @@ public class IngredientServiceImpl implements IngredientService {
                         ingredientType = optionalType.get();
                     } else {
                         // Fall back to get ItemStack ingredient type using a different approach
-                        ModLogger.info("Using fallback method to get item_stack ingredient type");
+                        ModLogger.debug("Using fallback method to get item_stack ingredient type");
                         ingredientType = getItemStackIngredientType(ingredientManager);
                     }
                 } catch (Exception e) {
@@ -396,7 +396,7 @@ public class IngredientServiceImpl implements IngredientService {
         // Look through all registered ingredient types to find the ItemStack type
         for (IIngredientType<?> type : ingredientManager.getRegisteredIngredientTypes()) {
             if (type.getIngredientClass().getSimpleName().equals("ItemStack")) {
-                ModLogger.info("Found ItemStack ingredient type: {}", type);
+                ModLogger.debug("Found ItemStack ingredient type: {}", type);
                 return type;
             }
         }

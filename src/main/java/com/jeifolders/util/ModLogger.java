@@ -14,8 +14,8 @@ import java.util.function.Supplier;
 public class ModLogger {
     private static final Logger LOGGER = LoggerFactory.getLogger("JEI Folders");
     
-    // Debug mode can be enabled by system property or when in development environment
-    private static final boolean DEBUG_MODE = Boolean.getBoolean("jeifolders.debug") || FMLEnvironment.dist == Dist.CLIENT;
+    // Debug mode can be enabled by system property
+    private static final boolean DEBUG_MODE = Boolean.getBoolean("jeifolders.debug");
 
     private ModLogger() {
         // Private constructor to prevent instantiation

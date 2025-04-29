@@ -2,11 +2,11 @@ package com.jeifolders.ui.display;
 
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
-import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.ui.components.contents.FolderContentsView;
+import com.jeifolders.ui.util.RefreshCoordinator;
 import com.jeifolders.util.ModLogger;
 
 import java.util.ArrayList;
@@ -23,10 +23,21 @@ public class BookmarkDisplayManager {
     
     // Track last refresh time for performance optimization
     private long lastRefreshTime = 0;
-    private static final long MIN_REFRESH_INTERVAL_MS = 100; // Prevent too frequent refreshes
+    private static final long MIN_REFRESH_INTERVAL_MS = 250; // Increased from 100ms to 250ms
+    
+    // Get reference to the refresh coordinator
+    private final RefreshCoordinator refreshCoordinator = RefreshCoordinator.getInstance();
+    
+    // Component ID for refresh coordination
+    private static final String COMPONENT_ID = "BookmarkDisplayManager";
     
     // Add recursion guard to prevent stack overflow
     private static boolean updatingBookmarkContents = false;
+    
+    // Track the last folder ID that was refreshed for additional debouncing
+    private Integer lastRefreshedFolderId = null;
+    private int consecutiveRefreshes = 0;
+    private static final int MAX_CONSECUTIVE_REFRESHES = 3;
     
     /**
      * Constructor for BookmarkDisplayManager
@@ -129,20 +140,24 @@ public class BookmarkDisplayManager {
      */
     public boolean refreshFolderBookmarks(Folder folder, boolean forceLayout) {
         if (folder == null) {
-            ModLogger.debug("Cannot refresh bookmarks - no folder provided");
+            ModLogger.debug("[REFRESH-DEBUG] Cannot refresh bookmarks - no folder provided");
             return false;
         }
 
-        // Check if we need to throttle refreshes
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+        int folderId = folder.getId();
+        
+        // First check with the global refresh coordinator if this refresh is allowed
+        if (!refreshCoordinator.canRefreshFolder(folderId, forceLayout)) {
             return false;
         }
-        lastRefreshTime = currentTime;
 
+        // Signal that we're starting a refresh operation
+        refreshCoordinator.beginRefresh();
+        
         try {
             // Ensure we have a bookmark display
             if (bookmarkDisplay == null) {
+                ModLogger.debug("[REFRESH-DEBUG] Creating new bookmark display during refresh");
                 if (!createBookmarkDisplay(true)) {
                     return false;
                 }
@@ -154,8 +169,11 @@ public class BookmarkDisplayManager {
             // Load bookmarks from the folder and convert to ingredients
             List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(
                 TypedIngredientHelper.loadBookmarksFromFolder(
-                    folderManager.getStorageService(), folder.getId(), true)
+                    folderManager.getStorageService(), folderId, true)
             );
+            
+            ModLogger.debug("[REFRESH-DEBUG] Loading {} bookmarks from folder ID {}", 
+                bookmarkIngredients.size(), folderId);
             
             // Set active folder and ingredients
             bookmarkDisplay.setActiveFolder(folder);
@@ -168,7 +186,7 @@ public class BookmarkDisplayManager {
                 // Restore pagination
                 if (currentPageNumber > 1 && bookmarkDisplay.getPageCount() >= currentPageNumber) {
                     bookmarkDisplay.goToPage(currentPageNumber);
-                    ModLogger.debug("Restored pagination to page {} after refresh", currentPageNumber);
+                    ModLogger.debug("[REFRESH-DEBUG] Restored pagination to page {} after refresh", currentPageNumber);
                 }
             }
             
@@ -181,11 +199,14 @@ public class BookmarkDisplayManager {
             // Fire event
             folderManager.getEventDispatcher().fireDisplayRefreshedEvent(folder);
             
-            ModLogger.debug("Folder bookmarks refresh completed successfully for folder: {}", folder.getName());
+            ModLogger.debug("[REFRESH-DEBUG] Folder bookmarks refresh completed successfully for folder: {}", folder.getName());
             return true;
         } catch (Exception e) {
-            ModLogger.error("Error refreshing folder bookmarks: {}", e.getMessage(), e);
+            ModLogger.error("[REFRESH-DEBUG] Error refreshing folder bookmarks: {}", e.getMessage(), e);
             return false;
+        } finally {
+            // Signal that we're done with the refresh operation
+            refreshCoordinator.endRefresh();
         }
     }
     
@@ -300,15 +321,33 @@ public class BookmarkDisplayManager {
      * @param bookmarkDisplayY The y position for the bookmark display
      */
     public void setBookmarkDisplayPositions(int nameY, int bookmarkDisplayY) {
-        ModLogger.debug("[POSITION-DEBUG] setBookmarkDisplayPositions called with nameY={}, bookmarkDisplayY={}", nameY, bookmarkDisplayY);
+        ModLogger.debug("Setting bookmark display positions: nameY={}, bookmarkDisplayY={}", nameY, bookmarkDisplayY);
         
         if (bookmarkDisplay != null) {
+            ModLogger.debug("Setting calculated positions on FolderContentsView");
             bookmarkDisplay.setCalculatedPositions(nameY, bookmarkDisplayY);
+            
             // Force an immediate update of bounds after setting calculated positions
             bookmarkDisplay.updateBoundsFromCalculatedPositions();
-            ModLogger.debug("[POSITION-DEBUG] Updated bookmark display bounds after setting positions");
+            
+            // Ensure the display is refreshed with the new positions
+            // Only refresh if we have an active folder
+            if (folderManager != null && folderManager.getUIStateManager().hasActiveFolder()) {
+                ModLogger.debug("Refreshing active folder with new positions");
+                refreshActiveFolder(true);
+            }
+            ModLogger.debug("Position update complete");
         } else {
-            ModLogger.debug("[POSITION-DEBUG] Could not update positions - bookmarkDisplay is null");
+            ModLogger.debug("Could not update positions - bookmarkDisplay is null");
+            // Try to create the bookmark display since it's null
+            createBookmarkDisplay(true);
+            
+            // If creation was successful, try setting positions again
+            if (bookmarkDisplay != null) {
+                ModLogger.debug("Created bookmarkDisplay, now setting positions");
+                bookmarkDisplay.setCalculatedPositions(nameY, bookmarkDisplayY);
+                bookmarkDisplay.updateBoundsFromCalculatedPositions();
+            }
         }
     }
     

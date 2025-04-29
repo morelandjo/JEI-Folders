@@ -30,6 +30,24 @@ public final class LayoutConstants {
      * Makes it easier to drop items onto folders.
      */
     public static final int DRAG_DROP_VERTICAL_MARGIN = 25;
+
+        
+    /**
+     * Height of the folder name display area in pixels.
+     */
+    public static final int FOLDER_NAME_HEIGHT = 5;
+    
+    /**
+     * Default height for ingredient grid when a folder is active.
+     * This value controls how far down the exclusion zone extends.
+     */
+    public static final int INGREDIENT_GRID_HEIGHT = 80;
+    
+    /**
+     * Extra padding to add below the ingredient grid to ensure
+     * complete coverage of the exclusion zone.
+     */
+    public static final int GRID_BOTTOM_PADDING = 5;
     
     /**
      * Calculates the left position of a standard GUI.
@@ -49,5 +67,20 @@ public final class LayoutConstants {
      */
     public static int calculateMaxWidthBeforeGui(int screenWidth) {
         return Math.max(50, calculateGuiLeft(screenWidth) - SAFETY_MARGIN);
+    }
+    
+    /**
+     * Calculates the total height needed for the ingredient grid area,
+     * including the folder name and padding.
+     * 
+     * @param displayHeight The height of the bookmark display if available (0 otherwise)
+     * @return The total height needed for the ingredient grid area
+     */
+    public static int calculateIngredientAreaHeight(int displayHeight) {
+        // Use the larger of the minimum grid height or the actual display height
+        int effectiveGridHeight = Math.max(INGREDIENT_GRID_HEIGHT, displayHeight);
+        
+        // Add folder name height and bottom padding
+        return FOLDER_NAME_HEIGHT + effectiveGridHeight + GRID_BOTTOM_PADDING;
     }
 }

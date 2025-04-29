@@ -8,7 +8,11 @@ import com.jeifolders.ui.events.FolderEvent;
 import com.jeifolders.ui.events.FolderEventBus;
 import com.jeifolders.ui.events.FolderEventListener;
 import com.jeifolders.ui.events.FolderEventType;
+import com.jeifolders.ui.util.RefreshCoordinator;
+import com.jeifolders.util.ModLogger;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -19,6 +23,16 @@ public class FolderEventDispatcher {
     
     // Event bus for event handling
     private final FolderEventBus eventBus = new FolderEventBus();
+    
+    // Event debouncing
+    private final Map<Integer, Long> lastFolderContentEvents = new ConcurrentHashMap<>();
+    private static final long EVENT_DEBOUNCE_MS = 250;
+    
+    // Component ID for refresh coordination
+    private static final String COMPONENT_ID = "FolderEventDispatcher";
+    
+    // Get reference to the refresh coordinator
+    private final RefreshCoordinator refreshCoordinator = RefreshCoordinator.getInstance();
     
     /**
      * Add a listener for a specific event type
@@ -178,17 +192,84 @@ public class FolderEventDispatcher {
         eventBus.post(event);
     }
     
+    /**
+     * Fires a folder contents changed event
+     * Uses both the internal debouncing and the global refresh coordinator
+     * to prevent excessive refresh events
+     * 
+     * @param folder The folder whose contents changed
+     */
     public void fireFolderContentsChangedEvent(Folder folder) {
-        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
-            .with("folder", folder)
-            .with("folderId", folder != null ? folder.getId() : null);
-        eventBus.post(event);
+        if (folder == null) {
+            ModLogger.warn("[EVENT-DEBUG] Attempted to fire folder contents changed event for null folder");
+            return;
+        }
+        
+        int folderId = folder.getId();
+        
+        // Check with both the internal debouncer and the global coordinator
+        if (shouldDebounceEvent(folderId) || !refreshCoordinator.canRefreshFolder(folderId, false)) {
+            return;
+        }
+        
+        // Get caller information for tracking event sources
+        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+        String callerClass = stackTrace.length > 2 ? stackTrace[2].getClassName() : "unknown";
+        String callerMethod = stackTrace.length > 2 ? stackTrace[2].getMethodName() : "unknown";
+        
+        // Notify the refresh coordinator that we're starting a refresh
+        refreshCoordinator.beginRefresh();
+        
+        try {
+            ModLogger.debug("[EVENT-DEBUG] Folder contents changed event triggered by {}::{} for folder {} ({})", 
+                callerClass, callerMethod, folder.getName(), folder.getId());
+            
+            FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
+                .with("folder", folder)
+                .with("folderId", folderId)
+                .with("sourceClass", callerClass)
+                .with("sourceMethod", callerMethod);
+            eventBus.post(event);
+        } finally {
+            // Signal that we're done with the refresh operation
+            refreshCoordinator.endRefresh();
+        }
     }
     
+    /**
+     * Fires a folder contents changed event by ID
+     * Uses both the internal debouncing and the global refresh coordinator
+     * to prevent excessive refresh events
+     * 
+     * @param folderId The ID of the folder whose contents changed
+     */
     public void fireFolderContentsChangedEvent(int folderId) {
-        FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
-            .with("folderId", folderId);
-        eventBus.post(event);
+        // Check with both the internal debouncer and the global coordinator
+        if (shouldDebounceEvent(folderId) || !refreshCoordinator.canRefreshFolder(folderId, false)) {
+            return;
+        }
+        
+        // Get caller information for tracking event sources
+        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+        String callerClass = stackTrace.length > 2 ? stackTrace[2].getClassName() : "unknown";
+        String callerMethod = stackTrace.length > 2 ? stackTrace[2].getMethodName() : "unknown";
+        
+        // Notify the refresh coordinator that we're starting a refresh
+        refreshCoordinator.beginRefresh();
+        
+        try {
+            ModLogger.debug("[EVENT-DEBUG] Folder contents changed event triggered by {}::{} for folder ID {}", 
+                callerClass, callerMethod, folderId);
+            
+            FolderEvent event = new FolderEvent(this, FolderEventType.FOLDER_CONTENTS_CHANGED)
+                .with("folderId", folderId)
+                .with("sourceClass", callerClass)
+                .with("sourceMethod", callerMethod);
+            eventBus.post(event);
+        } finally {
+            // Signal that we're done with the refresh operation
+            refreshCoordinator.endRefresh();
+        }
     }
     
     public void fireDisplayRefreshedEvent(Folder folder) {
@@ -196,5 +277,26 @@ public class FolderEventDispatcher {
             .with("folder", folder)
             .with("folderId", folder != null ? folder.getId() : null);
         eventBus.post(event);
+    }
+    
+    /**
+     * Determines if an event for the given folder should be debounced (skipped)
+     * because it was triggered too recently
+     * 
+     * @param folderId The folder ID
+     * @return True if the event should be skipped, false if it should be processed
+     */
+    private boolean shouldDebounceEvent(int folderId) {
+        long currentTime = System.currentTimeMillis();
+        Long lastEventTime = lastFolderContentEvents.get(folderId);
+        
+        if (lastEventTime != null && currentTime - lastEventTime < EVENT_DEBOUNCE_MS) {
+            ModLogger.debug("[EVENT-DEBUG] Debouncing folder content event for folder {} - too recent ({} ms)",
+                folderId, currentTime - lastEventTime);
+            return true;
+        }
+        
+        lastFolderContentEvents.put(folderId, currentTime);
+        return false;
     }
 }

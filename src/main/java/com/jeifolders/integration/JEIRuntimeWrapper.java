@@ -38,7 +38,6 @@ public class JEIRuntimeWrapper {
         try {
             // Cast safely within the integration layer
             jeiService.setJeiRuntime(runtime);
-            ModLogger.info("JEI runtime set successfully in wrapper");
         } catch (ClassCastException e) {
             ModLogger.error("Invalid runtime object provided: {}", e.getMessage(), e);
         }

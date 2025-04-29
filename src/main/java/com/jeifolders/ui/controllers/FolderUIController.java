@@ -14,6 +14,7 @@ import com.jeifolders.ui.layout.FolderLayoutService;
 import com.jeifolders.ui.render.UIRenderManager;
 import com.jeifolders.ui.screen.FolderScreenManager;
 import com.jeifolders.ui.state.FolderUIStateManager;
+import com.jeifolders.ui.util.LayoutConstants;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -50,11 +51,11 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     public static Rect2i lastDrawnArea = new Rect2i(0, 0, 0, 0);
     
     // New component-based architecture components
-    private final FolderManager coreFolderManager;
-    private final FolderUIStateManager uiStateManager;
-    private final BookmarkDisplayManager displayManager;
-    private final FolderInteractionHandler interactionHandler;
-    private final FolderStorageService storageService;
+    private FolderManager coreFolderManager;
+    private FolderUIStateManager uiStateManager;
+    private BookmarkDisplayManager displayManager;
+    private FolderInteractionHandler interactionHandler;
+    private FolderStorageService storageService;
     
     // Layout and rendering components
     private final FolderLayoutService layoutService;
@@ -93,6 +94,47 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             isInitialized = true;
             ModLogger.debug("FolderButtonSystem initialized and registered with EVENT_BUS");
         }
+    }
+
+    /**
+     * Initialize the folder button system with a specific FolderManager instance
+     * 
+     * @param folderManager The FolderManager instance to use
+     */
+    public static void init(FolderManager folderManager) {
+        if (!isInitialized) {
+            // Register event handlers
+            NeoForge.EVENT_BUS.register(FolderUIController.class);
+            
+            // Initialize the singleton instance
+            FolderUIController controller = getInstance();
+            
+            // Explicitly connect with the given FolderManager
+            controller.connectComponents(folderManager);
+            
+            isInitialized = true;
+            ModLogger.error("[INIT-DEBUG] FolderButtonSystem initialized with explicit FolderManager");
+        }
+    }
+    
+    /**
+     * Connect components explicitly to ensure proper initialization
+     */
+    private void connectComponents(FolderManager folderManager) {
+        // Make sure FolderLayoutService has the proper references
+        FolderLayoutService.init(folderManager);
+        
+        // Update our local references
+        this.coreFolderManager = folderManager;
+        this.uiStateManager = folderManager.getUIStateManager();
+        this.displayManager = folderManager.getDisplayManager();
+        this.interactionHandler = folderManager.getInteractionHandler();
+        this.storageService = folderManager.getStorageService();
+        
+        // Update layout positions and bookmark display bounds
+        updateLayoutPositions();
+        
+        ModLogger.error("[INIT-DEBUG] FolderUIController explicitly connected to FolderManager");
     }
     
     /**
@@ -254,7 +296,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
                 refreshBookmarkDisplay();
             }
             
-            ModLogger.info("Folder UI rebuild complete with {} folders", uiStateManager.getFolderButtons().size());
         } catch (Exception e) {
             ModLogger.error("Error during folder UI rebuild: {}", e.getMessage());
             e.printStackTrace();
@@ -286,6 +327,29 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         
         // Update the exclusion zone via the layout service
         lastDrawnArea = layoutService.updateExclusionZoneAndUI();
+        
+        // If we have an active folder, make sure the exclusion zone is big enough
+        // to cover both the folders and the ingredient GUI
+        if (uiStateManager.hasActiveFolder() && displayManager.getBookmarkDisplay() != null) {
+            FolderContentsView display = displayManager.getBookmarkDisplay();
+            
+            // Get the current exclusion zone
+            int currentWidth = lastDrawnArea.getWidth();
+            
+            // Use the current width as is - don't expand it further right
+            int expandedWidth = currentWidth;
+            
+            // Ensure height extends well beyond the bookmark display using the constants
+            // Use the LayoutConstants to calculate proper height
+            int expandedHeight = display.getY() + 
+                                LayoutConstants.calculateIngredientAreaHeight(display.getHeight());
+            
+            // Create a new exclusion zone with the expanded dimensions
+            lastDrawnArea = new Rect2i(0, 0, expandedWidth, expandedHeight);
+            
+            ModLogger.debug("Expanded exclusion zone for active folder - width: {}, height: {}", 
+                expandedWidth, expandedHeight);
+        }
     }
     
     /** 
@@ -299,7 +363,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             ticksAfterInit++;
             
             if (ticksAfterInit >= FORCE_REFRESH_DELAY) {
-                ModLogger.info("First-time initialization refresh triggered after {} ticks", ticksAfterInit);
                 rebuildFolders();
                 firstTimeLoaded = false;
                 ticksAfterInit = 0;
@@ -324,7 +387,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         
         // Check if window dimensions changed
         if (currentWidth != lastWindowWidth || currentHeight != lastWindowHeight) {
-            ModLogger.info("Window resized: {}x{} -> {}x{}, preserving folder state",
+            ModLogger.debug("Window resized: {}x{} -> {}x{}, preserving folder state",
                     lastWindowWidth, lastWindowHeight, currentWidth, currentHeight);
                     
             // Update cached window dimensions
@@ -339,7 +402,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             // Force update bookmark display after window resize
             if (uiStateManager.hasActiveFolder()) {
                 refreshBookmarkDisplay();
-                ModLogger.info("Updated bookmark display after resize");
             }
         }
     }
@@ -457,9 +519,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     public void setJeiRuntime(Object runtime) {
         JEIIntegrationFactory.getJEIService().setJeiRuntime(runtime);
         
-        // Force a UI refresh now that JEI is available
-        ModLogger.info("JEI runtime set, forcing folder UI refresh");
-        
         // Schedule refresh on the main thread to ensure it happens after current operations
         Minecraft.getInstance().execute(() -> {
             // Force a complete refresh of the folders
@@ -486,7 +545,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             
             // Force rebuild folders if this is the first screen after login
             if (folderButton.firstTimeLoaded && folderButton.getFolderButtons().size() <= 1) {
-                ModLogger.info("First GUI init detected, scheduling folder rebuild");
                 // Reset the counter so we force a refresh soon
                 folderButton.ticksAfterInit = 0;
             }

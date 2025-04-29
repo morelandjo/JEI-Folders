@@ -25,6 +25,13 @@ public class FolderStorageService {
     private static final int MIN_SAVE_INTERVAL_MS = 5000; // Minimum time between saves
     private long lastSaveTime = 0;
     
+    // Loading state tracking
+    private boolean isCurrentlyLoading = false;
+    private int loadingDepth = 0;
+    private String currentWorldName = null;
+    private long lastLoadTime = 0;
+    private static final long CACHE_VALID_MS = 5000;
+    
     /**
      * Private constructor for singleton pattern
      */
@@ -96,9 +103,41 @@ public class FolderStorageService {
      * Resets the data service state by updating file paths and reloading data
      */
     public void resetDataPaths() {
-        ModLogger.debug("Resetting data paths and reloading data");
+        ModLogger.debug("[LOADING-DEBUG] Resetting data paths and reloading data");
+        
+        // Invalidate the world name cache to force a fresh determination
+        pathResolver.invalidateWorldNameCache();
+        
         setupConfigDir();
-        loadData();
+        loadDataIfNeeded();
+    }
+    
+    /**
+     * Loads all folder data from the data file only if needed (world changed or cache expired)
+     * 
+     * @return true if data was loaded successfully, false otherwise
+     */
+    public boolean loadDataIfNeeded() {
+        String worldName = pathResolver.determineWorldFolder();
+        long currentTime = System.currentTimeMillis();
+        boolean worldChanged = !Objects.equals(worldName, currentWorldName);
+        boolean cacheExpired = currentTime - lastLoadTime > CACHE_VALID_MS;
+        
+        if (worldChanged) {
+            ModLogger.debug("[LOADING-DEBUG] Loading data because world changed from {} to {}", 
+                currentWorldName, worldName);
+            currentWorldName = worldName;
+            lastLoadTime = currentTime;
+            return loadData();
+        } else if (cacheExpired && folderRepository.isDirty()) {
+            ModLogger.debug("[LOADING-DEBUG] Loading data because cache expired and repository is dirty");
+            lastLoadTime = currentTime;
+            return loadData();
+        } else {
+            ModLogger.debug("[LOADING-DEBUG] Using cached data (world unchanged: {}, cache still valid: {})",
+                !worldChanged, !cacheExpired);
+            return true;
+        }
     }
     
     /**
@@ -107,6 +146,17 @@ public class FolderStorageService {
      * @return true if data was loaded successfully, false otherwise
      */
     public boolean loadData() {
+        loadingDepth++;
+        ModLogger.debug("[LOADING-DEBUG] Load data called, depth now: {}, call stack: {}", 
+            loadingDepth, Thread.currentThread().getStackTrace()[2]);
+        
+        if (isCurrentlyLoading) {
+            ModLogger.warn("[LOADING-DEBUG] Recursive data loading detected, depth: {}", loadingDepth);
+            loadingDepth--;
+            return false;
+        }
+        
+        isCurrentlyLoading = true;
         try {
             // Clear existing data
             folderRepository.clear();
@@ -114,22 +164,25 @@ public class FolderStorageService {
             
             // Determine the world and get the data file path
             String worldName = pathResolver.determineWorldFolder();
+            currentWorldName = worldName; // Update the current world name
             File dataFile = pathResolver.getDataFile(worldName);
             
-            ModLogger.info("Loading data from {}", dataFile.getAbsolutePath());
+            ModLogger.debug("Loading data from {}", dataFile.getAbsolutePath());
             
             // Check if the file exists
             if (!dataFile.exists()) {
-                ModLogger.info("No folder data file found at {}, will create new data", dataFile.getAbsolutePath());
+                ModLogger.debug("No folder data file found at {}, will create new data", dataFile.getAbsolutePath());
                 folderRepository.markLoaded();
+                lastLoadTime = System.currentTimeMillis(); // Update last load time even for empty data
                 return true;
             }
             
             // Read the data file
             Optional<String> fileContents = fileStorage.readDataFile(dataFile.toPath());
             if (fileContents.isEmpty() || fileContents.get().isEmpty()) {
-                ModLogger.info("Data file is empty, treating as no data");
+                ModLogger.debug("Data file is empty, treating as no data");
                 folderRepository.markLoaded();
+                lastLoadTime = System.currentTimeMillis();
                 return true;
             }
             
@@ -138,6 +191,7 @@ public class FolderStorageService {
             if (rootTagOpt.isEmpty()) {
                 ModLogger.error("Failed to parse data file");
                 folderRepository.markLoaded();
+                lastLoadTime = System.currentTimeMillis();
                 return false;
             }
             
@@ -154,7 +208,10 @@ public class FolderStorageService {
             // Prune unused ingredients
             pruneUnusedIngredients();
             
-            ModLogger.info("Data loaded successfully from {}", dataFile.getAbsolutePath());
+            // Update last load time
+            lastLoadTime = System.currentTimeMillis();
+            
+            ModLogger.debug("Data loaded successfully from {}", dataFile.getAbsolutePath());
             return true;
         } catch (Exception e) {
             ModLogger.error("Error loading data: {}", e.getMessage());
@@ -163,6 +220,9 @@ public class FolderStorageService {
             // Mark as loaded to avoid repeated load attempts
             folderRepository.markLoaded();
             return false;
+        } finally {
+            isCurrentlyLoading = false;
+            loadingDepth--;
         }
     }
     
@@ -198,7 +258,7 @@ public class FolderStorageService {
                 // Update state
                 folderRepository.markClean();
                 lastSaveTime = currentTime;
-                ModLogger.info("Data saved successfully to {}", dataFile.getAbsolutePath());
+                ModLogger.debug("Data saved successfully to {}", dataFile.getAbsolutePath());
             } else {
                 ModLogger.error("Failed to write data to {}", dataFile.getAbsolutePath());
             }
@@ -215,7 +275,7 @@ public class FolderStorageService {
      */
     private void ensureDataLoaded() {
         if (!folderRepository.isLoaded()) {
-            loadData();
+            loadDataIfNeeded(); // Use the improved method that checks if loading is needed
         }
     }
     

@@ -45,7 +45,6 @@ public class IngredientDragManager {
         // Pass the runtime to the ingredient drag handler
         try {
             this.ingredientDragHandler.setJeiRuntime(jeiRuntime);
-            ModLogger.info("GlobalIngredientDragManager initialized with JEI runtime");
         } catch (Exception e) {
             ModLogger.error("Failed to initialize drag handler with JEI runtime: {}", e.getMessage());
         }
@@ -95,10 +94,10 @@ public class IngredientDragManager {
                     boolean handled = folderButton.handleIngredientDrop(event.getMouseX(), event.getMouseY(), wrappedObj);
                     
                     if (handled) {
-                        ModLogger.info("Ingredient drop successfully handled by folder system");
+                        ModLogger.debug("Ingredient drop successfully handled by folder system");
                         event.setCanceled(true); // Prevent further processing
                     } else {
-                        ModLogger.info("Ingredient drop not handled by folder system");
+                        ModLogger.error("Ingredient drop not handled by folder system");
                     }
                 } catch (Exception e) {
                     ModLogger.error("Error during ingredient drop handling: {}", e.getMessage(), e);

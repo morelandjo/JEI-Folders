@@ -21,6 +21,8 @@ public class ExclusionHandler {
         if (!area.isEmpty()) {
             ModLogger.debug("Adding exclusion area: {}", area);
             exclusionAreas.add(area);
+        } else {
+            ModLogger.debug("Attempted to add empty exclusion area - ignored");
         }
     }
     
@@ -30,6 +32,7 @@ public class ExclusionHandler {
     }
     
     public void clearExclusionAreas() {
+        ModLogger.debug("Clearing all exclusion areas");
         exclusionAreas.clear();
     }
 
@@ -43,7 +46,13 @@ public class ExclusionHandler {
         
         Collection<Rect2i> result = new ArrayList<>(exclusionAreas.size());
         for (Rectangle2i area : exclusionAreas) {
-            result.add(new Rect2i(area.getX(), area.getY(), area.getWidth(), area.getHeight()));
+            // Create a Minecraft Rect2i from our Rectangle2i
+            Rect2i rect = new Rect2i(area.getX(), area.getY(), area.getWidth(), area.getHeight());
+            result.add(rect);
+            
+            // Log the conversion for debugging
+            ModLogger.debug("Converting exclusion area to Rect2i: {} -> x={}, y={}, w={}, h={}", 
+                area, rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
         }
         return result;
     }

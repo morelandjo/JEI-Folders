@@ -29,7 +29,7 @@ public class IngredientDragHandler {
     public void setJeiRuntime(Object jeiRuntime) {
         if (jeiRuntime instanceof mezz.jei.api.runtime.IJeiRuntime typedRuntime) {
             this.ingredientManager = typedRuntime.getIngredientManager();
-            ModLogger.info("IngredientDragHandler initialized with JEI runtime");
+            ModLogger.debug("IngredientDragHandler initialized with JEI runtime");
         } else {
             ModLogger.error("Failed to initialize IngredientDragHandler: Runtime object is not an IJeiRuntime");
         }
@@ -53,7 +53,7 @@ public class IngredientDragHandler {
             if (ingredient.isPresent()) {
                 jeiService.setDraggedIngredient(ingredient.get());
                 jeiService.setActuallyDragging(true);
-                ModLogger.info("Detected potential JEI ingredient drag: {}", lastDraggedItem);
+                ModLogger.debug("Detected potential JEI ingredient drag: {}", lastDraggedItem);
                 return true;
             }
         }

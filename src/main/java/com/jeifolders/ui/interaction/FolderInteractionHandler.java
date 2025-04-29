@@ -306,7 +306,6 @@ public class FolderInteractionHandler {
         // Force a complete UI rebuild through the FolderUIController
         Minecraft.getInstance().execute(() -> {
             if (FolderUIController.isInitialized()) {
-                ModLogger.info("Rebuilding folder UI after folder deletion");
                 FolderUIController.getInstance().rebuildFolders();
             }
         });

@@ -23,6 +23,11 @@ public class ExclusionManager {
     private int lastFolderCount = -1;
     private int lastBookmarkDisplayHeight = 0;
     
+    // Constants for ingredient grid coverage
+    private static final int BASE_FOLDER_NAME_HEIGHT = 25;
+    private static final int ACTIVE_FOLDER_EXTRA_PADDING = 60;
+    private static final int MINIMUM_INGREDIENT_GRID_HEIGHT = 200;
+    
     /**
      * Creates a new exclusion manager.
      * 
@@ -63,6 +68,7 @@ public class ExclusionManager {
         if (minecraft.screen == null) {
             exclusionZone = new Rect2i(0, 0, 0, 0);
             exclusionZoneCacheValid = true;
+            updateExclusionHandler(exclusionZone); // Make sure to update the handler even with an empty zone
             return exclusionZone;
         }
 
@@ -74,17 +80,24 @@ public class ExclusionManager {
         int exclusionWidth;
         int exclusionPadding = layoutCalculator.getExclusionPadding();
         
-        if (foldersVisible && folderCount > 0 && foldersPerRow > 1) {
-            // For multiple folders, calculate based on the grid width
-            int gridWidth = layoutCalculator.calculateGridWidth();
-            
-            // Add padding to the calculated width
-            exclusionWidth = Math.min(maxExclusionWidth, 
-                                    gridWidth + (2 * exclusionPadding));
-        } else {
-            // For single column or no folders, just use the button width plus padding
-            exclusionWidth = Math.min(maxExclusionWidth, 
-                                    layoutCalculator.getIconWidth() + (2 * exclusionPadding));
+        // Calculate the grid width to ensure it accommodates all folders
+        int gridWidth = layoutCalculator.calculateGridWidth();
+        
+        // Use a more conservative width calculation that better fits the actual UI
+        exclusionWidth = Math.min(maxExclusionWidth, gridWidth + exclusionPadding);
+        
+        // For a single folder, ensure minimum width but keep it compact
+        if (!foldersVisible || folderCount == 0) {
+            exclusionWidth = Math.min(maxExclusionWidth,
+                          layoutCalculator.getIconWidth() + exclusionPadding);
+        }
+        
+        // Ensure the width is adequate for the bookmark display when a folder is active
+        if (hasActiveFolder) {
+            // Use a more precise width calculation for the ingredient GUI
+            // This ensures we don't take up excessive horizontal space
+            int ingredientGuiWidth = Math.min(maxExclusionWidth, gridWidth + 40); // More conservative width
+            exclusionWidth = Math.min(maxExclusionWidth, ingredientGuiWidth);
         }
 
         // Calculate the height of the exclusion zone
@@ -99,12 +112,22 @@ public class ExclusionManager {
             
             // Add the height for active folder name and optionally the bookmark display
             if (hasActiveFolder) {
-                exclusionHeight = buttonsHeight + 20; // For folder name
+                // Base height includes buttons plus space for folder name with generous padding
+                exclusionHeight = buttonsHeight + BASE_FOLDER_NAME_HEIGHT;
                 
-                // Add bookmark display height if it exists
-                if (bookmarkDisplayHeight > 0) {
-                    exclusionHeight += bookmarkDisplayHeight + 10; // Add padding
-                }
+                // When a folder is active, ensure we have enough height for the ingredient grid
+                // regardless of the reported bookmark display height
+                int ingredientGridHeight = Math.max(
+                    MINIMUM_INGREDIENT_GRID_HEIGHT,  // Minimum height for ingredient grid
+                    bookmarkDisplayHeight * 2         // Double the reported height to be safe
+                );
+                
+                // Add the ingredient grid height plus extra padding
+                exclusionHeight += ingredientGridHeight + ACTIVE_FOLDER_EXTRA_PADDING;
+                
+                // Log the expanded height for debugging
+                ModLogger.debug("Expanded exclusion zone height for active folder: {}px (includes {}px ingredient grid)", 
+                              exclusionHeight, ingredientGridHeight);
             } else {
                 exclusionHeight = buttonsHeight + 10; // Just add some padding
             }
@@ -113,6 +136,10 @@ public class ExclusionManager {
             exclusionHeight = layoutCalculator.getIconHeight() + (2 * exclusionPadding);
         }
         
+        // Ensure we have positive dimensions
+        if (exclusionWidth <= 0) exclusionWidth = 1;
+        if (exclusionHeight <= 0) exclusionHeight = 1;
+        
         // Create the exclusion zone
         exclusionZone = new Rect2i(0, 0, exclusionWidth, exclusionHeight);
         
@@ -120,6 +147,7 @@ public class ExclusionManager {
         updateExclusionHandler(exclusionZone);
         
         exclusionZoneCacheValid = true;
+        
         ModLogger.debug("Updated exclusion zone - width: {}, height: {}", 
                        exclusionZone.getWidth(), exclusionZone.getHeight());
         
@@ -149,6 +177,10 @@ public class ExclusionManager {
         exclusionHandler.clearExclusionAreas();
         Rectangle2i rect = new Rectangle2i(zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());
         exclusionHandler.addExclusionArea(rect);
+        
+        // Add debug logging
+        ModLogger.debug("Updated exclusion handler with zone: x={}, y={}, width={}, height={}", 
+                       zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());
     }
     
     /**
