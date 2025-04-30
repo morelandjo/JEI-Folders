@@ -16,6 +16,7 @@ import com.jeifolders.ui.util.LayoutConstants;
 import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.ui.events.FolderEvent;
+import com.jeifolders.ui.events.FolderEventBuilder;
 
 import net.minecraft.client.Minecraft;
 
@@ -62,8 +63,9 @@ public class FolderContentsView implements HitTestable {
     private int calculatedNameY = -1;
     private int calculatedDisplayY = -1;
     
-    // Event system
+    // Event listeners
     private final Consumer<FolderEvent> folderChangedListener;
+    private final Consumer<FolderEvent> displayRefreshedListener;
 
     /**
      * Creates a new unified folder contents display
@@ -84,16 +86,27 @@ public class FolderContentsView implements HitTestable {
         this.displayManager = displayManager;
         this.interactionHandler = interactionHandler;
         
-        // Folder changed listener
+        // Folder changed listener - improved with better logging
         this.folderChangedListener = event -> {
-            if (activeFolder != null && event.getFolderId() == activeFolder.getId()) {
-                ModLogger.debug("FolderEventManager: Active folder {} was modified, refreshing display", event.getFolderId());
+            if (activeFolder != null && event.has("folderId") && 
+                event.getFolderId() != null && event.getFolderId().equals(activeFolder.getId())) {
+                ModLogger.debug("FolderContentsView: Active folder {} was modified, refreshing display", event.getFolderId());
                 needsRefresh = true;
+            }
+        };
+        
+        // Display refreshed listener
+        this.displayRefreshedListener = event -> {
+            if (activeFolder != null && event.has("folderId") && 
+                event.getFolderId() != null && event.getFolderId().equals(activeFolder.getId())) {
+                ModLogger.debug("FolderContentsView: Display refreshed for folder {}", event.getFolderId());
+                clearRefreshFlag();
             }
         };
         
         // Register with event system
         eventDispatcher.addEventListener(FolderEventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
+        eventDispatcher.addEventListener(FolderEventType.DISPLAY_REFRESHED, displayRefreshedListener);
     }
 
     /**
@@ -185,10 +198,19 @@ public class FolderContentsView implements HitTestable {
                 // Force update of the layout positions
                 updateBoundsFromCalculatedPositions();
             }
+            
+            // Announce folder activation via event system
+            eventDispatcher.fire(FolderEventType.FOLDER_ACTIVATED)
+                .withFolder(folder)
+                .withData("source", "FolderContentsView")
+                .build();
         } else {
             // Clear the current state if no folder is active
             ingredients.clear();
             ModLogger.debug("Cleared active folder");
+            
+            // Announce folder deactivation via event system
+            eventDispatcher.fireFolderDeactivatedEvent();
         }
     }
 
@@ -449,6 +471,16 @@ public class FolderContentsView implements HitTestable {
             return false;
         }
         
+        // Fire ingredient dropped event
+        if (activeFolder != null) {
+            eventDispatcher.fire(FolderEventType.INGREDIENT_DROPPED)
+                .withIngredient(ingredient)
+                .withFolderId(activeFolder.getId())
+                .withData("mouseX", mouseX)
+                .withData("mouseY", mouseY)
+                .build();
+        }
+        
         // Use the interaction handler directly
         return interactionHandler.handleIngredientDropOnFolder(activeFolder, ingredient);
     }
@@ -590,5 +622,16 @@ public class FolderContentsView implements HitTestable {
                 contentsImpl.previousPage();
             }
         }
+    }
+    
+    /**
+     * Clean up event listeners when this view is no longer needed
+     */
+    public void cleanup() {
+        // Unregister event listeners to prevent memory leaks
+        eventDispatcher.removeEventListener(FolderEventType.FOLDER_CONTENTS_CHANGED, folderChangedListener);
+        eventDispatcher.removeEventListener(FolderEventType.DISPLAY_REFRESHED, displayRefreshedListener);
+        
+        ModLogger.debug("FolderContentsView cleaned up event listeners");
     }
 }

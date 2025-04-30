@@ -6,22 +6,27 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
  * Type-safe event bus for folder events.
+ * Provides a centralized mechanism for components to communicate via events.
  */
 public class FolderEventBus {
     // Map of event type to list of listeners for that type
     private final Map<FolderEventType, List<Consumer<FolderEvent>>> listeners = new EnumMap<>(FolderEventType.class);
     
+    // Flag to enable detailed event logging
+    private boolean detailedLogging = false;
+    
     /**
      * Create a new event bus with initial listeners for all event types
      */
     public FolderEventBus() {
-        // Initialize empty listener lists for each event type
+        // Initialize empty thread-safe listener lists for each event type
         for (FolderEventType type : FolderEventType.values()) {
-            listeners.put(type, new ArrayList<>());
+            listeners.put(type, new CopyOnWriteArrayList<>());
         }
         ModLogger.debug("FolderEventBus initialized");
     }
@@ -35,7 +40,9 @@ public class FolderEventBus {
     public void register(FolderEventType type, Consumer<FolderEvent> listener) {
         if (listener != null) {
             listeners.get(type).add(listener);
-            ModLogger.debug("Added event listener for {}, total: {}", type, listeners.get(type).size());
+            if (detailedLogging) {
+                ModLogger.debug("Added event listener for {}, total: {}", type, listeners.get(type).size());
+            }
         }
     }
     
@@ -49,7 +56,9 @@ public class FolderEventBus {
             for (FolderEventType type : FolderEventType.values()) {
                 listeners.get(type).add(listener);
             }
-            ModLogger.debug("Added global event listener");
+            if (detailedLogging) {
+                ModLogger.debug("Added global event listener");
+            }
         }
     }
     
@@ -60,9 +69,13 @@ public class FolderEventBus {
      * @param listener The listener to remove
      */
     public void unregister(FolderEventType type, Consumer<FolderEvent> listener) {
-        listeners.get(type).remove(listener);
-        ModLogger.debug("Removed event listener for {}, remaining: {}", 
-                       type, listeners.get(type).size());
+        if (type != null && listener != null) {
+            listeners.get(type).remove(listener);
+            if (detailedLogging) {
+                ModLogger.debug("Removed event listener for {}, remaining: {}", 
+                              type, listeners.get(type).size());
+            }
+        }
     }
     
     /**
@@ -71,34 +84,46 @@ public class FolderEventBus {
      * @param listener The listener to remove
      */
     public void unregisterGlobal(Consumer<FolderEvent> listener) {
-        for (FolderEventType type : FolderEventType.values()) {
-            listeners.get(type).remove(listener);
+        if (listener != null) {
+            for (FolderEventType type : FolderEventType.values()) {
+                listeners.get(type).remove(listener);
+            }
+            if (detailedLogging) {
+                ModLogger.debug("Removed global event listener");
+            }
         }
-        ModLogger.debug("Removed global event listener");
     }
     
     /**
-     * Post an event to all registered listeners
+     * Post an event to all registered listeners.
+     * This method is thread-safe and will catch exceptions from individual listeners
+     * without disrupting other listeners.
      * 
      * @param event The event to dispatch
      */
     public void post(FolderEvent event) {
+        if (event == null) {
+            ModLogger.warn("Attempted to post null event");
+            return;
+        }
+        
         FolderEventType type = event.getType();
         List<Consumer<FolderEvent>> typeListeners = listeners.get(type);
         
         if (typeListeners != null && !typeListeners.isEmpty()) {
-            // Create a copy of the list to avoid concurrent modification issues
-            List<Consumer<FolderEvent>> listenersCopy = new ArrayList<>(typeListeners);
+            if (detailedLogging) {
+                ModLogger.debug("Posting {} event to {} listeners", type, typeListeners.size());
+            }
             
-            for (Consumer<FolderEvent> listener : listenersCopy) {
+            // We're using CopyOnWriteArrayList, so no need to create a defensive copy
+            for (Consumer<FolderEvent> listener : typeListeners) {
                 try {
                     listener.accept(event);
                 } catch (Exception e) {
-                    ModLogger.error("Error in folder event listener: {}", e.getMessage(), e);
+                    ModLogger.error("Error in folder event listener for type {}: {}", 
+                                  type, e.getMessage(), e);
                 }
             }
-            
-            ModLogger.debug("Posted {} event to {} listeners", type, typeListeners.size());
         }
     }
     
@@ -113,5 +138,24 @@ public class FolderEventBus {
         FolderEvent event = new FolderEvent(source, type);
         post(event);
         return event;
+    }
+    
+    /**
+     * Enable or disable detailed event logging
+     * 
+     * @param enable True to enable detailed logging, false to disable
+     */
+    public void setDetailedLogging(boolean enable) {
+        this.detailedLogging = enable;
+    }
+    
+    /**
+     * Clear all event listeners
+     */
+    public void clearAllListeners() {
+        for (FolderEventType type : FolderEventType.values()) {
+            listeners.get(type).clear();
+        }
+        ModLogger.debug("Cleared all event listeners");
     }
 }
