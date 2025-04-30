@@ -210,7 +210,8 @@ public class FolderContentsView implements HitTestable {
             ModLogger.debug("Cleared active folder");
             
             // Announce folder deactivation via event system
-            eventDispatcher.fireFolderDeactivatedEvent();
+            eventDispatcher.fire(FolderEventType.FOLDER_DEACTIVATED)
+                .build();
         }
     }
 

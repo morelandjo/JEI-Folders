@@ -6,6 +6,7 @@ import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.ui.components.contents.FolderContentsView;
+import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.ui.util.RefreshCoordinator;
 import com.jeifolders.util.ModLogger;
 
@@ -185,7 +186,9 @@ public class BookmarkDisplayManager {
             safeUpdateBookmarkContents();
             
             // Fire event
-            folderManager.getEventDispatcher().fireDisplayRefreshedEvent(folder);
+            folderManager.getEventDispatcher().fire(FolderEventType.DISPLAY_REFRESHED)
+                .withFolder(folder)
+                .build();
             
             ModLogger.debug("[REFRESH-DEBUG] Folder bookmarks refresh completed successfully for folder: {}", folder.getName());
             return true;
@@ -269,8 +272,10 @@ public class BookmarkDisplayManager {
             // Get the typed ingredient from the bookmark
             var typedIngredient = TypedIngredientHelper.getTypedIngredientForKey(key);
             if (typedIngredient != null) {
-                // Fire bookmark clicked event
-                folderManager.getEventDispatcher().fireBookmarkClickedEvent(typedIngredient);
+                // Fire bookmark clicked event using the new builder pattern
+                folderManager.getEventDispatcher().fire(FolderEventType.BOOKMARK_CLICKED)
+                    .withIngredient(typedIngredient)
+                    .build();
                 return true;
             }
         }

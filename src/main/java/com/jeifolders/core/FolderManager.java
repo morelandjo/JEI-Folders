@@ -6,6 +6,7 @@ import com.jeifolders.events.FolderEventDispatcher;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
+import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.ui.interaction.FolderInteractionHandler;
 import com.jeifolders.ui.state.FolderUIStateManager;
 import com.jeifolders.util.ModLogger;
@@ -136,7 +137,9 @@ public class FolderManager {
      */
     private void notifyFolderCreated(Folder folder) {
         // Fire folder created event
-        eventDispatcher.fireFolderCreatedEvent(folder);
+        eventDispatcher.fire(FolderEventType.FOLDER_CREATED)
+            .withFolder(folder)
+            .build();
     }
     
     /**
@@ -185,7 +188,10 @@ public class FolderManager {
      */
     private void notifyFolderActivation(FolderButton button) {
         // Fire event through the event dispatcher
-        eventDispatcher.fireFolderActivatedEvent(button);
+        eventDispatcher.fire(FolderEventType.FOLDER_ACTIVATED)
+            .withButton(button)
+            .withFolder(button.getFolder())
+            .build();
     }
     
     /**

@@ -6,6 +6,7 @@ import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.controllers.FolderUIController;
+import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
@@ -57,9 +58,9 @@ public class FolderInteractionHandler {
         if (deleteButtonX >= 0 && button == 0 && isDeleteButtonHovered) {
             // Fire delete button clicked event before deleting
             if (folderManager.getUIStateManager().hasActiveFolder()) {
-                folderManager.getEventDispatcher().fireDeleteButtonClickedEvent(
-                    folderManager.getUIStateManager().getActiveFolder().getFolder().getId()
-                );
+                folderManager.getEventDispatcher().fire(FolderEventType.DELETE_BUTTON_CLICKED)
+                    .withFolderId(folderManager.getUIStateManager().getActiveFolder().getFolder().getId())
+                    .build();
             }
             
             deleteActiveFolder();
@@ -195,11 +196,11 @@ public class FolderInteractionHandler {
             // Fire appropriate event based on ingredient type
             if (ingredient instanceof BookmarkIngredient) {
                 ModLogger.debug("Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
-                folderManager.getEventDispatcher().fireBookmarkAddedEvent(
-                    folder,
-                    (BookmarkIngredient)ingredient,
-                    key
-                );
+                folderManager.getEventDispatcher().fire(FolderEventType.BOOKMARK_ADDED)
+                    .withFolder(folder)
+                    .withIngredient((BookmarkIngredient)ingredient)
+                    .withBookmarkKey(key)
+                    .build();
             } else {
                 // For non-BookmarkIngredient, fire a folder contents changed event
                 ModLogger.debug("Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
@@ -231,7 +232,8 @@ public class FolderInteractionHandler {
      */
     public void handleAddFolderButtonClick(Folder ignored) {
         // Fire event for other listeners
-        folderManager.getEventDispatcher().fireAddButtonClickedEvent();
+        folderManager.getEventDispatcher().fire(FolderEventType.ADD_BUTTON_CLICKED)
+            .build();
         
         // Delegate dialog handling to the UI system
         if (addFolderDialogHandler != null) {
@@ -262,11 +264,15 @@ public class FolderInteractionHandler {
                 if (button.isActive()) {
                     // If clicking the active folder again, deactivate it
                     uiStateManager.deactivateActiveFolder();
-                    folderManager.getEventDispatcher().fireFolderDeactivatedEvent();
+                    folderManager.getEventDispatcher().fire(FolderEventType.FOLDER_DEACTIVATED)
+                        .build();
                 } else {
                     // Otherwise activate the clicked folder
                     uiStateManager.setActiveFolder(button);
-                    folderManager.getEventDispatcher().fireFolderActivatedEvent(button);
+                    folderManager.getEventDispatcher().fire(FolderEventType.FOLDER_ACTIVATED)
+                        .withButton(button)
+                        .withFolder(button.getFolder())
+                        .build();
                     
                     // Update bookmark display
                     var bookmarkDisplay = folderManager.getDisplayManager().getBookmarkDisplay();
@@ -298,7 +304,10 @@ public class FolderInteractionHandler {
         folderManager.getStorageService().deleteFolder(folderId);
         
         // Fire folder deleted event
-        folderManager.getEventDispatcher().fireFolderDeletedEvent(folderId, folderName);
+        folderManager.getEventDispatcher().fire(FolderEventType.FOLDER_DELETED)
+            .withFolderId(folderId)
+            .withFolderName(folderName)
+            .build();
         
         // Force a complete UI rebuild through the FolderUIController
         Minecraft.getInstance().execute(() -> {
@@ -328,7 +337,9 @@ public class FolderInteractionHandler {
         ModLogger.debug("Created folder: {} (ID: {})", folder.getName(), folder.getId());
         
         // Fire folder created event
-        folderManager.getEventDispatcher().fireFolderCreatedEvent(folder);
+        folderManager.getEventDispatcher().fire(FolderEventType.FOLDER_CREATED)
+            .withFolder(folder)
+            .build();
         
         return folder;
     }

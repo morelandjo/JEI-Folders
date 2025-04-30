@@ -70,8 +70,6 @@ public class FolderEventDispatcher {
         eventBus.unregisterGlobal(listener);
     }
     
-    // ----- Generic event firing method -----
-    
     /**
      * Fire an event using the builder pattern.
      * 
@@ -89,128 +87,12 @@ public class FolderEventDispatcher {
         };
     }
     
-    // ----- Helper methods for firing folder UI events -----
-    // These methods now use the builder pattern internally
-    
-    public void fireFolderClickedEvent(Folder folder) {
-        fire(FolderEventType.FOLDER_CLICKED)
-            .withFolder(folder)
-            .build();
-    }
-    
-    public void fireFolderActivatedEvent(FolderButton button) {
-        FolderEventBuilder builder = fire(FolderEventType.FOLDER_ACTIVATED)
-            .withButton(button);
-            
-        if (button != null && button.getFolder() != null) {
-            builder.withFolder(button.getFolder());
-        }
-        
-        builder.build();
-    }
-    
-    public void fireFolderDeactivatedEvent() {
-        fire(FolderEventType.FOLDER_DEACTIVATED)
-            .build();
-    }
-    
-    public void fireFolderCreatedEvent(Folder folder) {
-        fire(FolderEventType.FOLDER_CREATED)
-            .withFolder(folder)
-            .build();
-    }
-    
-    public void fireFolderDeletedEvent(int folderId, String folderName) {
-        fire(FolderEventType.FOLDER_DELETED)
-            .withFolderId(folderId)
-            .withFolderName(folderName)
-            .build();
-    }
-    
-    public void fireAddButtonClickedEvent() {
-        fire(FolderEventType.ADD_BUTTON_CLICKED)
-            .build();
-    }
-    
-    public void fireDeleteButtonClickedEvent(int folderId) {
-        fire(FolderEventType.DELETE_BUTTON_CLICKED)
-            .withFolderId(folderId)
-            .build();
-    }
-    
-    public void fireBookmarkClickedEvent(TypedIngredient ingredient) {
-        fire(FolderEventType.BOOKMARK_CLICKED)
-            .withIngredient(ingredient)
-            .build();
-    }
-    
-    public void fireIngredientDroppedEvent(Object ingredient, Integer folderId) {
-        FolderEventBuilder builder = fire(FolderEventType.INGREDIENT_DROPPED)
-            .withIngredient(ingredient);
-            
-        if (folderId != null) {
-            builder.withFolderId(folderId);
-        }
-        
-        builder.build();
-    }
-    
-    public void fireBookmarkAddedEvent(Folder folder, 
-                                      BookmarkIngredient ingredient, 
-                                      String key) {
-        fire(FolderEventType.BOOKMARK_ADDED)
-            .withFolder(folder)
-            .withIngredient(ingredient)
-            .withBookmarkKey(key)
-            .build();
-    }
-    
-    public void fireBookmarkRemovedEvent(Folder folder, 
-                                       BookmarkIngredient ingredient, 
-                                       String key) {
-        fire(FolderEventType.BOOKMARK_REMOVED)
-            .withFolder(folder)
-            .withIngredient(ingredient)
-            .withBookmarkKey(key)
-            .build();
-    }
-    
-    public void fireBookmarksClearedEvent(Folder folder) {
-        fire(FolderEventType.BOOKMARKS_CLEARED)
-            .withFolder(folder)
-            .build();
-    }
-    
-    /**
-     * Fires a folder contents changed event
-     * 
-     * @param folder The folder whose contents changed
-     */
-    public void fireFolderContentsChangedEvent(Folder folder) {
-        if (folder == null) {
-            ModLogger.warn("[EVENT-DEBUG] Attempted to fire folder contents changed event for null folder");
-            return;
-        }
-        
-        int folderId = folder.getId();
-        fireFolderContentsChangedEventById(folderId);
-    }
-    
-    /**
-     * Fires a folder contents changed event by ID
-     * 
-     * @param folderId The ID of the folder whose contents changed
-     */
-    public void fireFolderContentsChangedEvent(int folderId) {
-        fireFolderContentsChangedEventById(folderId);
-    }
-    
     /**
      * Internal method to handle folder contents changed events with debouncing
      * 
      * @param folderId The folder ID
      */
-    private void fireFolderContentsChangedEventById(int folderId) {
+    public void fireFolderContentsChangedEvent(int folderId) {
         // Skip if the event should be debounced or if the folder can't be refreshed
         if (!debouncer.shouldProcess(folderId) || !refreshCoordinator.canRefreshFolder(folderId, false)) {
             return;
@@ -239,9 +121,18 @@ public class FolderEventDispatcher {
         }
     }
     
-    public void fireDisplayRefreshedEvent(Folder folder) {
-        fire(FolderEventType.DISPLAY_REFRESHED)
-            .withFolder(folder)
-            .build();
+    /**
+     * Fires a folder contents changed event
+     * 
+     * @param folder The folder whose contents changed
+     */
+    public void fireFolderContentsChangedEvent(Folder folder) {
+        if (folder == null) {
+            ModLogger.warn("[EVENT-DEBUG] Attempted to fire folder contents changed event for null folder");
+            return;
+        }
+        
+        int folderId = folder.getId();
+        fireFolderContentsChangedEvent(folderId);
     }
 }

@@ -5,6 +5,7 @@ import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.IngredientService;
 import com.jeifolders.events.FolderEventDispatcher;
+import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.gui.overlay.IIngredientGridSource;
@@ -126,7 +127,9 @@ public class FolderBookmarkList {
             notifyingListeners = true;
             
             if (folder != null) {
-                eventDispatcher.fireFolderContentsChangedEvent(folder);
+                eventDispatcher.fire(FolderEventType.FOLDER_CONTENTS_CHANGED)
+                    .withFolder(folder)
+                    .build();
             }
 
             // Notify JEI source list changed listeners
@@ -197,7 +200,11 @@ public class FolderBookmarkList {
         ingredients.add(ingredient);
         folder.addBookmarkKey(key);
 
-        eventDispatcher.fireBookmarkAddedEvent(folder, ingredient, key);
+        eventDispatcher.fire(FolderEventType.BOOKMARK_ADDED)
+            .withFolder(folder)
+            .withIngredient(ingredient)
+            .withBookmarkKey(key)
+            .build();
 
         return true;
     }
@@ -217,7 +224,11 @@ public class FolderBookmarkList {
             ingredients.remove(ingredient);
             folder.removeBookmarkKey(key);
 
-            eventDispatcher.fireBookmarkRemovedEvent(folder, ingredient, key);
+            eventDispatcher.fire(FolderEventType.BOOKMARK_REMOVED)
+                .withFolder(folder)
+                .withIngredient(ingredient)
+                .withBookmarkKey(key)
+                .build();
 
             return true;
         }
@@ -259,7 +270,9 @@ public class FolderBookmarkList {
         if (folder != null) {
             folder.clearBookmarks();
 
-            eventDispatcher.fireBookmarksClearedEvent(folder);
+            eventDispatcher.fire(FolderEventType.BOOKMARKS_CLEARED)
+                .withFolder(folder)
+                .build();
         }
     }
 
