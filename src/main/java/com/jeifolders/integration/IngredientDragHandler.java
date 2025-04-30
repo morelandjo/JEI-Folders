@@ -76,4 +76,13 @@ public class IngredientDragHandler {
     public Optional<TypedIngredient> getDraggedIngredient() {
         return jeiService.getDraggedIngredient();
     }
+    
+    /**
+     * Check if an ingredient is actually being dragged (not just hover)
+     * 
+     * @return true if an ingredient is being actively dragged
+     */
+    public boolean isActuallyDragging() {
+        return jeiService.isActuallyDragging();
+    }
 }

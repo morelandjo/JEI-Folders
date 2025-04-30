@@ -131,4 +131,9 @@ public class JEIServiceImpl implements JEIService {
         this.isActuallyDragging = dragging;
         ModLogger.debug("Actually dragging set to: {}", dragging);
     }
+    
+    @Override
+    public boolean isActuallyDragging() {
+        return this.isActuallyDragging;
+    }
 }

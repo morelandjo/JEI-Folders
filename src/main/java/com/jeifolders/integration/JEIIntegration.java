@@ -204,7 +204,6 @@ public class JEIIntegration implements IModPlugin {
 
     /**
      * Ghost ingredient handler specifically for folder interactions
-     * This implementation completely prevents targets from being created when just hovering
      */
     private static class FolderGhostIngredientHandler<T extends AbstractContainerScreen<?>> implements IGhostIngredientHandler<T> {
         // Track if we're in an actual drag (not just hover) using mouse state
@@ -214,38 +213,40 @@ public class JEIIntegration implements IModPlugin {
         public <I> List<Target<I>> getTargetsTyped(T gui, ITypedIngredient<I> ingredient, boolean doStart) {
             List<Target<I>> targets = new ArrayList<>();
             
-            // Important: We're completely ignoring the doStart parameter from JEI
-            // and using our own mouse tracking to determine if this is a drag or just hover
+            // If doStart is true, JEI is informing us that a drag operation has started
+            // This parameter is essential for JEI's ghost ingredient system to work
+            boolean dragStarting = doStart;
             
-            // Check the mouse state directly instead of relying on JEI's doStart
-            boolean leftMouseDown = org.lwjgl.glfw.GLFW.glfwGetMouseButton(
-                net.minecraft.client.Minecraft.getInstance().getWindow().getWindow(), 
-                org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
+            // For additional precision, we also check mouse state directly
+            Minecraft minecraft = Minecraft.getInstance();
+            boolean leftMouseDown = minecraft.mouseHandler.isLeftPressed();
             
-            if (leftMouseDown) {
-                // Left mouse button is down, so this is an actual drag operation
-                mouseButtonDown = true;
+            // Detect start of drag through either doStart or mouse state
+            if (dragStarting || leftMouseDown) {
+                // This is either the start of a drag or an ongoing drag
+                if (!mouseButtonDown) {
+                    // First detection of this drag operation
+                    mouseButtonDown = true;
+                    ModLogger.debug("[DRAG-DEBUG] Ingredient drag detected, targets will be created");
+                    
+                    // Set the dragged ingredient for the actual drag
+                    JEIIntegrationFactory.getJEIService().setDraggedIngredient(ingredient);
+                    JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
+                }
                 
-                // Log the actual drag operation
-                ModLogger.debug("[HOVER-FIX] Actual drag detected, mouse button is down");
-                
-                // Set the dragged ingredient for the actual drag
-                JEIIntegrationFactory.getJEIService().setDraggedIngredient(ingredient);
-                JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
-                
-                // Now add the targets since this is an actual drag
+                // Now add the targets for the drag operation
                 if (FolderUIController.isInitialized()) {
-                    FolderUIController folderButton = FolderUIController.getInstance();
+                    FolderUIController controller = FolderUIController.getInstance();
                     
                     // Add targets for folder buttons
-                    folderButton.getFolderButtons().forEach(folderRowButton -> {
-                        targets.add(createFolderTarget(folderRowButton, folderButton, ingredient));
+                    controller.getFolderButtons().forEach(buttonInstance -> {
+                        targets.add(createFolderTarget(buttonInstance, controller, ingredient));
                     });
 
                     // Add target for bookmark display area if available
-                    if (folderButton.isBookmarkAreaAvailable()) {
-                        Rect2i bookmarkArea = folderButton.getBookmarkDisplayArea();
-                        targets.add(createBookmarkAreaTarget(bookmarkArea, folderButton, ingredient));
+                    if (controller.isBookmarkAreaAvailable()) {
+                        Rect2i bookmarkArea = controller.getBookmarkDisplayArea();
+                        targets.add(createBookmarkAreaTarget(bookmarkArea, controller, ingredient));
                     }
                 }
             } else if (mouseButtonDown) {
@@ -253,48 +254,46 @@ public class JEIIntegration implements IModPlugin {
                 mouseButtonDown = false;
                 JEIIntegrationFactory.getJEIService().setActuallyDragging(false);
                 JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
-                ModLogger.debug("[HOVER-FIX] Mouse button released, drag operation ended");
+                ModLogger.debug("[DRAG-DEBUG] Drag operation ended");
             }
             
             return targets;
         }
 
         private <I> Target<I> createFolderTarget(
-                com.jeifolders.ui.components.buttons.FolderButton folderRowButton,
-                FolderUIController folderButton,
+                com.jeifolders.ui.components.buttons.FolderButton button,
+                FolderUIController controller,
                 ITypedIngredient<I> ingredient) {
 
             return new Target<I>() {
                 @Override
                 public Rect2i getArea() {
-                    return new Rect2i(
-                            folderRowButton.getX(),
-                            folderRowButton.getY(),
-                            folderRowButton.getWidth(),
-                            folderRowButton.getHeight()
-                    );
+                    // Use button's area directly instead of creating a new Rect2i
+                    return new Rect2i(button.getX(), button.getY(), button.getWidth(), button.getHeight());
                 }
 
                 @Override
                 public void accept(I ingredientObj) {
-                    ModLogger.debug("[HOVER-FIX] Ingredient dropped on folder: {}", folderRowButton.getFolder().getName());
-                    folderButton.handleIngredientDrop(
-                            folderRowButton.getX() + folderRowButton.getWidth() / 2,
-                            folderRowButton.getY() + folderRowButton.getHeight() / 2,
-                            ingredient
-                    );
+                    ModLogger.debug("[HOVER-FIX] Ingredient dropped on folder: {}", button.getFolder().getName());
+                    
+                    // Get the center of the button for the drop position
+                    int centerX = button.getX() + button.getWidth() / 2;
+                    int centerY = button.getY() + button.getHeight() / 2;
+                    
+                    controller.handleIngredientDrop(centerX, centerY, ingredient);
                 }
             };
         }
 
         private <I> Target<I> createBookmarkAreaTarget(
                 Rect2i bookmarkArea,
-                FolderUIController folderButton,
+                FolderUIController controller,
                 ITypedIngredient<I> ingredient) {
 
             return new Target<I>() {
                 @Override
                 public Rect2i getArea() {
+                    // Return the bookmark area directly
                     return bookmarkArea;
                 }
 
@@ -302,13 +301,12 @@ public class JEIIntegration implements IModPlugin {
                 public void accept(I ingredientObj) {
                     ModLogger.debug("[HOVER-FIX] Ingredient dropped on bookmark display");
                     
-                    // We need to pass the ingredientObj (which is the actual Minecraft item)
-                    // instead of the ITypedIngredient wrapper
-                    folderButton.handleIngredientDrop(
-                            bookmarkArea.getX() + bookmarkArea.getWidth() / 2,
-                            bookmarkArea.getY() + bookmarkArea.getHeight() / 2,
-                            ingredientObj
-                    );
+                    // Calculate center of bookmark area for better drop accuracy
+                    int centerX = bookmarkArea.getX() + bookmarkArea.getWidth() / 2;
+                    int centerY = bookmarkArea.getY() + bookmarkArea.getHeight() / 2;
+                    
+                    // Pass the actual Minecraft item (ingredientObj) instead of the wrapper
+                    controller.handleIngredientDrop(centerX, centerY, ingredientObj);
                 }
             };
         }

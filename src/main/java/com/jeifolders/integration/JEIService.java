@@ -49,4 +49,10 @@ public interface JEIService {
      * Sets whether an ingredient is actually being dragged
      */
     void setActuallyDragging(boolean dragging);
+    
+    /**
+     * Checks if an ingredient is actually being dragged
+     * @return true if an ingredient is actively being dragged, false otherwise
+     */
+    boolean isActuallyDragging();
 }

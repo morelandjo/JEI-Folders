@@ -3,35 +3,21 @@ package com.jeifolders.ui.util;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.integration.IngredientDragHandler;
 import com.jeifolders.integration.TypedIngredient;
-import com.jeifolders.ui.controllers.FolderUIController;
-import com.jeifolders.ui.interaction.IngredientDropTarget;
-
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.world.entity.player.Player;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.common.NeoForge;
 
 import java.util.Optional;
 
 /**
- * Manages the detection of dragged ingredients from JEI globally.
+ * Provides compatibility interface between JEI runtime and the folder system.
+ * Note: Primary drag handling now happens through FolderGhostIngredientHandler.
  */
 public class IngredientDragManager {
     private static IngredientDragManager instance;
-    private boolean isDragging = false;
-    private int dragStartX = -1;
-    private int dragStartY = -1;
-    private int lastMouseX = -1;
-    private int lastMouseY = -1;
     
     // Delegate functionality to the handler in the integration package
     private final IngredientDragHandler ingredientDragHandler = new IngredientDragHandler();
 
     private IngredientDragManager() {
-        // Register for Forge events
-        NeoForge.EVENT_BUS.register(this);
+        // Simplified initialization
     }
 
     public static IngredientDragManager getInstance() {
@@ -41,120 +27,35 @@ public class IngredientDragManager {
         return instance;
     }
 
+    /**
+     * Sets the JEI runtime for ingredient operations
+     * @param jeiRuntime The JEI runtime object
+     */
     public void setJeiRuntime(Object jeiRuntime) {
         // Pass the runtime to the ingredient drag handler
         try {
             this.ingredientDragHandler.setJeiRuntime(jeiRuntime);
+            ModLogger.debug("JEI runtime set in IngredientDragManager");
         } catch (Exception e) {
             ModLogger.error("Failed to initialize drag handler with JEI runtime: {}", e.getMessage());
         }
     }
 
-    @SubscribeEvent
-    public void onMouseClick(ScreenEvent.MouseButtonPressed.Pre event) {
-        if (!(event.getScreen() instanceof AbstractContainerScreen<?>)) {
-            return;
-        }
-
-        if (event.getButton() == 0) { // Left mouse button
-            // Start tracking for potential drag
-            dragStartX = (int) event.getMouseX();
-            dragStartY = (int) event.getMouseY();
-        }
-    }
-
-    @SubscribeEvent
-    public void onMouseRelease(ScreenEvent.MouseButtonReleased.Pre event) {
-        if (!(event.getScreen() instanceof AbstractContainerScreen<?>)) {
-            return;
-        }
-
-        if (event.getButton() == 0 && isDragging) { // Left mouse button
-            // Get the currently active folder button interface from FolderButtonSystem
-            IngredientDropTarget folderButton = FolderUIController.isInitialized() ? 
-                                                FolderUIController.getInstance() : null;
-            
-            if (folderButton == null) {
-                ModLogger.debug("No active folder button found for drop processing");
-                resetDragState();
-                return;
-            }
-
-            // Get the dragged ingredient from our wrapper
-            Optional<TypedIngredient> typedIngredientOpt = ingredientDragHandler.getDraggedIngredient();
-            if (typedIngredientOpt.isPresent()) {
-                TypedIngredient typedIngredient = typedIngredientOpt.get();
-                Object wrappedObj = typedIngredient.getWrappedIngredient();
-                
-                ModLogger.debug("Processing ingredient drop at ({}, {})", event.getMouseX(), event.getMouseY());
-                
-                try {
-                    // Check if the drop should be handled by the folder button
-                    boolean handled = folderButton.handleIngredientDrop(event.getMouseX(), event.getMouseY(), wrappedObj);
-                    
-                    if (handled) {
-                        ModLogger.debug("Ingredient drop successfully handled by folder system");
-                        event.setCanceled(true); // Prevent further processing
-                    } else {
-                        ModLogger.error("Ingredient drop not handled by folder system");
-                    }
-                } catch (Exception e) {
-                    ModLogger.error("Error during ingredient drop handling: {}", e.getMessage(), e);
-                }
-            } else {
-                ModLogger.debug("No ingredient being dragged at drop time");
-            }
-
-            resetDragState();
-        }
-    }
-
-    @SubscribeEvent
-    public void onMouseDrag(ScreenEvent.MouseDragged.Pre event) {
-        if (!(event.getScreen() instanceof AbstractContainerScreen<?>)) {
-            return;
-        }
-
-        if (event.getMouseButton() == 0) { // Left mouse button
-            lastMouseX = (int) event.getMouseX();
-            lastMouseY = (int) event.getMouseY();
-
-            if (dragStartX != -1 && !isDragging) {
-                double dragDistSq = (dragStartX - lastMouseX) * (dragStartX - lastMouseX)
-                        + (dragStartY - lastMouseY) * (dragStartY - lastMouseY);
-
-                if (dragDistSq > 25) { // 5 pixels distance threshold
-                    checkForJeiIngredientDrag();
-                }
-            }
-        }
-    }
-
-    private void checkForJeiIngredientDrag() {
-        Minecraft minecraft = Minecraft.getInstance();
-        Player player = minecraft.player;
-
-        if (player != null) {
-            // Delegate to the JEI-specific handler in the integration package
-            boolean dragDetected = ingredientDragHandler.checkForJeiIngredientDrag(player);
-            if (dragDetected) {
-                isDragging = true;
-            }
-        }
+    /**
+     * Gets the currently dragged ingredient, if any
+     * @return Optional containing the dragged ingredient, or empty if none
+     */
+    public Optional<TypedIngredient> getDraggedIngredient() {
+        return ingredientDragHandler.getDraggedIngredient();
     }
     
     /**
-     * Reset all drag state variables to their default values
+     * Checks if an ingredient is currently being dragged
+     * @return true if an ingredient is being dragged
      */
-    private void resetDragState() {
-        isDragging = false;
-        dragStartX = -1;
-        dragStartY = -1;
-        ingredientDragHandler.resetDragState();
-    }
-
     public boolean isDragging() {
-        // Only return true if we're actually dragging (not just hovering)
-        return isDragging && dragStartX != -1 && ingredientDragHandler.getDraggedIngredient().isPresent();
+        // Only return true if we have an ingredient and JEI's dragging flag is set
+        return ingredientDragHandler.getDraggedIngredient().isPresent() && 
+               ingredientDragHandler.isActuallyDragging();
     }
 }
