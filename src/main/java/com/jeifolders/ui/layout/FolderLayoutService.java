@@ -15,16 +15,12 @@ import java.util.List;
 
 /**
  * Centralized service for managing all UI layout calculations.
- * Delegates core responsibilities to specialized components:
- * - LayoutCalculator: Core position/dimension calculations
- * - ExclusionManager: Manages JEI exclusion zones
- * - LayoutCacheService: Handles caching of layout data
  */
 public class FolderLayoutService {
     // Singleton instance
     private static FolderLayoutService instance;
     
-    // Component architecture - new structure
+    // Component architecture
     private final LayoutCalculator layoutCalculator;
     private final ExclusionManager exclusionManager;
     private final LayoutCacheService cacheService;
@@ -37,7 +33,7 @@ public class FolderLayoutService {
     // State
     private boolean needsRebuild = true;
     
-    // Component architecture - backward compatibility
+    // Component references
     private FolderManager folderManager;
     private BookmarkDisplayManager displayManager;
     private FolderInteractionHandler interactionHandler;
@@ -75,14 +71,6 @@ public class FolderLayoutService {
         layoutService.calculateInitialLayout();
         
         ModLogger.debug("FolderLayoutService initialized with component architecture");
-    }
-    
-    /**
-     * Backwards compatibility init
-     */
-    public static void init() {
-        ModLogger.debug("FolderLayoutService legacy init called WITHOUT folderManager - deferring calculations");
-        getInstance();
     }
     
     /**
@@ -291,14 +279,7 @@ public class FolderLayoutService {
     }
     
     /**
-     * Forces a complete layout update including:
-     * - Cache invalidation
-     * - Recalculating folders per row
-     * - Updating positions
-     * - Refreshing the exclusion zone
-     * - Refreshing the active folder display
-     * 
-     * Use this method when the UI needs a complete refresh
+     * Forces a complete layout update
      */
     public void forceLayoutUpdate() {
         // First invalidate all caches and recalculate basic layout parameters
@@ -429,7 +410,6 @@ public class FolderLayoutService {
     
     /**
      * Complete update of the exclusion zone and related UI elements.
-     * This consolidates all exclusion zone management in one place.
      * 
      * @return The updated exclusion zone
      */
@@ -491,7 +471,7 @@ public class FolderLayoutService {
     }
     
     /**
-     * Simple data class to hold UI state information for exclusion zone calculations
+     * UI state information for exclusion zone calculations
      */
     private static class UIStateInfo {
         int buttonCount = 0;

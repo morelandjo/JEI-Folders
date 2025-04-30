@@ -37,7 +37,6 @@ import java.util.List;
 /**
  * Main entry point for the folder button system.
  * Coordinates between state management, input handling, and screen management components.
- * Rendering is delegated to the centralized rendering system.
  */
 public class FolderUIController extends AbstractWidget implements IngredientDropTarget {
     // Singleton instance for static access
@@ -50,7 +49,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     // Exclusion zone
     public static Rect2i lastDrawnArea = new Rect2i(0, 0, 0, 0);
     
-    // New component-based architecture components
+    // Component-based architecture components
     private FolderManager coreFolderManager;
     private FolderUIStateManager uiStateManager;
     private BookmarkDisplayManager displayManager;
@@ -163,7 +162,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         this.storageService = coreFolderManager.getStorageService();
         this.layoutService = FolderLayoutService.getInstance();
         
-        // Create the specialized components - directly use UIRenderManager with components
+        // Create the specialized components
         this.renderManager = new UIRenderManager(this.uiStateManager, this.displayManager, layoutService);
         this.screenManager = new FolderScreenManager(coreFolderManager, this::createFolder);
         
@@ -215,7 +214,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     }
     
     /**
-     * Initializes folder buttons directly using the new component architecture
+     * Initializes folder buttons directly
      * 
      * @return The button to activate (if any)
      */
@@ -225,7 +224,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Get all folders from the storage service
         List<Folder> folders = storageService.getAllFolders();
         if (folders == null) {
-            // Instead of assigning the result of loadData(), just call it and get folders again
             storageService.loadData();
             folders = storageService.getAllFolders();
             // If still null, create an empty list as fallback
@@ -336,7 +334,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             // Get the current exclusion zone
             int currentWidth = lastDrawnArea.getWidth();
             
-            // Use the current width as is - don't expand it further right
+            // Use the current width as is
             int expandedWidth = currentWidth;
             
             // Ensure height extends well beyond the bookmark display using the constants
@@ -436,7 +434,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Use interactionHandler directly
         return interactionHandler.handleMouseClick(mouseX, mouseY, button, 
                                              renderManager.isDeleteButtonHovered(),
                                              renderManager.getCurrentDeleteButtonX());
@@ -492,7 +489,6 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * @return The newly created folder
      */
     public Folder createFolder(String name) {
-        // Use interactionHandler instead of folderManager
         Folder folder = interactionHandler.createFolder(name);
         
         // Handle UI updates after folder creation

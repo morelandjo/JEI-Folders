@@ -9,7 +9,6 @@ import java.util.Map;
 
 /**
  * Represents a folder-related event.
- * Simplified event model with a flexible data structure.
  */
 public class FolderEvent extends EventObject {
     private static final long serialVersionUID = 1L;

@@ -11,8 +11,6 @@ import net.minecraft.client.gui.GuiGraphics;
 
 /**
  * Specialized renderer for folder buttons.
- * This class centralizes folder button rendering logic that was previously
- * duplicated across multiple classes.
  */
 public class FolderButtonRenderer {
     
@@ -30,8 +28,6 @@ public class FolderButtonRenderer {
     public static void renderFolderButton(FolderButton button, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         int x = button.getX();
         int y = button.getY();
-        int width = button.getWidth();
-        int height = button.getHeight();
         boolean isActive = button.isActive();
         
         // Check hover state using the HitTestable interface implementation
@@ -98,16 +94,15 @@ public class FolderButtonRenderer {
         // Calculate the position to center the text under the folder icon
         int textWidth = Minecraft.getInstance().font.width(shortName);
         int textX = x + (width - textWidth) / 2;
-        int textY = y + height + 2; // Position right below the folder icon
+        int textY = y + height + 2;
         
-        // Draw the name with a shadow to make it more readable
         graphics.drawString(
             Minecraft.getInstance().font,
             shortName,
             textX,
             textY,
-            0xFFFFFF, // White color
-            true // Draw with shadow
+            0xFFFFFF,
+            true
         );
     }
     
@@ -118,11 +113,8 @@ public class FolderButtonRenderer {
         // Render the delete button
         FolderButtonTextures.renderDeleteFolderIcon(graphics, x, y);
         
-        // Create a temporary "button" just for hit testing
-        FolderButton deleteButton = new FolderButton(x, y, FolderButton.ButtonType.DELETE);
-        
-        // Show tooltip when hovering over delete button using standardized hit test
-        boolean isHovered = MouseHitUtil.isMouseOver(mouseX, mouseY, deleteButton);
+        // Show tooltip when hovering over delete button using direct rectangle hit test
+        boolean isHovered = isMouseOverDeleteButton(mouseX, mouseY, x, y);
         if (isHovered) {
             TooltipRenderer.renderTooltip(graphics, "tooltip.jeifolders.delete_folder", mouseX, mouseY);
         }
@@ -132,8 +124,8 @@ public class FolderButtonRenderer {
      * Checks if mouse is over a delete button
      */
     public static boolean isMouseOverDeleteButton(int mouseX, int mouseY, int buttonX, int buttonY) {
-        // Create a temporary button just for hit testing
-        FolderButton deleteButton = new FolderButton(buttonX, buttonY, FolderButton.ButtonType.DELETE);
-        return MouseHitUtil.isMouseOver(mouseX, mouseY, deleteButton);
+        return MouseHitUtil.isMouseOverRect(mouseX, mouseY, buttonX, buttonY, 
+                                         FolderButtonTextures.ICON_WIDTH, 
+                                         FolderButtonTextures.ICON_HEIGHT);
     }
 }

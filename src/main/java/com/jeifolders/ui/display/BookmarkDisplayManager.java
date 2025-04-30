@@ -21,23 +21,11 @@ public class BookmarkDisplayManager {
     private final FolderManager folderManager;
     private FolderContentsView bookmarkDisplay;
     
-    // Track last refresh time for performance optimization
-    private long lastRefreshTime = 0;
-    private static final long MIN_REFRESH_INTERVAL_MS = 250; // Increased from 100ms to 250ms
-    
     // Get reference to the refresh coordinator
     private final RefreshCoordinator refreshCoordinator = RefreshCoordinator.getInstance();
     
-    // Component ID for refresh coordination
-    private static final String COMPONENT_ID = "BookmarkDisplayManager";
-    
     // Add recursion guard to prevent stack overflow
     private static boolean updatingBookmarkContents = false;
-    
-    // Track the last folder ID that was refreshed for additional debouncing
-    private Integer lastRefreshedFolderId = null;
-    private int consecutiveRefreshes = 0;
-    private static final int MAX_CONSECUTIVE_REFRESHES = 3;
     
     /**
      * Constructor for BookmarkDisplayManager
@@ -240,7 +228,6 @@ public class BookmarkDisplayManager {
             return false;
         }
 
-        // Delegate to our centralized refresh method
         return refreshFolderBookmarks(
             folderManager.getUIStateManager().getActiveFolder().getFolder(), 
             true
@@ -249,7 +236,6 @@ public class BookmarkDisplayManager {
 
     /**
      * Handles a click on the bookmark display
-     * This method processes business logic and events after the view handles UI interactions
      *
      * @param mouseX The mouse X position
      * @param mouseY The mouse Y position

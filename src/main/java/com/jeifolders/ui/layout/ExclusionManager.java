@@ -68,7 +68,7 @@ public class ExclusionManager {
         if (minecraft.screen == null) {
             exclusionZone = new Rect2i(0, 0, 0, 0);
             exclusionZoneCacheValid = true;
-            updateExclusionHandler(exclusionZone); // Make sure to update the handler even with an empty zone
+            updateExclusionHandler(exclusionZone);
             return exclusionZone;
         }
 
@@ -96,7 +96,7 @@ public class ExclusionManager {
         if (hasActiveFolder) {
             // Use a more precise width calculation for the ingredient GUI
             // This ensures we don't take up excessive horizontal space
-            int ingredientGuiWidth = Math.min(maxExclusionWidth, gridWidth + 40); // More conservative width
+            int ingredientGuiWidth = Math.min(maxExclusionWidth, gridWidth + 40);
             exclusionWidth = Math.min(maxExclusionWidth, ingredientGuiWidth);
         }
 
@@ -112,24 +112,21 @@ public class ExclusionManager {
             
             // Add the height for active folder name and optionally the bookmark display
             if (hasActiveFolder) {
-                // Base height includes buttons plus space for folder name with generous padding
                 exclusionHeight = buttonsHeight + BASE_FOLDER_NAME_HEIGHT;
                 
                 // When a folder is active, ensure we have enough height for the ingredient grid
-                // regardless of the reported bookmark display height
                 int ingredientGridHeight = Math.max(
-                    MINIMUM_INGREDIENT_GRID_HEIGHT,  // Minimum height for ingredient grid
-                    bookmarkDisplayHeight * 2         // Double the reported height to be safe
+                    MINIMUM_INGREDIENT_GRID_HEIGHT, 
+                    bookmarkDisplayHeight * 2         
                 );
                 
                 // Add the ingredient grid height plus extra padding
                 exclusionHeight += ingredientGridHeight + ACTIVE_FOLDER_EXTRA_PADDING;
                 
-                // Log the expanded height for debugging
                 ModLogger.debug("Expanded exclusion zone height for active folder: {}px (includes {}px ingredient grid)", 
                               exclusionHeight, ingredientGridHeight);
             } else {
-                exclusionHeight = buttonsHeight + 10; // Just add some padding
+                exclusionHeight = buttonsHeight + 10;
             }
         } else {
             // If folders aren't visible or there are no folders, minimal height
@@ -178,7 +175,6 @@ public class ExclusionManager {
         Rectangle2i rect = new Rectangle2i(zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());
         exclusionHandler.addExclusionArea(rect);
         
-        // Add debug logging
         ModLogger.debug("Updated exclusion handler with zone: x={}, y={}, width={}, height={}", 
                        zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());
     }

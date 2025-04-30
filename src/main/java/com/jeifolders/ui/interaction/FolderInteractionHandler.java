@@ -44,7 +44,6 @@ public class FolderInteractionHandler {
     
     /**
      * Central method to handle all mouse click events in the UI.
-     * This consolidates all click handling in one place for better maintainability.
      *
      * @param mouseX Mouse X position
      * @param mouseY Mouse Y position
@@ -165,7 +164,6 @@ public class FolderInteractionHandler {
     
     /**
      * Central method for handling ingredient drops on a folder.
-     * This consolidates the logic previously duplicated across multiple classes.
      * 
      * @param folder The folder to add the ingredient to
      * @param ingredient The ingredient being dropped
@@ -228,7 +226,6 @@ public class FolderInteractionHandler {
     /**
      * Handles a click on the "Add Folder" button.
      * This method is used as a click handler for the "Add Folder" button.
-     * Since the button has no associated folder, the parameter is ignored.
      * 
      * @param ignored This parameter is ignored since the Add button has no folder
      */
@@ -313,7 +310,6 @@ public class FolderInteractionHandler {
     
     /**
      * Sets the handler for showing the add folder dialog
-     * This should be called by the UI system that manages dialogs
      * 
      * @param handler The runnable that will show the add folder dialog
      */

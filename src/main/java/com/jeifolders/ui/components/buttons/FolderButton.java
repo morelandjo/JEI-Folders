@@ -8,7 +8,6 @@ import java.util.function.Consumer;
 
 /**
  * A button that represents a folder in the UI.
- * This class is now a pure data object without rendering logic.
  */
 public class FolderButton implements HitTestable {
     // Position and dimensions
@@ -119,7 +118,6 @@ public class FolderButton implements HitTestable {
     
     /**
      * Determines if the mouse coordinates are over this button.
-     * Implementation of the HitTestable interface.
      * 
      * @param mouseX X coordinate of the mouse
      * @param mouseY Y coordinate of the mouse
@@ -132,7 +130,6 @@ public class FolderButton implements HitTestable {
     
     /**
      * Determines if the mouse coordinates are over the extended area of this button.
-     * This implementation adds a small margin to make drag and drop operations easier.
      * 
      * @param mouseX X coordinate of the mouse
      * @param mouseY Y coordinate of the mouse

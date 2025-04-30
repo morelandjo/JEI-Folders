@@ -9,8 +9,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * A simple type-safe event bus for folder events.
- * Handles event registration and dispatching with improved type safety.
+ * Type-safe event bus for folder events.
  */
 public class FolderEventBus {
     // Map of event type to list of listeners for that type

@@ -6,7 +6,6 @@ import net.minecraft.client.Minecraft;
 
 /**
  * Handles caching of layout data for improved performance.
- * Centralizes all caching logic for positions, dimensions and UI state.
  */
 public class LayoutCacheService {
     // Interval between forced recalculations in milliseconds

@@ -26,7 +26,6 @@ import java.util.function.Consumer;
 
 /**
  * Manages folder contents data, layout, and interaction.
- * Rendering is now handled by the ContentViewRenderer for better separation.
  */
 public class FolderContentsView implements HitTestable {
     // Constants
@@ -51,7 +50,7 @@ public class FolderContentsView implements HitTestable {
     private boolean updatingBounds = false;
     private boolean needsRefresh = false;
     private List<BookmarkIngredient> ingredients = new ArrayList<>();
-    private boolean refreshingBookmarks = false; // Add a refreshing state guard to prevent recursion
+    private boolean refreshingBookmarks = false;
     
     // Layout properties
     private int x;
@@ -98,7 +97,7 @@ public class FolderContentsView implements HitTestable {
     }
 
     /**
-     * Creates a new instance of UnifiedFolderContentsDisplay
+     * Creates a new instance of FolderContentsView
      * @param folderService The folder data service
      * @return An optional containing the new display if creation was successful
      */
@@ -203,7 +202,6 @@ public class FolderContentsView implements HitTestable {
 
     /**
      * Refreshes bookmarks from the active folder.
-     * This now uses displayManager directly instead of FolderStateManager.
      */
     public void refreshBookmarks() {
         if (activeFolder == null) {
@@ -219,7 +217,6 @@ public class FolderContentsView implements HitTestable {
 
         try {
             refreshingBookmarks = true;
-            // Use displayManager directly with proper method name
             displayManager.refreshFolderBookmarks(activeFolder, true);
         } catch (Exception e) {
             ModLogger.error("Error refreshing bookmarks: {}", e.getMessage(), e);
@@ -232,7 +229,6 @@ public class FolderContentsView implements HitTestable {
      * Force a refresh of the contents and layout
      */
     public void forceRefresh() {
-        // Use displayManager directly
         if (activeFolder != null) {
             displayManager.refreshFolderBookmarks(activeFolder, true);
         }
@@ -371,7 +367,6 @@ public class FolderContentsView implements HitTestable {
 
     /**
      * Checks if mouse coordinates are over this display.
-     * Implementation of the HitTestable interface.
      * 
      * @param mouseX X coordinate of the mouse
      * @param mouseY Y coordinate of the mouse
@@ -385,8 +380,6 @@ public class FolderContentsView implements HitTestable {
     
     /**
      * Checks if mouse coordinates are over this display's extended area.
-     * For drag operations, we use a more generous hit area.
-     * This overrides the default implementation in HitTestable.
      * 
      * @param mouseX X coordinate of the mouse
      * @param mouseY Y coordinate of the mouse
@@ -417,8 +410,6 @@ public class FolderContentsView implements HitTestable {
 
     /**
      * Handles a click on the bookmark display
-     * Only handles view-specific aspects like pagination
-     * Business logic is delegated to the interaction handler
      * 
      * @return true if the click was handled by pagination controls
      */
@@ -478,7 +469,6 @@ public class FolderContentsView implements HitTestable {
             updatingBounds = true;
             
             // Use the calculated displayY position only if it has been properly set
-            // If not properly set, use a better default position (50px from top)
             int displayY = (calculatedDisplayY >= 0) ? calculatedDisplayY : 50;
             ModLogger.debug("[POSITION-DEBUG-FORCE] Using displayY={} (calculatedDisplayY={})", 
                           displayY, calculatedDisplayY);

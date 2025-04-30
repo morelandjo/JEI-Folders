@@ -2,7 +2,6 @@ package com.jeifolders.ui.events;
 
 /**
  * Defines the types of folder events in the system.
- * This enum is used by the FolderEvent class to identify event types.
  */
 public enum FolderEventType {
     // Folder UI events

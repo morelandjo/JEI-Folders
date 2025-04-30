@@ -130,8 +130,7 @@ public class LayoutCalculator {
      * @return The Y position for the bookmark display
      */
     public int calculateBookmarkDisplayY(int folderNameY) {
-        // Use a reasonable amount of spacing between folder name and bookmark grid
-        return folderNameY + 20; // Changed from 50px test value to 20px
+        return folderNameY + 20;
     }
     
     /**

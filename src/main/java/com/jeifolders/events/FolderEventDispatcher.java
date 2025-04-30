@@ -170,8 +170,6 @@ public class FolderEventDispatcher {
     
     /**
      * Fires a folder contents changed event
-     * Uses both the internal debouncing and the global refresh coordinator
-     * to prevent excessive refresh events
      * 
      * @param folder The folder whose contents changed
      */
@@ -207,15 +205,12 @@ public class FolderEventDispatcher {
                 .with("sourceMethod", callerMethod);
             eventBus.post(event);
         } finally {
-            // Signal that we're done with the refresh operation
             refreshCoordinator.endRefresh();
         }
     }
     
     /**
      * Fires a folder contents changed event by ID
-     * Uses both the internal debouncing and the global refresh coordinator
-     * to prevent excessive refresh events
      * 
      * @param folderId The ID of the folder whose contents changed
      */
@@ -256,7 +251,7 @@ public class FolderEventDispatcher {
     }
     
     /**
-     * Determines if an event for the given folder should be debounced (skipped)
+     * Determines if an event for the given folder should be debounced 
      * because it was triggered too recently
      * 
      * @param folderId The folder ID

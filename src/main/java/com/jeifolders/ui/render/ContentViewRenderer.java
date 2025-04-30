@@ -9,7 +9,6 @@ import com.jeifolders.util.ModLogger;
 
 /**
  * Specialized renderer for folder content views (bookmarks).
- * This class separates rendering logic from the content view's data management.
  */
 public class ContentViewRenderer {
     /**
