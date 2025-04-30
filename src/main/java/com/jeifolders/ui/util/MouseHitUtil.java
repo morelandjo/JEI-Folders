@@ -7,8 +7,6 @@ import net.minecraft.client.renderer.Rect2i;
 
 /**
  * Centralized utility for mouse hit detection across the UI.
- * This class consolidates various mouse-over detection methods that were previously
- * duplicated across multiple classes.
  */
 public final class MouseHitUtil {
     
@@ -101,7 +99,6 @@ public final class MouseHitUtil {
     
     /**
      * Checks if mouse coordinates are over a rectangular area with extended margins.
-     * This is particularly useful for drag and drop operations where we want a more forgiving hit area.
      * 
      * @param mouseX X coordinate of the mouse
      * @param mouseY Y coordinate of the mouse
@@ -171,8 +168,6 @@ public final class MouseHitUtil {
     /**
      * Checks if mouse coordinates are over a content view, considering both basic bounds and
      * extended areas for drag-drop operations.
-     * This centralizes the hit detection logic previously duplicated in ContentViewRenderer
-     * and FolderContentsView.
      *
      * @param mouseX X coordinate of the mouse
      * @param mouseY Y coordinate of the mouse

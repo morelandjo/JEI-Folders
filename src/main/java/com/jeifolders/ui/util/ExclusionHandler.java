@@ -12,7 +12,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Handles exclusion areas for folder bookmarks in JEI.
+ * Handles exclusion areas for folder bookmarks
  */
 public class ExclusionHandler {
     private final Set<Rectangle2i> exclusionAreas = new HashSet<>();
@@ -50,7 +50,6 @@ public class ExclusionHandler {
             Rect2i rect = new Rect2i(area.getX(), area.getY(), area.getWidth(), area.getHeight());
             result.add(rect);
             
-            // Log the conversion for debugging
             ModLogger.debug("Converting exclusion area to Rect2i: {} -> x={}, y={}, w={}, h={}", 
                 area, rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
         }

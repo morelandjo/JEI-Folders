@@ -2,7 +2,6 @@ package com.jeifolders.ui.util;
 
 /**
  * Interface for UI components that can be hit-tested with mouse coordinates.
- * This standardizes mouse hit detection across all UI components.
  */
 public interface HitTestable {
     

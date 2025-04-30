@@ -86,7 +86,6 @@ public class IngredientDragManager {
                 TypedIngredient typedIngredient = typedIngredientOpt.get();
                 Object wrappedObj = typedIngredient.getWrappedIngredient();
                 
-                // Log the drop coordinates for debugging
                 ModLogger.debug("Processing ingredient drop at ({}, {})", event.getMouseX(), event.getMouseY());
                 
                 try {

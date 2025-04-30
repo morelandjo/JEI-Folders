@@ -21,7 +21,7 @@ public class JEIFolders {
     private boolean dataLoaded = false;
     
     /**
-     * Centralizes event registration logic to reduce boilerplate in the main class
+     * Centralizes event registration logic
      */
     private static class EventRegistration {
         private final JEIFolders mod;
@@ -54,7 +54,6 @@ public class JEIFolders {
     public JEIFolders(IEventBus modEventBus) {
         ModLogger.info("JEI Folders initializing");
         
-        // Use the event registration class to centralize event handling
         new EventRegistration(this, modEventBus).registerAll();
     }
 
@@ -85,7 +84,7 @@ public class JEIFolders {
     }
 
     /**
-     * Helper method to load data when needed and avoid code duplication
+     * Helper method to load data when needed
      * 
      * @param source The source of the data load request for logging
      * @param shouldCheck Whether to check the dataLoaded flag before loading

@@ -5,7 +5,6 @@ import com.jeifolders.ui.dialogs.FolderNameInputScreen;
 import com.jeifolders.ui.interaction.FolderInteractionHandler;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 
 import java.util.function.Consumer;
 
@@ -44,26 +43,5 @@ public class FolderScreenManager {
                 folderCreationCallback.accept(folderName);
             }
         ));
-    }
-    
-    /**
-     * Creates and shows a custom dialog screen
-     * 
-     * @param title Dialog title
-     * @param message Dialog message
-     * @param callback Callback for dialog confirmation
-     */
-    public void showConfirmDialog(String title, String message, Runnable callback) {
-        // Implementation for showing a confirmation dialog
-        // This could be expanded as needed for different dialog types
-    }
-    
-    /**
-     * Returns to the previous screen
-     * 
-     * @param currentScreen The current screen
-     */
-    public void returnToPreviousScreen(Screen currentScreen) {
-        // Implementation for returning to previous screen
     }
 }

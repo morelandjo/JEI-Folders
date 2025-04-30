@@ -42,7 +42,6 @@ public class SnbtFormat {
      */
     private static String convertToString(CompoundTag tag) {
         // Use toString() for a basic SNBT representation
-        // This gives us something like {folders:[{id:0,name:"test",bookmarks:[]}],nextId:1}
         return tag.toString();
     }
     
@@ -53,7 +52,6 @@ public class SnbtFormat {
      * @return Formatted SNBT string
      */
     public static String format(CompoundTag tag) {
-        // Simple implementation that adds indentation to make the SNBT more readable
         return tag.toString().replace(",", ",\n  ")
             .replace("{", "{\n  ")
             .replace("}", "\n}");

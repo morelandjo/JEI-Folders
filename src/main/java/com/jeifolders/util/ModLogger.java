@@ -1,7 +1,5 @@
 package com.jeifolders.util;
 
-import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.api.distmarker.Dist;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,7 +7,6 @@ import java.util.function.Supplier;
 
 /**
  * Utility class for optimized logging in the mod.
- * Uses lazy evaluation for debug messages to avoid string formatting costs in production.
  */
 public class ModLogger {
     private static final Logger LOGGER = LoggerFactory.getLogger("JEI Folders");
@@ -72,7 +69,6 @@ public class ModLogger {
 
     /**
      * Log a debug message IF debug mode is enabled.
-     * No-op in production to avoid performance impact.
      */
     public static void debug(String message) {
         if (DEBUG_MODE) {
@@ -82,7 +78,6 @@ public class ModLogger {
 
     /**
      * Log a debug message with formatting IF debug mode is enabled.
-     * Uses lazy evaluation to avoid string formatting costs in production.
      */
     public static void debug(String format, Object... args) {
         if (DEBUG_MODE) {
@@ -92,7 +87,6 @@ public class ModLogger {
 
     /**
      * Log a debug message using a supplier to avoid computation costs when debug is disabled.
-     * This is useful for expensive debug logs.
      */
     public static void debugLazy(Supplier<String> messageSupplier) {
         if (DEBUG_MODE) {

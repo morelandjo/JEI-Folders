@@ -6,8 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Coordinates refresh operations to prevent cascading refreshes
- * and reduce unnecessary UI updates.
+ * Coordinates refresh operations
  */
 public class RefreshCoordinator {
     private static RefreshCoordinator instance;
@@ -81,7 +80,6 @@ public class RefreshCoordinator {
     
     /**
      * Request permission to refresh a specific folder
-     * Uses adaptive throttling that increases with consecutive refreshes
      * 
      * @param folderId The folder ID
      * @param forceRefresh Whether to force refresh regardless of timing
@@ -124,7 +122,6 @@ public class RefreshCoordinator {
         stats.consecutiveRefreshCount++;
         
         // Increase the adaptive interval for consecutive refreshes
-        // This will make the delay between refreshes longer if they're happening rapidly
         if (stats.consecutiveRefreshCount > 3) {
             // Cap at 2 seconds maximum interval
             stats.adaptiveInterval = Math.min(

@@ -7,8 +7,6 @@ import java.util.List;
 
 /**
  * Centralized utility for rendering tooltips consistently across the UI.
- * This class consolidates tooltip rendering logic that was previously
- * duplicated across multiple classes.
  */
 public final class TooltipRenderer {
     
@@ -96,9 +94,6 @@ public final class TooltipRenderer {
      */
     public static void renderTooltip(GuiGraphics graphics, List<Component> tooltips, int mouseX, int mouseY) {
         if (tooltips != null && !tooltips.isEmpty()) {
-            // Handle list of components properly
-            // In newer versions of Minecraft/NeoForge, we need to use a different approach
-            // for rendering lists of tooltip components
             Component firstComponent = tooltips.get(0);
             if (tooltips.size() == 1) {
                 graphics.renderTooltip(

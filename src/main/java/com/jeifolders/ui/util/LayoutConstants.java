@@ -21,13 +21,11 @@ public final class LayoutConstants {
     
     /**
      * Extended margin for drag and drop operations (horizontal).
-     * Makes it easier to drop items onto folders.
      */
     public static final int DRAG_DROP_HORIZONTAL_MARGIN = 15;
     
     /**
      * Extended margin for drag and drop operations (vertical).
-     * Makes it easier to drop items onto folders.
      */
     public static final int DRAG_DROP_VERTICAL_MARGIN = 25;
 
@@ -39,13 +37,11 @@ public final class LayoutConstants {
     
     /**
      * Default height for ingredient grid when a folder is active.
-     * This value controls how far down the exclusion zone extends.
      */
     public static final int INGREDIENT_GRID_HEIGHT = 80;
     
     /**
-     * Extra padding to add below the ingredient grid to ensure
-     * complete coverage of the exclusion zone.
+     * Extra padding to add below the ingredient grid.
      */
     public static final int GRID_BOTTOM_PADDING = 5;
     

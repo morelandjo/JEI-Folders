@@ -16,7 +16,6 @@ import java.util.List;
 
 /**
  * Centralized manager for all UI rendering in the JEI Folders mod.
- * This class separates rendering logic from data management and UI components.
  */
 public class UIRenderManager {
     private final FolderUIStateManager uiStateManager;
@@ -111,16 +110,14 @@ public class UIRenderManager {
             displayName = fullName.substring(0, 12) + "...";
         }
         
-        // Use the correct Y position from layoutService for the folder name
         int nameY = layoutService.getFolderNameY();
         
-        // Draw folder name with white color
         graphics.drawString(
             Minecraft.getInstance().font,
             displayName,
             10,
             nameY,
-            0xFFFFFF, // White color
+            0xFFFFFF,
             true
         );
         
