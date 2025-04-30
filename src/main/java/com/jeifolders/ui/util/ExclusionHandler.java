@@ -1,6 +1,5 @@
 package com.jeifolders.ui.util;
 
-import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.renderer.Rect2i;
@@ -12,25 +11,42 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Handles exclusion areas for folder bookmarks
+ * Handles exclusion areas for folder bookmarks.
+ * Uses Minecraft's Rect2i class exclusively.
  */
 public class ExclusionHandler {
-    private final Set<Rectangle2i> exclusionAreas = new HashSet<>();
+    // Primary storage uses Minecraft's Rect2i
+    private final Set<Rect2i> exclusionAreas = new HashSet<>();
     
-    public void addExclusionArea(Rectangle2i area) {
-        if (!area.isEmpty()) {
-            ModLogger.debug("Adding exclusion area: {}", area);
+    /**
+     * Adds a new exclusion area.
+     * 
+     * @param area The area to exclude
+     */
+    public void addExclusionArea(Rect2i area) {
+        if (area != null && area.getWidth() > 0 && area.getHeight() > 0) {
+            ModLogger.debug("Adding exclusion area: x={}, y={}, w={}, h={}", 
+                area.getX(), area.getY(), area.getWidth(), area.getHeight());
             exclusionAreas.add(area);
         } else {
             ModLogger.debug("Attempted to add empty exclusion area - ignored");
         }
     }
     
-    public void removeExclusionArea(Rectangle2i area) {
-        ModLogger.debug("Removing exclusion area: {}", area);
+    /**
+     * Removes an exclusion area.
+     * 
+     * @param area The area to remove
+     */
+    public void removeExclusionArea(Rect2i area) {
+        ModLogger.debug("Removing exclusion area: x={}, y={}, w={}, h={}", 
+                area.getX(), area.getY(), area.getWidth(), area.getHeight());
         exclusionAreas.remove(area);
     }
     
+    /**
+     * Clears all exclusion areas.
+     */
     public void clearExclusionAreas() {
         ModLogger.debug("Clearing all exclusion areas");
         exclusionAreas.clear();
@@ -38,21 +54,15 @@ public class ExclusionHandler {
 
     /**
      * Gets the current exclusion areas as Rect2i objects.
+     * 
+     * @return A collection of Minecraft Rect2i objects representing the exclusion areas
      */
     public Collection<Rect2i> getExclusionAreas() {
         if (exclusionAreas.isEmpty()) {
             return Collections.emptyList();
         }
         
-        Collection<Rect2i> result = new ArrayList<>(exclusionAreas.size());
-        for (Rectangle2i area : exclusionAreas) {
-            // Create a Minecraft Rect2i from our Rectangle2i
-            Rect2i rect = new Rect2i(area.getX(), area.getY(), area.getWidth(), area.getHeight());
-            result.add(rect);
-            
-            ModLogger.debug("Converting exclusion area to Rect2i: {} -> x={}, y={}, w={}, h={}", 
-                area, rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
-        }
-        return result;
+        // Return a copy of the collection
+        return new ArrayList<>(exclusionAreas);
     }
 }

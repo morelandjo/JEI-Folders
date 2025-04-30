@@ -4,7 +4,6 @@ import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.integration.impl.JeiBookmarkAdapter;
 import com.jeifolders.integration.impl.JeiContentsImpl;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
@@ -16,9 +15,9 @@ import com.jeifolders.ui.util.LayoutConstants;
 import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.ui.events.FolderEvent;
-import com.jeifolders.ui.events.FolderEventBuilder;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.Rect2i;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,7 +46,7 @@ public class FolderContentsView implements HitTestable {
     
     // State tracking
     private Folder activeFolder;
-    private Rectangle2i backgroundArea = Rectangle2i.EMPTY;
+    private Rect2i backgroundArea = new Rect2i(0, 0, 0, 0);
     private boolean updatingBounds = false;
     private boolean needsRefresh = false;
     private List<BookmarkIngredient> ingredients = new ArrayList<>();
@@ -59,7 +58,7 @@ public class FolderContentsView implements HitTestable {
     private int width = DEFAULT_DISPLAY_WIDTH;
     private int height = DEFAULT_DISPLAY_HEIGHT;
     private final int[] bounds = new int[4]; // x, y, width, height
-    private Rectangle2i lastCalculatedBounds = null;
+    private Rect2i lastCalculatedBounds = null;
     private int calculatedNameY = -1;
     private int calculatedDisplayY = -1;
     
@@ -316,9 +315,11 @@ public class FolderContentsView implements HitTestable {
             // Calculate content area
             int availableWidth = Math.max(MIN_CONTENT_WIDTH, safeWidth);
             int availableHeight = Math.max(MIN_CONTENT_HEIGHT, height);
-            Rectangle2i newBounds = new Rectangle2i(x, y, availableWidth, availableHeight);
             
-            // Update the contents implementation bounds
+            // Create a Minecraft Rect2i directly
+            Rect2i newBounds = new Rect2i(x, y, availableWidth, availableHeight);
+            
+            // Update the contents implementation bounds using the new Rect2i-based method
             boolean contentsBoundsUpdated = contentsImpl.updateBounds(newBounds);
             
             // Update layout if needed - update with preservePageState=true
@@ -336,9 +337,9 @@ public class FolderContentsView implements HitTestable {
                 }
             }
             
-            // Update background area
-            Rectangle2i newBackground = contentsImpl.getBackgroundArea();
-            if (newBackground != null && !newBackground.isEmpty()) {
+            // Update background area using Minecraft's Rect2i directly
+            Rect2i newBackground = contentsImpl.getBackgroundArea();
+            if (newBackground != null && newBackground.getWidth() > 0 && newBackground.getHeight() > 0) {
                 this.backgroundArea = newBackground;
             } else {
                 this.backgroundArea = newBounds;
@@ -509,10 +510,17 @@ public class FolderContentsView implements HitTestable {
             // Calculate safe width to prevent GUI overlap
             int safeWidth = getSafeDisplayWidth(this.width);
             
-            Rectangle2i newBounds = new Rectangle2i(x, displayY, safeWidth, height);
+            // Use Minecraft's Rect2i directly
+            Rect2i newBounds = new Rect2i(x, displayY, safeWidth, height);
             
             // Check if bounds are actually changing to avoid unnecessary updates
-            if (lastCalculatedBounds != null && lastCalculatedBounds.equals(newBounds)) {
+            boolean boundsChanged = lastCalculatedBounds == null || 
+                lastCalculatedBounds.getX() != newBounds.getX() || 
+                lastCalculatedBounds.getY() != newBounds.getY() ||
+                lastCalculatedBounds.getWidth() != newBounds.getWidth() ||
+                lastCalculatedBounds.getHeight() != newBounds.getHeight();
+            
+            if (!boundsChanged) {
                 ModLogger.debug("[POSITION-DEBUG-FORCE] Bounds unchanged, skipping update");
                 return;
             }
@@ -534,6 +542,7 @@ public class FolderContentsView implements HitTestable {
             
             // Tell the contents implementation about the new bounds
             if (contentsImpl != null) {
+                // Use the new Rect2i method directly
                 contentsImpl.updateBounds(newBounds);
                 ModLogger.debug("[POSITION-DEBUG-FORCE] Updated contentsImpl with new bounds");
             }
@@ -575,7 +584,7 @@ public class FolderContentsView implements HitTestable {
     public int getY() { return y; }
     public int getWidth() { return width; }
     public int getHeight() { return height; }
-    public Rectangle2i getBackgroundArea() { return backgroundArea; }
+    public Rect2i getBackgroundArea() { return backgroundArea; }
     
     /**
      * Gets the current page number (1-indexed).

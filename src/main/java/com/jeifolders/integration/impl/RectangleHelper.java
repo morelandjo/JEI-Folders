@@ -1,11 +1,12 @@
 package com.jeifolders.integration.impl;
 
-import com.jeifolders.integration.Rectangle2i;
 import mezz.jei.common.util.ImmutableRect2i;
+import net.minecraft.client.renderer.Rect2i;
 
 /**
- * Helper class that handles conversion between our platform-agnostic Rectangle2i
- * and JEI's ImmutableRect2i implementations.
+ * Helper class that handles conversion between rectangle implementations:
+ * - JEI's ImmutableRect2i
+ * - Minecraft's native Rect2i
  */
 public class RectangleHelper {
     
@@ -14,20 +15,20 @@ public class RectangleHelper {
     }
     
     /**
-     * Converts a JEI ImmutableRect2i to our Rectangle2i.
+     * Converts JEI's ImmutableRect2i to Minecraft's Rect2i.
      */
-    public static Rectangle2i fromJei(ImmutableRect2i rect) {
+    public static Rect2i jeiToMinecraft(ImmutableRect2i rect) {
         if (rect == null || rect.isEmpty()) {
-            return Rectangle2i.EMPTY;
+            return new Rect2i(0, 0, 0, 0);
         }
-        return new Rectangle2i(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
+        return new Rect2i(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
     }
     
     /**
-     * Converts our Rectangle2i to JEI's ImmutableRect2i.
+     * Converts Minecraft's Rect2i to JEI's ImmutableRect2i.
      */
-    public static ImmutableRect2i toJei(Rectangle2i rect) {
-        if (rect == null || rect.isEmpty()) {
+    public static ImmutableRect2i minecraftToJei(Rect2i rect) {
+        if (rect == null) {
             return ImmutableRect2i.EMPTY;
         }
         return new ImmutableRect2i(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());

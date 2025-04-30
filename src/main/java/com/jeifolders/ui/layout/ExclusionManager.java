@@ -1,6 +1,5 @@
 package com.jeifolders.ui.layout;
 
-import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.ui.util.ExclusionHandler;
 import com.jeifolders.util.ModLogger;
 
@@ -10,6 +9,7 @@ import net.minecraft.client.renderer.Rect2i;
 /**
  * Manages exclusion zones for JEI integration.
  * Responsible for calculating and updating exclusion zones based on UI state.
+ * This class has been updated to use Minecraft's Rect2i exclusively.
  */
 public class ExclusionManager {
     private final ExclusionHandler exclusionHandler;
@@ -140,7 +140,7 @@ public class ExclusionManager {
         // Create the exclusion zone
         exclusionZone = new Rect2i(0, 0, exclusionWidth, exclusionHeight);
         
-        // Update the ExclusionHandler
+        // Update the ExclusionHandler using Minecraft's Rect2i directly
         updateExclusionHandler(exclusionZone);
         
         exclusionZoneCacheValid = true;
@@ -172,8 +172,8 @@ public class ExclusionManager {
         }
         
         exclusionHandler.clearExclusionAreas();
-        Rectangle2i rect = new Rectangle2i(zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());
-        exclusionHandler.addExclusionArea(rect);
+        // Use the Rect2i directly with the updated ExclusionHandler
+        exclusionHandler.addExclusionArea(zone);
         
         ModLogger.debug("Updated exclusion handler with zone: x={}, y={}, width={}, height={}", 
                        zone.getX(), zone.getY(), zone.getWidth(), zone.getHeight());

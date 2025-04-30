@@ -1,12 +1,12 @@
 package com.jeifolders.ui.util;
 
-import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.ui.components.buttons.FolderButton;
 
 import net.minecraft.client.renderer.Rect2i;
 
 /**
  * Centralized utility for mouse hit detection across the UI.
+ * Uses Minecraft's Rect2i class for all rectangle operations.
  */
 public final class MouseHitUtil {
     
@@ -25,8 +25,8 @@ public final class MouseHitUtil {
      * @return true if the mouse is over the rectangle
      */
     public static boolean isMouseOverRect(double mouseX, double mouseY, int x, int y, int width, int height) {
-        return mouseX >= x && mouseX < x + width && 
-               mouseY >= y && mouseY < y + height;
+        // Use a temporary Rect2i to leverage Minecraft's implementation
+        return isMouseOverRect(mouseX, mouseY, new Rect2i(x, y, width, height));
     }
     
     /**
@@ -65,12 +65,13 @@ public final class MouseHitUtil {
      */
     public static boolean isMouseOverButton(double mouseX, double mouseY, FolderButton button) {
         if (button == null) return false;
-        return isMouseOverRect(mouseX, mouseY, button.getX(), button.getY(), 
-                               button.getWidth(), button.getHeight());
+        return isMouseOverRect(mouseX, mouseY, new Rect2i(button.getX(), button.getY(), 
+                               button.getWidth(), button.getHeight()));
     }
     
     /**
      * Checks if mouse coordinates are over a Minecraft Rect2i.
+     * This is the primary implementation that other rectangle-checking methods delegate to.
      * 
      * @param mouseX X coordinate of the mouse
      * @param mouseY Y coordinate of the mouse
@@ -79,22 +80,10 @@ public final class MouseHitUtil {
      */
     public static boolean isMouseOverRect(double mouseX, double mouseY, Rect2i rect) {
         if (rect == null) return false;
-        return isMouseOverRect(mouseX, mouseY, rect.getX(), rect.getY(), 
-                              rect.getWidth(), rect.getHeight());
-    }
-    
-    /**
-     * Checks if mouse coordinates are over a Rectangle2i from our integration package.
-     * 
-     * @param mouseX X coordinate of the mouse
-     * @param mouseY Y coordinate of the mouse
-     * @param rect The rectangle to check
-     * @return true if the mouse is over the rectangle
-     */
-    public static boolean isMouseOverRect(double mouseX, double mouseY, Rectangle2i rect) {
-        if (rect == null || rect.isEmpty()) return false;
-        return isMouseOverRect(mouseX, mouseY, rect.getX(), rect.getY(), 
-                              rect.getWidth(), rect.getHeight());
+        
+        // Use Minecraft's point-in-rectangle check
+        return mouseX >= rect.getX() && mouseX < rect.getX() + rect.getWidth() && 
+               mouseY >= rect.getY() && mouseY < rect.getY() + rect.getHeight();
     }
     
     /**
@@ -152,20 +141,6 @@ public final class MouseHitUtil {
     }
     
     /**
-     * Checks if mouse coordinates are over a Rectangle2i with the standard drag-drop margins.
-     * 
-     * @param mouseX X coordinate of the mouse
-     * @param mouseY Y coordinate of the mouse
-     * @param rect The rectangle to check
-     * @return true if the mouse is over the extended rectangle area
-     */
-    public static boolean isMouseOverDragDropArea(double mouseX, double mouseY, Rectangle2i rect) {
-        if (rect == null || rect.isEmpty()) return false;
-        return isMouseOverDragDropArea(mouseX, mouseY, rect.getX(), rect.getY(), 
-                                     rect.getWidth(), rect.getHeight());
-    }
-    
-    /**
      * Checks if mouse coordinates are over a content view, considering both basic bounds and
      * extended areas for drag-drop operations.
      *
@@ -180,15 +155,14 @@ public final class MouseHitUtil {
      */
     public static boolean isMouseOverContentView(double mouseX, double mouseY,
                                                int x, int y, int width, int height,
-                                               Rectangle2i backgroundArea) {
+                                               Rect2i backgroundArea) {
         // Basic check if mouse is over the current display bounds
         if (isMouseOverRect(mouseX, mouseY, x, y, width, height)) {
             return true;
         }
         
         // For drag operations, check against the background area if available
-        if (backgroundArea != null && !backgroundArea.isEmpty() &&
-            isMouseOverDragDropArea(mouseX, mouseY, backgroundArea)) {
+        if (backgroundArea != null && isMouseOverDragDropArea(mouseX, mouseY, backgroundArea)) {
             return true;
         }
         

@@ -3,7 +3,6 @@ package com.jeifolders.integration.impl;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.IngredientService;
-import com.jeifolders.integration.Rectangle2i;
 import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
 
@@ -25,6 +24,7 @@ import mezz.jei.gui.overlay.IngredientGrid;
 import mezz.jei.gui.overlay.IngredientGridWithNavigation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.Rect2i;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,6 +36,8 @@ import java.util.Set;
  * JEI-specific implementation for rendering and interacting with bookmark ingredients.
  * This class contains all direct references to JEI classes and keeps them isolated
  * from the rest of the mod.
+ * 
+ * Uses Minecraft's Rect2i class for rectangle handling.
  */
 public class JeiContentsImpl {
     private final JeiBookmarkAdapter bookmarkAdapter;
@@ -167,13 +169,15 @@ public class JeiContentsImpl {
     }
 
     /**
-     * Updates the bounds of the grid.
-     * Changed to accept our Rectangle2i instead of ImmutableRect2i
+     * Updates the bounds of the grid using Minecraft's Rect2i.
+     * 
+     * @param area The new bounds as a Rect2i
+     * @return True if the update was successful
      */
-    public boolean updateBounds(Rectangle2i area) {
+    public boolean updateBounds(Rect2i area) {
         try {
-            // Convert our Rectangle2i to JEI's ImmutableRect2i
-            ImmutableRect2i jeiRect = RectangleHelper.toJei(area);
+            // Convert Minecraft's Rect2i to JEI's ImmutableRect2i
+            ImmutableRect2i jeiRect = RectangleHelper.minecraftToJei(area);
             this.contents.updateBounds(jeiRect, this.guiExclusionAreas, null);
             return true;
         } catch (Exception e) {
@@ -201,21 +205,23 @@ public class JeiContentsImpl {
     }
 
     /**
-     * Gets the background area of the grid.
-     * Changed to return our Rectangle2i instead of ImmutableRect2i
+     * Gets the background area of the grid as Minecraft's Rect2i.
+     * 
+     * @return The background area as a Rect2i
      */
-    public Rectangle2i getBackgroundArea() {
-        // Convert JEI's ImmutableRect2i to our Rectangle2i
-        return RectangleHelper.fromJei(this.contents.getBackgroundArea());
+    public Rect2i getBackgroundArea() {
+        // Convert JEI's ImmutableRect2i to Minecraft's Rect2i
+        return RectangleHelper.jeiToMinecraft(this.contents.getBackgroundArea());
     }
 
     /**
-     * Gets the slot background area of the grid.
-     * Changed to return our Rectangle2i instead of ImmutableRect2i
+     * Gets the slot background area of the grid as Minecraft's Rect2i.
+     * 
+     * @return The slot background area as a Rect2i
      */
-    public Rectangle2i getSlotBackgroundArea() {
-        // Convert JEI's ImmutableRect2i to our Rectangle2i
-        return RectangleHelper.fromJei(this.contents.getSlotBackgroundArea());
+    public Rect2i getSlotBackgroundArea() {
+        // Convert JEI's ImmutableRect2i to Minecraft's Rect2i
+        return RectangleHelper.jeiToMinecraft(this.contents.getSlotBackgroundArea());
     }
 
     /**
@@ -306,13 +312,12 @@ public class JeiContentsImpl {
     public boolean isNextButtonClicked(double mouseX, double mouseY) {
         try {
             ImmutableRect2i buttonArea = this.contents.getNextPageButtonArea();
-            // Use MouseHitUtil to check if the mouse is over the button area
-            return !buttonArea.isEmpty() && 
-                   MouseHitUtil.isMouseOverRect(mouseX, mouseY, 
-                                               buttonArea.getX(), 
-                                               buttonArea.getY(),
-                                               buttonArea.getWidth(), 
-                                               buttonArea.getHeight());
+            // Convert JEI's ImmutableRect2i to Minecraft's Rect2i and use MouseHitUtil
+            if (!buttonArea.isEmpty()) {
+                Rect2i mcRect = RectangleHelper.jeiToMinecraft(buttonArea);
+                return MouseHitUtil.isMouseOverRect(mouseX, mouseY, mcRect);
+            }
+            return false;
         } catch (Exception e) {
             ModLogger.error("Error checking if next button is clicked: {}", e.getMessage(), e);
             return false;
@@ -325,13 +330,12 @@ public class JeiContentsImpl {
     public boolean isBackButtonClicked(double mouseX, double mouseY) {
         try {
             ImmutableRect2i buttonArea = this.contents.getBackButtonArea();
-            // Use MouseHitUtil to check if the mouse is over the button area
-            return !buttonArea.isEmpty() && 
-                   MouseHitUtil.isMouseOverRect(mouseX, mouseY, 
-                                               buttonArea.getX(), 
-                                               buttonArea.getY(),
-                                               buttonArea.getWidth(), 
-                                               buttonArea.getHeight());
+            // Convert JEI's ImmutableRect2i to Minecraft's Rect2i and use MouseHitUtil
+            if (!buttonArea.isEmpty()) {
+                Rect2i mcRect = RectangleHelper.jeiToMinecraft(buttonArea);
+                return MouseHitUtil.isMouseOverRect(mouseX, mouseY, mcRect);
+            }
+            return false;
         } catch (Exception e) {
             ModLogger.error("Error checking if back button is clicked: {}", e.getMessage(), e);
             return false;
