@@ -3,6 +3,7 @@ package com.jeifolders.data;
 import com.jeifolders.util.ModLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
@@ -146,8 +147,8 @@ public class ConfigPathResolver {
                 return logAndReturnWorldFolder(getDefaultWorldFolderName());
             }
             
-            // Try each world name strategy in order of reliability
-            String worldName = tryWorldNameStrategies(minecraft);
+            // Simplified world name determination using Minecraft's built-in methods
+            String worldName = getWorldNameUsingMinecraftMethods(minecraft);
             
             // Process the world name if we found one
             if (worldName != null && !worldName.trim().isEmpty()) {
@@ -157,7 +158,7 @@ public class ConfigPathResolver {
                 worldNameDeterminedAt = currentTime;
                 return logAndReturnWorldFolder(sanitized);
             } else {
-                ModLogger.warn("[WORLD-DEBUG] Failed to determine world name after trying all strategies");
+                ModLogger.warn("[WORLD-DEBUG] Failed to determine world name");
                 return logAndReturnWorldFolder(getDefaultWorldFolderName());
             }
         } catch (Exception e) {
@@ -190,102 +191,83 @@ public class ConfigPathResolver {
     }
     
     /**
-     * Tries all world name determination strategies in order of reliability
+     * Simplified world name resolution using Minecraft's built-in methods
      * 
      * @param minecraft The Minecraft instance
      * @return The world name, or null if none could be determined
      */
-    private String tryWorldNameStrategies(Minecraft minecraft) {
-        // Strategy 1: Try to get world name from current server
-        String fromServer = tryGetCurrentServerWorldName();
-        ModLogger.debug("[WORLD-DEBUG] World name from server: {}", fromServer != null ? fromServer : "null");
-        if (fromServer != null) {
-            return fromServer;
+    private String getWorldNameUsingMinecraftMethods(Minecraft minecraft) {
+        if (minecraft == null) {
+            return null;
         }
         
-        // Strategy 2: Try to get world name from level
-        String fromLevel = tryGetCurrentLevelWorldName();
-        ModLogger.debug("[WORLD-DEBUG] World name from level: {}", fromLevel != null ? fromLevel : "null");
-        if (fromLevel != null) {
-            return fromLevel;
+        // Case 1: Check if we're playing on a multiplayer server
+        ServerData currentServer = minecraft.getCurrentServer();
+        if (currentServer != null && currentServer.name != null && !currentServer.name.isEmpty()) {
+            ModLogger.debug("[WORLD-DEBUG] Got server name from getCurrentServer(): {}", currentServer.name);
+            return "server_" + currentServer.name;
         }
         
-        ModLogger.debug("[WORLD-DEBUG] All strategies failed to determine world name");
-        return null;
-    }
-    
-    /**
-     * Strategy 1: Try to get world name from server hooks or integrated server
-     */
-    private String tryGetCurrentServerWorldName() {
+        // Case 2: Check if we're in an integrated server
         try {
-            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server != null && server.getWorldData() != null) {
-                String worldName = server.getWorldData().getLevelName();
+            IntegratedServer integratedServer = minecraft.getSingleplayerServer();
+            if (integratedServer != null && integratedServer.getWorldData() != null) {
+                String worldName = integratedServer.getWorldData().getLevelName();
                 if (worldName != null && !worldName.isEmpty()) {
-                    ModLogger.debug("[WORLD-DEBUG] Got world name from server hooks: {}", worldName);
+                    ModLogger.debug("[WORLD-DEBUG] Got world name from integrated server: {}", worldName);
                     return worldName;
-                }
-            }
-        } catch (Exception e) {
-            ModLogger.debug("[WORLD-DEBUG] Error getting world name from server hooks: {}", e.getMessage());
-        }
-        
-        try {
-            Minecraft minecraft = getMinecraftSafe();
-            if (minecraft != null) {
-                IntegratedServer integratedServer = minecraft.getSingleplayerServer();
-                if (integratedServer != null && integratedServer.getWorldData() != null) {
-                    String worldName = integratedServer.getWorldData().getLevelName();
-                    if (worldName != null && !worldName.isEmpty()) {
-                        ModLogger.debug("[WORLD-DEBUG] Got world name from integrated server: {}", worldName);
-                        return worldName;
-                    }
                 }
             }
         } catch (Exception e) {
             ModLogger.debug("[WORLD-DEBUG] Error getting world name from integrated server: {}", e.getMessage());
         }
         
-        return null;
-    }
-    
-    /**
-     * Strategy 2: Try to get world name from current level
-     */
-    private String tryGetCurrentLevelWorldName() {
+        // Case 3: Try getting the level name from level properties
         try {
-            Minecraft minecraft = getMinecraftSafe();
-            if (minecraft != null && minecraft.level != null) {
-                // Try to access from level properties directly when available
+            if (minecraft.level != null) {
+                // Use reflection as a fallback to handle API differences
                 try {
-                    // Try to use the server name if we're in an integrated server
-                    if (minecraft.getSingleplayerServer() != null &&
-                        minecraft.getSingleplayerServer().getWorldData() != null) {
-                        String worldName = minecraft.getSingleplayerServer().getWorldData().getLevelName();
-                        if (worldName != null && !worldName.isEmpty()) {
-                            ModLogger.debug("[WORLD-DEBUG] Got world name from integrated server via level: {}", worldName);
-                            return worldName;
+                    // Try different methods that might exist
+                    Object levelData = minecraft.level.getClass().getMethod("getLevelData").invoke(minecraft.level);
+                    if (levelData != null) {
+                        String levelName = (String) levelData.getClass().getMethod("getLevelName").invoke(levelData);
+                        if (levelName != null && !levelName.isEmpty()) {
+                            ModLogger.debug("[WORLD-DEBUG] Got level name via reflection: {}", levelName);
+                            return levelName;
                         }
                     }
                 } catch (Exception e) {
-                    ModLogger.debug("[WORLD-DEBUG] Could not access integrated server through level: {}", e.getMessage());
+                    ModLogger.debug("[WORLD-DEBUG] Could not get level name via reflection: {}", e.getMessage());
                 }
                 
-                // Try the dimension path as an identifier
+                // Try to access the world folder name if possible
                 try {
-                    String dimensionKey = minecraft.level.dimension().location().toString();
-                    if (dimensionKey != null && !dimensionKey.isEmpty()) {
-                        ModLogger.debug("[WORLD-DEBUG] Using dimension key as fallback: {}", dimensionKey);
-                        return "world_" + dimensionKey.replace(':', '_');
+                    String worldFolderName = minecraft.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).getFileName().toString();
+                    if (worldFolderName != null && !worldFolderName.isEmpty()) {
+                        ModLogger.debug("[WORLD-DEBUG] Got world folder name: {}", worldFolderName);
+                        return worldFolderName;
                     }
                 } catch (Exception e) {
-                    ModLogger.debug("[WORLD-DEBUG] Could not access dimension key: {}", e.getMessage());
+                    ModLogger.debug("[WORLD-DEBUG] Could not get world folder name: {}", e.getMessage());
                 }
             }
         } catch (Exception e) {
-            ModLogger.debug("[WORLD-DEBUG] Error getting name from client level: {}", e.getMessage());
+            ModLogger.debug("[WORLD-DEBUG] Error accessing level data: {}", e.getMessage());
         }
+        
+        // Case 4: Try using the current level's dimension as identifier
+        try {
+            if (minecraft.level != null && minecraft.level.dimension() != null) {
+                String dimensionKey = minecraft.level.dimension().location().toString();
+                if (dimensionKey != null && !dimensionKey.isEmpty()) {
+                    ModLogger.debug("[WORLD-DEBUG] Using dimension key as fallback: {}", dimensionKey);
+                    return "world_" + dimensionKey.replace(':', '_');
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.debug("[WORLD-DEBUG] Could not access dimension key: {}", e.getMessage());
+        }
+        
         return null;
     }
     
