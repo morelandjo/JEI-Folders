@@ -4,10 +4,10 @@ import com.jeifolders.data.Folder;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.JEIIntegrationFactory;
 import com.jeifolders.integration.IngredientService;
+import com.jeifolders.integration.ingredient.Ingredient;
 import com.jeifolders.events.FolderEventDispatcher;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.util.ModLogger;
-import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.gui.overlay.IIngredientGridSource;
 
 import java.util.ArrayList;
@@ -69,12 +69,16 @@ public class FolderBookmarkList {
                 try {
                     startBatchUpdate();
                     for (String key : keys) {
-                        // Handle Optional return type properly
-                        Optional<ITypedIngredient<?>> ingredientOpt = ingredientService.getIngredientForKey(key);
+                        // Handle Optional<Ingredient> return type
+                        Optional<Ingredient> ingredientOpt = ingredientService.getIngredientForKey(key);
                         if (ingredientOpt.isPresent()) {
-                            BookmarkIngredient ingredient = new BookmarkIngredient(ingredientOpt.get());
-                            ingredients.add(ingredient);
-                            ingredientMap.put(key, ingredient);
+                            Ingredient ingredient = ingredientOpt.get();
+                            // Create BookmarkIngredient from the Ingredient's ITypedIngredient
+                            if (ingredient.getTypedIngredient() != null) {
+                                BookmarkIngredient bookmarkIngredient = new BookmarkIngredient(ingredient.getTypedIngredient());
+                                ingredients.add(bookmarkIngredient);
+                                ingredientMap.put(key, bookmarkIngredient);
+                            }
                         }
                     }
                     finishBatchUpdate();

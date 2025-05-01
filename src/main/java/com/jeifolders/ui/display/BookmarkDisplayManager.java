@@ -5,6 +5,7 @@ import com.jeifolders.data.Folder;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.integration.TypedIngredientHelper;
+import com.jeifolders.integration.ingredient.Ingredient;
 import com.jeifolders.ui.components.contents.FolderContentsView;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.ui.util.RefreshCoordinator;
@@ -85,7 +86,9 @@ public class BookmarkDisplayManager {
                     if (!cachedContents.isEmpty()) {
                         ModLogger.debug("Applying {} cached bookmark items during display creation", 
                             cachedContents.size());
-                        TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, cachedContents);
+                        // Convert Ingredient list to TypedIngredient list before passing to setIngredientsOnDisplay
+                        List<TypedIngredient> typedIngredients = TypedIngredientHelper.convertFromIngredients(cachedContents);
+                        TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, typedIngredients);
                     }
                 }
             }
@@ -109,10 +112,13 @@ public class BookmarkDisplayManager {
             updatingBookmarkContents = true;
             if (bookmarkDisplay != null) {
                 // Use the helper to get ingredients from the display
-                List<TypedIngredient> bookmarkContents = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
+                List<TypedIngredient> typedIngredients = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
                 
-                // Update cache
-                folderManager.updateBookmarkContentsCache(bookmarkContents);
+                // Convert TypedIngredient list to Ingredient list
+                List<Ingredient> ingredients = TypedIngredientHelper.convertToIngredients(typedIngredients);
+                
+                // Update cache with the converted list
+                folderManager.updateBookmarkContentsCache(ingredients);
             }
         } finally {
             updatingBookmarkContents = false;

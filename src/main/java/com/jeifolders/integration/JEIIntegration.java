@@ -2,25 +2,39 @@ package com.jeifolders.integration;
 
 import com.jeifolders.JEIFolders;
 import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.data.IngredientCacheManager;
+import com.jeifolders.integration.impl.JEIIngredientService;
+import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.ingredient.IngredientManager;
 import com.jeifolders.ui.controllers.FolderUIController;
-import com.jeifolders.ui.util.ExclusionHandler;
 import com.jeifolders.ui.util.IngredientDragManager;
+import com.jeifolders.ui.util.ExclusionHandler;
 import com.jeifolders.util.ModLogger;
+
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
-import mezz.jei.api.gui.handlers.IGuiContainerHandler;
+import mezz.jei.api.constants.RecipeTypes;
+import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
+import mezz.jei.api.gui.handlers.IGuiContainerHandler;
+import mezz.jei.api.helpers.IJeiHelpers;
+import mezz.jei.api.ingredients.IIngredientType;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
+import mezz.jei.api.registration.IModIngredientRegistration;
+import mezz.jei.api.registration.IRecipeCatalystRegistration;
+import mezz.jei.api.registration.IRecipeRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import javax.annotation.Nonnull;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
@@ -31,9 +45,9 @@ import java.util.function.Consumer;
 public class JEIIntegration implements IModPlugin {
     private static final ResourceLocation PLUGIN_ID = ResourceLocation.fromNamespaceAndPath(JEIFolders.MOD_ID, "jei_plugin");
     
-    // Access the services through the factory
-    private final JEIService jeiService = JEIIntegrationFactory.getJEIService();
-    
+    // Access the services through the appropriate instance getters
+    private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+    private final JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
     
     // Static instance of the exclusion handler
     private static final ExclusionHandler exclusionHandler = new ExclusionHandler();
@@ -44,7 +58,7 @@ public class JEIIntegration implements IModPlugin {
     }
 
     @Override
-    public void registerGuiHandlers(IGuiHandlerRegistration registration) {
+    public void registerGuiHandlers(@Nonnull IGuiHandlerRegistration registration) {
         // Register our exclusion handler using the JEI-specific wrapper
         registration.addGlobalGuiHandler(new JEIExclusionHandler(exclusionHandler));
 
@@ -55,12 +69,11 @@ public class JEIIntegration implements IModPlugin {
         registration.addGuiContainerHandler(screenClass, new FolderAreaContainerHandler<>());
         
         // Register ghost ingredient handler for folder drag and drop
-        registration.addGhostIngredientHandler(screenClass, new FolderGhostIngredientHandler<>());
+        registration.addGhostIngredientHandler(screenClass, new FolderGhostIngredientHandler<>(screenClass));
     }
 
     @Override
-    public void onRuntimeAvailable(IJeiRuntime runtime) {
-        
+    public void onRuntimeAvailable(@Nonnull IJeiRuntime runtime) {
         // Initialize the runtime directly instead of using JeiRuntimeHelper
         initializeJeiRuntime(runtime);
         
@@ -76,9 +89,8 @@ public class JEIIntegration implements IModPlugin {
      * @param runtime The JEI runtime instance
      */
     private void initializeJeiRuntime(IJeiRuntime runtime) {
-        
-        // Set the runtime in the JEIService
-        jeiService.setJeiRuntime(runtime);
+        // Set the runtime in the JEIRuntime
+        jeiRuntime.setJeiRuntime(runtime);
         
         // Request data to be loaded now that JEI is available
         FolderStorageService.getInstance().loadData();
@@ -97,7 +109,7 @@ public class JEIIntegration implements IModPlugin {
      * @return true if JEI runtime is available, false otherwise
      */
     public static boolean isJeiRuntimeAvailable() {
-        return JEIIntegrationFactory.getJEIService().getJeiRuntime().isPresent();
+        return JEIIntegrationFactory.getJEIRuntime().getJeiRuntime().isPresent();
     }
 
     private void initializeFolderButton(IJeiRuntime runtime) {
@@ -115,67 +127,44 @@ public class JEIIntegration implements IModPlugin {
      * Registers a callback to be executed when the JEI runtime becomes available.
      */
     public static void registerRuntimeAvailableCallback(Consumer<IJeiRuntime> callback) {
-        // Wrap the IJeiRuntime consumer in an Object consumer
-        Consumer<Object> wrappedCallback = obj -> {
-            if (obj instanceof IJeiRuntime jeiRuntime) {
-                callback.accept(jeiRuntime);
-            } else {
-                ModLogger.error("Runtime object is not an IJeiRuntime: {}", 
-                    obj != null ? obj.getClass().getName() : "null");
-            }
-        };
-        
-        JEIIntegrationFactory.getJEIService().registerRuntimeCallback(wrappedCallback);
+        JEIIntegrationFactory.getJEIRuntime().registerRuntimeCallback(callback);
     }
 
     public static void setJeiRuntime(IJeiRuntime runtime) {
-        JEIIntegrationFactory.getJEIService().setJeiRuntime(runtime);
+        JEIIntegrationFactory.getJEIRuntime().setJeiRuntime(runtime);
     }
 
     public static Optional<IJeiRuntime> getJeiRuntime() {
-        Optional<Object> runtimeObj = JEIIntegrationFactory.getJEIService().getJeiRuntime();
-        if (runtimeObj.isEmpty()) {
-            return Optional.empty();
-        }
-        
-        Object obj = runtimeObj.get();
-        if (obj instanceof IJeiRuntime jeiRuntime) {
-            return Optional.of(jeiRuntime);
-        } else {
-            ModLogger.error("JEI runtime is not of expected type: {}", 
-                obj != null ? obj.getClass().getName() : "null");
-            return Optional.empty();
-        }
+        return JEIIntegrationFactory.getJEIRuntime().getJeiRuntime();
     }
 
     public static void setDraggedIngredient(ITypedIngredient<?> ingredient) {
-        JEIIntegrationFactory.getJEIService().setDraggedIngredient(ingredient);
+        JEIIntegrationFactory.getJEIRuntime().setDraggedIngredient(ingredient);
     }
 
     public static void clearDraggedIngredient() {
-        JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
+        JEIIntegrationFactory.getJEIRuntime().clearDraggedIngredient();
     }
 
     public static Optional<ITypedIngredient<?>> getDraggedIngredient() {
-        Optional<TypedIngredient> typedIngredientOpt = JEIIntegrationFactory.getJEIService().getDraggedIngredient();
-        if (typedIngredientOpt.isEmpty()) {
+        Optional<Ingredient> unifiedIngredientOpt = JEIIntegrationFactory.getJEIRuntime().getDraggedIngredient();
+        if (unifiedIngredientOpt.isEmpty()) {
             return Optional.empty();
         }
         
-        TypedIngredient typedIngredient = typedIngredientOpt.get();
-        Object wrappedObj = typedIngredient.getWrappedIngredient();
+        Ingredient unifiedIngredient = unifiedIngredientOpt.get();
+        ITypedIngredient<?> typedIngredient = unifiedIngredient.getTypedIngredient();
         
-        if (wrappedObj instanceof ITypedIngredient<?> jeiTypedIngredient) {
-            return Optional.of(jeiTypedIngredient);
+        if (typedIngredient != null) {
+            return Optional.of(typedIngredient);
         } else {
-            ModLogger.error("Dragged ingredient is not of expected type: {}", 
-                wrappedObj != null ? wrappedObj.getClass().getName() : "null");
+            ModLogger.error("Unified ingredient does not have a valid typed ingredient");
             return Optional.empty();
         }
     }
     
     public static void setActuallyDragging(boolean isDragging) {
-        JEIIntegrationFactory.getJEIService().setActuallyDragging(isDragging);
+        JEIIntegrationFactory.getJEIRuntime().setActuallyDragging(isDragging);
     }
 
     /**
@@ -190,7 +179,8 @@ public class JEIIntegration implements IModPlugin {
      */
     private static class FolderAreaContainerHandler<T extends AbstractContainerScreen<?>> implements IGuiContainerHandler<T> {
         @Override
-        public List<Rect2i> getGuiExtraAreas(T containerScreen) {
+        @Nonnull
+        public List<Rect2i> getGuiExtraAreas(@Nonnull T containerScreen) {
             List<Rect2i> areas = new ArrayList<>();
 
             // Add the folder button exclusion zone if available
@@ -206,60 +196,43 @@ public class JEIIntegration implements IModPlugin {
      * Ghost ingredient handler specifically for folder interactions
      */
     private static class FolderGhostIngredientHandler<T extends AbstractContainerScreen<?>> implements IGhostIngredientHandler<T> {
-        // Track if we're in an actual drag (not just hover) using mouse state
-        private boolean mouseButtonDown = false;
+        private final Class<T> screenClass;
+        
+        public FolderGhostIngredientHandler(Class<T> screenClass) {
+            this.screenClass = screenClass;
+        }
         
         @Override
-        public <I> List<Target<I>> getTargetsTyped(T gui, ITypedIngredient<I> ingredient, boolean doStart) {
+        @Nonnull
+        public <I> List<Target<I>> getTargetsTyped(@Nonnull T screen, @Nonnull ITypedIngredient<I> ingredient, boolean doStart) {
+            // Get the controller for the current screen
+            FolderUIController controller = FolderUIController.getInstance();
+            if (controller == null || !controller.isBookmarkAreaAvailable()) {
+                return Collections.emptyList();
+            }
+            
+            // Create targets for all folder buttons and the active bookmark display
             List<Target<I>> targets = new ArrayList<>();
             
-            // If doStart is true, JEI is informing us that a drag operation has started
-            // This parameter is essential for JEI's ghost ingredient system to work
-            boolean dragStarting = doStart;
+            // Add targets for folder buttons
+            controller.getFolderButtons().forEach(button -> {
+                targets.add(createFolderTarget(button, controller, ingredient));
+            });
             
-            // For additional precision, we also check mouse state directly
-            Minecraft minecraft = Minecraft.getInstance();
-            boolean leftMouseDown = minecraft.mouseHandler.isLeftPressed();
-            
-            // Detect start of drag through either doStart or mouse state
-            if (dragStarting || leftMouseDown) {
-                // This is either the start of a drag or an ongoing drag
-                if (!mouseButtonDown) {
-                    // First detection of this drag operation
-                    mouseButtonDown = true;
-                    ModLogger.debug("[DRAG-DEBUG] Ingredient drag detected, targets will be created");
-                    
-                    // Set the dragged ingredient for the actual drag
-                    JEIIntegrationFactory.getJEIService().setDraggedIngredient(ingredient);
-                    JEIIntegrationFactory.getJEIService().setActuallyDragging(true);
-                }
-                
-                // Now add the targets for the drag operation
-                if (FolderUIController.isInitialized()) {
-                    FolderUIController controller = FolderUIController.getInstance();
-                    
-                    // Add targets for folder buttons
-                    controller.getFolderButtons().forEach(buttonInstance -> {
-                        targets.add(createFolderTarget(buttonInstance, controller, ingredient));
-                    });
-
-                    // Add target for bookmark display area if available
-                    if (controller.isBookmarkAreaAvailable()) {
-                        Rect2i bookmarkArea = controller.getBookmarkDisplayArea();
-                        targets.add(createBookmarkAreaTarget(bookmarkArea, controller, ingredient));
-                    }
-                }
-            } else if (mouseButtonDown) {
-                // Mouse button was down but now it's up - reset the state
-                mouseButtonDown = false;
-                JEIIntegrationFactory.getJEIService().setActuallyDragging(false);
-                JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
-                ModLogger.debug("[DRAG-DEBUG] Drag operation ended");
+            // Add target for the bookmark area if present
+            Rect2i bookmarkArea = controller.getBookmarkDisplayArea();
+            if (bookmarkArea != null) {
+                targets.add(createBookmarkAreaTarget(bookmarkArea, controller, ingredient));
             }
             
             return targets;
         }
-
+        
+        @Override
+        public void onComplete() {
+            // Nothing to do here
+        }
+        
         private <I> Target<I> createFolderTarget(
                 com.jeifolders.ui.components.buttons.FolderButton button,
                 FolderUIController controller,
@@ -280,23 +253,24 @@ public class JEIIntegration implements IModPlugin {
                     int centerX = button.getX() + button.getWidth() / 2;
                     int centerY = button.getY() + button.getHeight() / 2;
                     
-                    controller.handleIngredientDrop(centerX, centerY, ingredient);
+                    // Create and pass the unified ingredient to the controller
+                    Ingredient unifiedIngredient = IngredientManager.getInstance().createIngredient(ingredient);
+                    controller.handleIngredientDrop(centerX, centerY, unifiedIngredient);
                 }
             };
         }
-
+        
         private <I> Target<I> createBookmarkAreaTarget(
                 Rect2i bookmarkArea,
                 FolderUIController controller,
                 ITypedIngredient<I> ingredient) {
-
+                
             return new Target<I>() {
                 @Override
                 public Rect2i getArea() {
-                    // Return the bookmark area directly
                     return bookmarkArea;
                 }
-
+                
                 @Override
                 public void accept(I ingredientObj) {
                     ModLogger.debug("[HOVER-FIX] Ingredient dropped on bookmark display");
@@ -305,18 +279,11 @@ public class JEIIntegration implements IModPlugin {
                     int centerX = bookmarkArea.getX() + bookmarkArea.getWidth() / 2;
                     int centerY = bookmarkArea.getY() + bookmarkArea.getHeight() / 2;
                     
-                    // Pass the actual Minecraft item (ingredientObj) instead of the wrapper
-                    controller.handleIngredientDrop(centerX, centerY, ingredientObj);
+                    // Create and pass the unified ingredient to the controller
+                    Ingredient unifiedIngredient = IngredientManager.getInstance().createIngredient(ingredient);
+                    controller.handleIngredientDrop(centerX, centerY, unifiedIngredient);
                 }
             };
-        }
-
-        @Override
-        public void onComplete() {
-            ModLogger.debug("[HOVER-FIX] Ghost ingredient drag completed");
-            mouseButtonDown = false;
-            JEIIntegrationFactory.getJEIService().setActuallyDragging(false);
-            JEIIntegrationFactory.getJEIService().clearDraggedIngredient();
         }
     }
 }

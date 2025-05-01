@@ -2,6 +2,9 @@ package com.jeifolders.integration.impl;
 
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.IngredientService;
+import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.ingredient.IngredientManager;
+import com.jeifolders.integration.JEIRuntime;
 import com.jeifolders.util.ModLogger;
 
 import mezz.jei.api.helpers.ICodecHelper;
@@ -15,6 +18,7 @@ import mezz.jei.api.constants.VanillaTypes;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of the IngredientService interface that handles all JEI ingredient-related operations.
@@ -23,19 +27,22 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JEIIngredientService implements IngredientService {
 
     // Cache for ingredients by folder ID
-    private final Map<Integer, List<ITypedIngredient<?>>> ingredientCache = new ConcurrentHashMap<>();
+    private final Map<Integer, List<Ingredient>> ingredientCache = new ConcurrentHashMap<>();
     
     // Cache for ingredients by key
-    private final Map<String, ITypedIngredient<?>> keyToIngredientCache = new ConcurrentHashMap<>();
+    private final Map<String, Ingredient> keyToIngredientCache = new ConcurrentHashMap<>();
     
     // Reference to the folder service to access bookmark keys - initialized lazily to avoid circular dependency
     private FolderStorageService folderService;
     
-    // JEI's ingredient manager (set when JEI runtime is available)
-    private IIngredientManager ingredientManager;
+    // Reference to the JEIRuntime for centralized JEI access
+    private final JEIRuntime jeiRuntime = JEIRuntime.getInstance();
     
     // JEI's codec helper for serialization
     private ICodecHelper codecHelper;
+    
+    // Reference to the ingredient manager
+    private final IngredientManager unifiedIngredientManager = IngredientManager.getInstance();
     
     /**
      * Creates a new JEIIngredientService instance.
@@ -53,46 +60,52 @@ public class JEIIngredientService implements IngredientService {
     }
     
     /**
-     * Sets the JEI ingredient manager, needed for ingredient operations.
-     */
-    public void setIngredientManager(IIngredientManager ingredientManager) {
-        this.ingredientManager = ingredientManager;
-        // Clear the cache when the ingredient manager changes
-        clearCache();
-    }
-    
-    /**
      * Sets the JEI codec helper, needed for ingredient serialization.
      */
     public void setJeiHelpers(IJeiHelpers jeiHelpers) {
         this.codecHelper = jeiHelpers.getCodecHelper();
     }
     
+    /**
+     * Gets the current ingredient manager from JEIRuntime
+     */
+    private Optional<IIngredientManager> getIngredientManager() {
+        return jeiRuntime.getIngredientManager();
+    }
+    
     @Override
     public String getKeyForIngredient(Object ingredientObj) {
-        if (ingredientObj == null || ingredientManager == null) {
+        Optional<IIngredientManager> managerOpt = getIngredientManager();
+        if (ingredientObj == null || managerOpt.isEmpty()) {
             return "";
         }
         
+        IIngredientManager ingredientManager = managerOpt.get();
+        
         try {
             // Get a typed ingredient if needed
-            ITypedIngredient<?> ingredient;
-            if (ingredientObj instanceof ITypedIngredient<?>) {
-                ingredient = (ITypedIngredient<?>) ingredientObj;
+            ITypedIngredient<?> typedIngredient;
+            if (ingredientObj instanceof Ingredient) {
+                typedIngredient = ((Ingredient) ingredientObj).getTypedIngredient();
+                if (typedIngredient == null) {
+                    return ((Ingredient) ingredientObj).getKey();
+                }
+            } else if (ingredientObj instanceof ITypedIngredient<?>) {
+                typedIngredient = (ITypedIngredient<?>) ingredientObj;
             } else {
                 Optional<ITypedIngredient<?>> optionalIngredient = getTypedIngredientFromObject(ingredientObj);
                 if (optionalIngredient.isEmpty()) {
                     return "";
                 }
-                ingredient = optionalIngredient.get();
+                typedIngredient = optionalIngredient.get();
             }
             
             // Get the type ID and ingredient type
-            IIngredientType<?> type = ingredient.getType();
+            IIngredientType<?> type = typedIngredient.getType();
             String typeId = type.getUid();
             
             // Generate the key using the proper approach
-            return generateKeyForTypedIngredient(ingredient, typeId);
+            return generateKeyForTypedIngredient(typedIngredient, typeId, ingredientManager);
         } catch (Exception e) {
             ModLogger.error("Error getting key for ingredient: {}", e.getMessage(), e);
             return "";
@@ -100,7 +113,7 @@ public class JEIIngredientService implements IngredientService {
     }
     
     @SuppressWarnings("unchecked")
-    private <T> String generateKeyForTypedIngredient(ITypedIngredient<T> ingredient, String typeId) {
+    private <T> String generateKeyForTypedIngredient(ITypedIngredient<T> ingredient, String typeId, IIngredientManager ingredientManager) {
         // Get the helper for this ingredient type
         IIngredientHelper<T> helper = (IIngredientHelper<T>) ingredientManager.getIngredientHelper(ingredient.getType());
         
@@ -112,8 +125,9 @@ public class JEIIngredientService implements IngredientService {
     }
     
     @Override
-    public Optional<ITypedIngredient<?>> getIngredientForKey(String bookmarkKey) {
-        if (bookmarkKey == null || bookmarkKey.isEmpty() || ingredientManager == null) {
+    public Optional<Ingredient> getIngredientForKey(String bookmarkKey) {
+        Optional<IIngredientManager> managerOpt = getIngredientManager();
+        if (bookmarkKey == null || bookmarkKey.isEmpty() || managerOpt.isEmpty()) {
             return Optional.empty();
         }
         
@@ -122,6 +136,25 @@ public class JEIIngredientService implements IngredientService {
             return Optional.ofNullable(keyToIngredientCache.get(bookmarkKey));
         }
         
+        try {
+            // Try to get a typed ingredient from the key
+            Optional<ITypedIngredient<?>> typedIngredient = getTypedIngredientFromKey(bookmarkKey, managerOpt.get());
+            
+            // If found, create a new Ingredient and cache it
+            if (typedIngredient.isPresent()) {
+                Ingredient ingredient = unifiedIngredientManager.createIngredient(typedIngredient.get(), bookmarkKey);
+                keyToIngredientCache.put(bookmarkKey, ingredient);
+                return Optional.of(ingredient);
+            }
+            
+            return Optional.empty();
+        } catch (Exception e) {
+            ModLogger.error("Error getting ingredient for key: {}", e.getMessage(), e);
+            return Optional.empty();
+        }
+    }
+    
+    private Optional<ITypedIngredient<?>> getTypedIngredientFromKey(String bookmarkKey, IIngredientManager ingredientManager) {
         try {
             // Parse the key to get type ID and UID
             String[] parts = bookmarkKey.split(":", 2);
@@ -136,17 +169,14 @@ public class JEIIngredientService implements IngredientService {
             Optional<IIngredientType<?>> optionalType = ingredientManager.getIngredientTypeForUid(typeId);
             if (optionalType.isEmpty()) {
                 // Handle different type ID formats
-                // 1. Try with VanillaTypes constants
                 if ("item_stack".equals(typeId)) {
                     optionalType = Optional.of(VanillaTypes.ITEM_STACK);
                 }
-                // 2. Handle fully qualified class name (as returned by IIngredientType.getUid())
                 else if (typeId.equals("net.minecraft.world.item.ItemStack")) {
                     optionalType = Optional.of(VanillaTypes.ITEM_STACK);
                 }
-                // 3. For any other fully qualified class name, try to find the type by matching class name
                 else if (typeId.contains(".")) {
-                    optionalType = findIngredientTypeByClassName(typeId);
+                    optionalType = findIngredientTypeByClassName(typeId, ingredientManager);
                 }
                 
                 if (optionalType.isEmpty()) {
@@ -157,219 +187,137 @@ public class JEIIngredientService implements IngredientService {
             
             IIngredientType<?> ingredientType = optionalType.get();
             
-            // Find the ingredient by iterating through all ingredients of this type
-            ITypedIngredient<?> result = findIngredientOfType(ingredientType, bookmarkKey);
+            // Use the existing implementation to find the ingredient by iterating over
+            // all ingredients of this type and comparing keys
+            for (Object ingredient : ingredientManager.getAllIngredients(ingredientType)) {
+                Optional<?> optTypedIngredient = ingredientManager.createTypedIngredient(ingredient);
+                if (optTypedIngredient.isPresent()) {
+                    ITypedIngredient<?> typedIngredient = (ITypedIngredient<?>) optTypedIngredient.get();
+                    String key = getKeyForIngredient(typedIngredient);
+                    if (bookmarkKey.equals(key)) {
+                        return Optional.of(typedIngredient);
+                    }
+                }
+            }
             
-            // Cache the result
-            keyToIngredientCache.put(bookmarkKey, result);
-            
-            return Optional.ofNullable(result);
+            ModLogger.debug("No ingredient found for key: {}", bookmarkKey);
+            return Optional.empty();
         } catch (Exception e) {
-            ModLogger.warn("Error getting ingredient for key '{}': {}", bookmarkKey, e.getMessage());
+            ModLogger.error("Error parsing ingredient key: {}", e.getMessage(), e);
             return Optional.empty();
         }
     }
     
-    /**
-     * Helper method to find an ingredient type by its class name
-     */
-    private Optional<IIngredientType<?>> findIngredientTypeByClassName(String className) {
-        // Try to get all ingredient types and find one that matches the class name
-        try {
-            for (IIngredientType<?> type : ingredientManager.getRegisteredIngredientTypes()) {
-                if (type.getIngredientClass().getName().equals(className) ||
-                    type.getUid().equals(className)) {
-                    return Optional.of(type);
-                }
+    @Override
+    public List<Ingredient> getIngredientsForKeys(List<String> bookmarkKeys) {
+        Optional<IIngredientManager> managerOpt = getIngredientManager();
+        if (bookmarkKeys == null || bookmarkKeys.isEmpty() || managerOpt.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        List<Ingredient> result = new ArrayList<>();
+        
+        // Process all keys
+        for (String key : bookmarkKeys) {
+            Optional<Ingredient> ingredient = getIngredientForKey(key);
+            ingredient.ifPresent(result::add);
+        }
+        
+        return result;
+    }
+    
+    @Override
+    public Optional<Ingredient> getIngredientFromObject(Object ingredientObj) {
+        Optional<IIngredientManager> managerOpt = getIngredientManager();
+        if (ingredientObj == null || managerOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        // If it's already a unified Ingredient, return it
+        if (ingredientObj instanceof Ingredient) {
+            return Optional.of((Ingredient) ingredientObj);
+        }
+        
+        // Get a typed ingredient and create a new Ingredient
+        Optional<ITypedIngredient<?>> typedIngredient = getTypedIngredientFromObject(ingredientObj);
+        if (typedIngredient.isPresent()) {
+            String key = getKeyForIngredient(typedIngredient.get());
+            if (!key.isEmpty()) {
+                return Optional.of(unifiedIngredientManager.createIngredient(typedIngredient.get(), key));
             }
-        } catch (Exception e) {
-            ModLogger.error("Error finding ingredient type by class name: {}", e.getMessage(), e);
         }
         
         return Optional.empty();
     }
     
-    @SuppressWarnings("unchecked")
-    private <T> ITypedIngredient<T> findIngredientOfType(IIngredientType<T> type, String targetKey) {
-        Collection<T> allIngredients = ingredientManager.getAllIngredients(type);
-        IIngredientHelper<T> helper = ingredientManager.getIngredientHelper(type);
-        
-        ModLogger.debug("Finding ingredient for key '{}' in {} ingredients of type {}", 
-            targetKey, allIngredients.size(), type.getUid());
-            
-        // Parse the target key to separate type ID and UID
-        String[] parts = targetKey.split(":", 2);
-        if (parts.length < 2) {
-            ModLogger.warn("Invalid ingredient key format: {}", targetKey);
-            return null;
-        }
-        
-        String typeId = parts[0];
-        String targetUid = parts[1];
-        
-        // For item types, the targetUid is often in the format "minecraft:oak_log"
-        // We need to directly match against this format
-        for (T ingredient : allIngredients) {
-            try {
-                // Get the UID for this ingredient
-                String uid = helper.getUid(ingredient, UidContext.Ingredient).toString();
-                
-                // First try direct matching with the targetUid
-                if (targetUid.equals(uid)) {
-                    Optional<ITypedIngredient<T>> typedIngredient = ingredientManager.createTypedIngredient(type, ingredient);
-                    if (typedIngredient.isPresent()) {
-                        ModLogger.debug("Found exact match for key '{}': {}", targetKey, uid);
-                        return typedIngredient.get();
-                    }
-                }
-                
-                // Also try creating the key and comparing the full key
-                Optional<ITypedIngredient<T>> typedIngredient = ingredientManager.createTypedIngredient(type, ingredient);
-                if (typedIngredient.isPresent()) {
-                    String key = getKeyForIngredient(typedIngredient.get());
-                    if (targetKey.equals(key)) {
-                        ModLogger.debug("Found key match for '{}': {}", targetKey, key);
-                        return typedIngredient.get();
-                    }
-                    
-                    // If the type IDs match but the UIDs don't, log extra info for debugging
-                    if (key.startsWith(typeId + ":")) {
-                        ModLogger.debug("Key mismatch: target='{}', actual='{}'", targetKey, key);
-                    }
-                }
-            } catch (Exception e) {
-                ModLogger.warn("Error comparing ingredient: {}", e.getMessage());
-            }
-        }
-        
-        ModLogger.warn("Could not find ingredient for key: {}", targetKey);
-        return null;
-    }
-    
     @Override
-    public List<ITypedIngredient<?>> getIngredientsForKeys(List<String> bookmarkKeys) {
-        if (bookmarkKeys == null || bookmarkKeys.isEmpty() || ingredientManager == null) {
-            return List.of();
+    public Optional<ITypedIngredient<?>> getTypedIngredientFromObject(Object ingredientObj) {
+        Optional<IIngredientManager> managerOpt = getIngredientManager();
+        if (ingredientObj == null || managerOpt.isEmpty()) {
+            return Optional.empty();
         }
         
-        List<ITypedIngredient<?>> result = new ArrayList<>();
+        IIngredientManager ingredientManager = managerOpt.get();
         
-        for (String key : bookmarkKeys) {
-            Optional<ITypedIngredient<?>> ingredient = getIngredientForKey(key);
-            ingredient.ifPresent(result::add);
+        // If it's already a unified Ingredient, get the wrapped ITypedIngredient
+        if (ingredientObj instanceof Ingredient) {
+            return Optional.ofNullable(((Ingredient) ingredientObj).getTypedIngredient());
         }
         
-        ModLogger.debug("Retrieved {} ingredients for {} bookmark keys", result.size(), bookmarkKeys.size());
+        // If it's already an ITypedIngredient, return it
+        if (ingredientObj instanceof ITypedIngredient<?>) {
+            return Optional.of((ITypedIngredient<?>) ingredientObj);
+        }
+        
+        // Try to create an ITypedIngredient from the raw object
+        // Cast to appropriate wildcard type to match the method's return type
+        @SuppressWarnings("unchecked")
+        Optional<ITypedIngredient<?>> result = (Optional<ITypedIngredient<?>>) (Optional<?>) ingredientManager.createTypedIngredient(ingredientObj);
         return result;
     }
     
-    @SuppressWarnings("unchecked")
     @Override
-    public Optional<ITypedIngredient<?>> getTypedIngredientFromObject(Object ingredient) {
-        if (ingredient == null || ingredientManager == null) {
-            return Optional.empty();
+    public List<Ingredient> getCachedIngredientsForFolder(int folderId) {
+        // Return cached ingredients if available
+        if (ingredientCache.containsKey(folderId)) {
+            return ingredientCache.get(folderId);
         }
         
-        // If it's already a typed ingredient, return it directly
-        if (ingredient instanceof ITypedIngredient<?>) {
-            return Optional.of((ITypedIngredient<?>) ingredient);
+        // Otherwise fetch from folder service and cache
+        FolderStorageService folderStorage = getFolderService();
+        Optional<com.jeifolders.data.Folder> folder = folderStorage.getFolder(folderId);
+        
+        if (folder.isEmpty()) {
+            ModLogger.warn("Folder with ID {} not found", folderId);
+            return Collections.emptyList();
         }
         
-        // Use the ingredient manager's type detection
-        try {
-            IIngredientType<?> type = ingredientManager.getIngredientType(ingredient);
-            if (type != null) {
-                // Use a safer approach that doesn't require casting the Optional itself
-                Optional<?> result = createTypedIngredientForType(type, ingredient);
-                if (result.isPresent()) {
-                    return Optional.of((ITypedIngredient<?>) result.get());
-                }
-            }
-            
-            // Try direct ingredient creation as fallback
-            Optional<?> typedIngredient = ingredientManager.createTypedIngredient(ingredient);
-            if (typedIngredient.isPresent()) {
-                return Optional.of((ITypedIngredient<?>) typedIngredient.get());
-            }
-            return Optional.empty();
-        } catch (Exception e) {
-            ModLogger.warn("Error creating typed ingredient: {}", e.getMessage());
-            return Optional.empty();
-        }
-    }
-    
-    @SuppressWarnings("unchecked")
-    private <T> Optional<ITypedIngredient<T>> createTypedIngredientForType(IIngredientType<T> type, Object ingredient) {
-        try {
-            // Safe cast since we've already checked the type
-            T typedValue = (T) ingredient;
-            return ingredientManager.createTypedIngredient(type, typedValue);
-        } catch (ClassCastException e) {
-            ModLogger.warn("Type mismatch creating typed ingredient: {}", e.getMessage());
-            return Optional.empty();
-        }
-    }
-    
-    @Override
-    public List<ITypedIngredient<?>> getCachedIngredientsForFolder(int folderId) {
-        // Check if we have a cache hit first
-        List<ITypedIngredient<?>> cachedIngredients = ingredientCache.get(folderId);
-        if (cachedIngredients != null) {
-            ModLogger.debug("Ingredient cache hit for folder {}: {} ingredients", 
-                folderId, cachedIngredients.size());
-            return new ArrayList<>(cachedIngredients);
-        }
+        List<String> bookmarkKeys = folder.get().getBookmarkKeys();
+        List<Ingredient> ingredients = getIngredientsForKeys(bookmarkKeys);
         
-        // Cache miss, need to process the ingredients
-        List<String> bookmarkKeys = getFolderBookmarkKeys(folderId);
-        if (bookmarkKeys.isEmpty()) {
-            ModLogger.debug("No bookmarks found for folder {}", folderId);
-            ingredientCache.put(folderId, List.of());
-            return List.of();
-        }
-        
-        // Get the ingredients for these keys
-        List<ITypedIngredient<?>> ingredients = getIngredientsForKeys(bookmarkKeys);
-        
-        // Store in cache
-        if (!ingredients.isEmpty()) {
-            List<ITypedIngredient<?>> defensiveCopy = new ArrayList<>(ingredients);
-            ingredientCache.put(folderId, defensiveCopy);
-            ModLogger.debug("Cached {} ingredients for folder {}", defensiveCopy.size(), folderId);
-        } else {
-            ingredientCache.put(folderId, List.of());
-            ModLogger.debug("Cached empty ingredient list for folder {}", folderId);
-        }
+        // Cache the result
+        ingredientCache.put(folderId, ingredients);
         
         return ingredients;
     }
     
-    private List<String> getFolderBookmarkKeys(int folderId) {
-        return getFolderService().getFolder(folderId)
-            .map(folder -> folder.getBookmarkKeys())
-            .orElseGet(() -> {
-                ModLogger.warn("Could not find folder with id {} for bookmarks", folderId);
-                return Collections.emptyList();
-            });
-    }
-    
     @Override
     public void invalidateIngredientsCache(int folderId) {
-        boolean removed = ingredientCache.remove(folderId) != null;
-        ModLogger.debug("Invalidated ingredient cache for folder {}: {}", folderId, removed);
+        ingredientCache.remove(folderId);
     }
     
     @Override
     public void clearCache() {
         ingredientCache.clear();
         keyToIngredientCache.clear();
-        ModLogger.debug("Cleared entire ingredient cache");
     }
     
-    /**
-     * @return Whether the ingredient service is ready to be used
-     */
-    public boolean isReady() {
-        return ingredientManager != null;
+    private Optional<IIngredientType<?>> findIngredientTypeByClassName(String className, IIngredientManager ingredientManager) {
+        for (IIngredientType<?> type : ingredientManager.getRegisteredIngredientTypes()) {
+            if (type.getIngredientClass().getName().equals(className)) {
+                return Optional.of(type);
+            }
+        }
+        return Optional.empty();
     }
 }

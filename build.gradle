@@ -53,7 +53,7 @@ neoForge {
             client()
             systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
             // Enable debug logging in development environment
-            systemProperty 'jeifolders.debug', 'false'
+            systemProperty 'jeifolders.debug', 'true'
         }
 
         server {

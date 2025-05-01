@@ -1,5 +1,6 @@
 package com.jeifolders.integration;
 
+import com.jeifolders.integration.ingredient.Ingredient;
 import mezz.jei.api.ingredients.ITypedIngredient;
 
 import java.util.List;
@@ -18,30 +19,27 @@ public interface IngredientService {
     /**
      * Gets an ingredient for a bookmark key
      */
-    Optional<ITypedIngredient<?>> getIngredientForKey(String bookmarkKey);
+    Optional<Ingredient> getIngredientForKey(String bookmarkKey);
     
     /**
      * Gets ingredients for a list of bookmark keys
      */
-    List<ITypedIngredient<?>> getIngredientsForKeys(List<String> bookmarkKeys);
+    List<Ingredient> getIngredientsForKeys(List<String> bookmarkKeys);
     
     /**
-     * Converts a generic Object to an ITypedIngredient if possible
+     * Converts a generic Object to an Ingredient if possible
+     */
+    Optional<Ingredient> getIngredientFromObject(Object ingredientObj);
+    
+    /**
+     * Gets the underlying ITypedIngredient for compatibility with JEI
      */
     Optional<ITypedIngredient<?>> getTypedIngredientFromObject(Object ingredient);
     
     /**
      * Gets cached ingredients for a folder
      */
-    List<ITypedIngredient<?>> getCachedIngredientsForFolder(int folderId);
-    
-    /**
-     * Gets cached ingredients for a folder as BookmarkIngredient objects
-     */
-    default List<BookmarkIngredient> getCachedBookmarkIngredientsForFolder(int folderId) {
-        List<ITypedIngredient<?>> ingredients = getCachedIngredientsForFolder(folderId);
-        return TypedIngredientHelper.wrapJeiIngredients(ingredients);
-    }
+    List<Ingredient> getCachedIngredientsForFolder(int folderId);
     
     /**
      * Invalidates the ingredient cache for a folder

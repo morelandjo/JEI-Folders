@@ -3,7 +3,7 @@ package com.jeifolders.core;
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.events.FolderEventDispatcher;
-import com.jeifolders.integration.TypedIngredient;
+import com.jeifolders.integration.ingredient.Ingredient;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
 import com.jeifolders.ui.events.FolderEventType;
@@ -98,7 +98,7 @@ public class FolderManager {
      * 
      * @param bookmarkContents The bookmark contents to cache
      */
-    public void updateBookmarkContentsCache(List<TypedIngredient> bookmarkContents) {
+    public void updateBookmarkContentsCache(List<Ingredient> bookmarkContents) {
         uiStateManager.updateBookmarkContentsCache(bookmarkContents);
     }
     

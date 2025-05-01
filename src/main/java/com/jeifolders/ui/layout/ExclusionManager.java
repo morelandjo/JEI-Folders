@@ -123,8 +123,7 @@ public class ExclusionManager {
                 // Add the ingredient grid height plus extra padding
                 exclusionHeight += ingredientGridHeight + ACTIVE_FOLDER_EXTRA_PADDING;
                 
-                ModLogger.debug("Expanded exclusion zone height for active folder: {}px (includes {}px ingredient grid)", 
-                              exclusionHeight, ingredientGridHeight);
+                
             } else {
                 exclusionHeight = buttonsHeight + 10;
             }

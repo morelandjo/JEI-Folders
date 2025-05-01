@@ -1,6 +1,8 @@
 package com.jeifolders.integration;
 
 import com.jeifolders.integration.impl.JEIIngredientService;
+import com.jeifolders.integration.ingredient.IngredientManager;
+import com.jeifolders.util.ModLogger;
 
 /**
  * Factory for accessing JEI integration services.
@@ -16,10 +18,10 @@ public class JEIIntegrationFactory {
     }
     
     /**
-     * Gets the JEI service for runtime management
+     * Gets the JEI runtime for direct access to JEI functionality
      */
-    public static JEIService getJEIService() {
-        return JEIServiceImpl.getInstance();
+    public static JEIRuntime getJEIRuntime() {
+        return JEIRuntime.getInstance();
     }
     
     /**
@@ -30,9 +32,9 @@ public class JEIIntegrationFactory {
     }
     
     /**
-     * Gets the bookmark service for bookmark operations
+     * Gets the ingredient manager for unified ingredient handling
      */
-    public static BookmarkService getBookmarkService() {
-        return BookmarkServiceImpl.getInstance();
+    public static IngredientManager getIngredientManager() {
+        return IngredientManager.getInstance();
     }
 }

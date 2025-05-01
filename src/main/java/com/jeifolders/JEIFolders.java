@@ -1,7 +1,8 @@
 package com.jeifolders;
 
 import com.jeifolders.core.FolderManager;
-import com.jeifolders.integration.JEIIntegration;
+import com.jeifolders.integration.JEIIntegrationFactory;
+import com.jeifolders.integration.JEIRuntime;
 import com.jeifolders.ui.controllers.FolderUIController;
 import com.jeifolders.ui.layout.FolderLayoutService;
 import com.jeifolders.data.FolderStorageService;
@@ -73,11 +74,12 @@ public class JEIFolders {
         // Initialize the folder button system with the same FolderManager instance
         FolderUIController.init(folderManager);
         
-        // Initialize JEI integration
-        JEIIntegration.registerRuntimeAvailableCallback(jeiRuntime -> {
+        // Initialize JEI integration using the new JEIRuntime class
+        JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
+        jeiRuntime.registerRuntimeCallback(runtime -> {
             ModLogger.debug("JEI Runtime available, initializing JEI-Folders integration");
             // Pass the JEI runtime to our main controller
-            FolderUIController.getInstance().setJeiRuntime(jeiRuntime);
+            FolderUIController.getInstance().setJeiRuntime(runtime);
         });
         
         ModLogger.error("[INIT-DEBUG] JEI Folders client setup complete");

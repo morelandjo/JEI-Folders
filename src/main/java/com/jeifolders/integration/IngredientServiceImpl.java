@@ -19,10 +19,10 @@ public class IngredientServiceImpl implements IngredientService {
     // Add a cache for processed key-to-ingredient mappings
     private final Map<String, ITypedIngredient<?>> keyToIngredientCache = new HashMap<>();
     private final Map<Integer, List<ITypedIngredient<?>>> folderIngredientsCache = new HashMap<>();
-    private final JEIService jeiService;
+    private final JEIRuntime jeiRuntime;
     
     private IngredientServiceImpl() {
-        this.jeiService = JEIServiceImpl.getInstance();
+        this.jeiRuntime = JEIRuntime.getInstance();
     }
     
     /**
@@ -43,19 +43,13 @@ public class IngredientServiceImpl implements IngredientService {
 
             ModLogger.debug("Getting key for ingredient of class: {}", ingredient.getClass().getName());
 
-            Optional<Object> managerOpt = jeiService.getIngredientManager();
+            Optional<IIngredientManager> managerOpt = jeiRuntime.getIngredientManager();
             if (managerOpt.isEmpty()) {
                 ModLogger.error("JEI ingredient manager not available for key generation");
                 return "";
             }
             
-            Object managerObj = managerOpt.get();
-            if (!(managerObj instanceof IIngredientManager)) {
-                ModLogger.error("JEI ingredient manager is not of expected type");
-                return "";
-            }
-            
-            IIngredientManager manager = (IIngredientManager) managerObj;
+            IIngredientManager manager = managerOpt.get();
 
             // Special handling for directly passed JEI ingredient
             if (ingredient instanceof ITypedIngredient<?> typedIngredient) {
@@ -114,20 +108,34 @@ public class IngredientServiceImpl implements IngredientService {
     }
 
     @Override
+    public Optional<com.jeifolders.integration.ingredient.Ingredient> getIngredientFromObject(Object ingredientObj) {
+        // First, try to get a typed ingredient
+        Optional<ITypedIngredient<?>> typedIngredientOpt = getTypedIngredientFromObject(ingredientObj);
+        
+        // If we have a typed ingredient, convert it to our unified Ingredient
+        if (typedIngredientOpt.isPresent()) {
+            return Optional.of(new com.jeifolders.integration.ingredient.Ingredient(typedIngredientOpt.get()));
+        }
+        
+        // If we couldn't get a typed ingredient but the object is not null,
+        // create an ingredient from the raw object
+        if (ingredientObj != null) {
+            return Optional.of(new com.jeifolders.integration.ingredient.Ingredient(ingredientObj));
+        }
+        
+        // Otherwise, return empty
+        return Optional.empty();
+    }
+
+    @Override
     public Optional<ITypedIngredient<?>> getTypedIngredientFromObject(Object ingredient) {
-        Optional<Object> managerOpt = jeiService.getIngredientManager();
+        Optional<IIngredientManager> managerOpt = jeiRuntime.getIngredientManager();
         if (managerOpt.isEmpty()) {
             ModLogger.error("JEI ingredient manager not available");
             return Optional.empty();
         }
         
-        Object managerObj = managerOpt.get();
-        if (!(managerObj instanceof IIngredientManager)) {
-            ModLogger.error("JEI ingredient manager is not of expected type");
-            return Optional.empty();
-        }
-        
-        IIngredientManager manager = (IIngredientManager) managerObj;
+        IIngredientManager manager = managerOpt.get();
 
         for (IIngredientType<?> type : manager.getRegisteredIngredientTypes()) {
             Optional<?> typedIngredient = tryConvertIngredient(manager, type, ingredient);
@@ -183,37 +191,41 @@ public class IngredientServiceImpl implements IngredientService {
     }
 
     @Override
-    public Optional<ITypedIngredient<?>> getIngredientForKey(String bookmarkKey) {
+    public Optional<com.jeifolders.integration.ingredient.Ingredient> getIngredientForKey(String bookmarkKey) {
         // First check the cache
         if (keyToIngredientCache.containsKey(bookmarkKey)) {
-            return Optional.ofNullable(keyToIngredientCache.get(bookmarkKey));
+            ITypedIngredient<?> cachedIngredient = keyToIngredientCache.get(bookmarkKey);
+            if (cachedIngredient != null) {
+                return Optional.of(new com.jeifolders.integration.ingredient.Ingredient(cachedIngredient));
+            } else {
+                return Optional.empty();
+            }
         }
 
         // If not in cache, perform the lookup
-        Optional<Object> managerOpt = jeiService.getIngredientManager();
+        Optional<IIngredientManager> managerOpt = jeiRuntime.getIngredientManager();
         if (managerOpt.isEmpty()) {
             return Optional.empty();
         }
 
-        Object managerObj = managerOpt.get();
-        if (!(managerObj instanceof IIngredientManager)) {
-            ModLogger.error("JEI ingredient manager is not of expected type");
-            return Optional.empty();
-        }
+        IIngredientManager ingredientManager = managerOpt.get();
         
-        IIngredientManager ingredientManager = (IIngredientManager) managerObj;
-
         // Find the ingredient using JEI's methods
         ITypedIngredient<?> ingredient = findIngredientByKey(bookmarkKey, ingredientManager);
 
         // Cache the result, even if it's null
         keyToIngredientCache.put(bookmarkKey, ingredient);
 
-        return Optional.ofNullable(ingredient);
+        // Convert to our unified Ingredient class and return
+        if (ingredient != null) {
+            return Optional.of(new com.jeifolders.integration.ingredient.Ingredient(ingredient));
+        } else {
+            return Optional.empty();
+        }
     }
 
     @Override
-    public List<ITypedIngredient<?>> getIngredientsForKeys(List<String> bookmarkKeys) {
+    public List<com.jeifolders.integration.ingredient.Ingredient> getIngredientsForKeys(List<String> bookmarkKeys) {
         // Special optimize case for empty list
         if (bookmarkKeys.isEmpty()) {
             return Collections.emptyList();
@@ -222,7 +234,7 @@ public class IngredientServiceImpl implements IngredientService {
         // Start timing for performance logging
         long startTime = System.currentTimeMillis();
 
-        List<ITypedIngredient<?>> result = new ArrayList<>();
+        List<com.jeifolders.integration.ingredient.Ingredient> result = new ArrayList<>();
         List<String> keysToProcess = new ArrayList<>();
 
         // First check which keys we already have in cache
@@ -230,7 +242,8 @@ public class IngredientServiceImpl implements IngredientService {
             if (keyToIngredientCache.containsKey(key)) {
                 ITypedIngredient<?> cachedIngredient = keyToIngredientCache.get(key);
                 if (cachedIngredient != null) {
-                    result.add(cachedIngredient);
+                    // Convert ITypedIngredient to our unified Ingredient
+                    result.add(new com.jeifolders.integration.ingredient.Ingredient(cachedIngredient));
                 }
             } else {
                 keysToProcess.add(key);
@@ -245,19 +258,13 @@ public class IngredientServiceImpl implements IngredientService {
         }
 
         // Process any keys not found in cache
-        Optional<Object> managerOpt = jeiService.getIngredientManager();
+        Optional<IIngredientManager> managerOpt = jeiRuntime.getIngredientManager();
         if (managerOpt.isEmpty()) {
             ModLogger.warn("JEI ingredient manager not available for ingredient lookup");
             return result;
         }
         
-        Object managerObj = managerOpt.get();
-        if (!(managerObj instanceof IIngredientManager)) {
-            ModLogger.error("JEI ingredient manager is not of expected type");
-            return result;
-        }
-        
-        IIngredientManager ingredientManager = (IIngredientManager) managerObj;
+        IIngredientManager ingredientManager = managerOpt.get();
 
         // Record how many ingredients were found in cache vs needed processing
         int cacheHits = result.size();
@@ -273,7 +280,8 @@ public class IngredientServiceImpl implements IngredientService {
 
             ITypedIngredient<?> ingredient = findIngredientByKey(key, ingredientManager);
             if (ingredient != null) {
-                result.add(ingredient);
+                // Convert to our unified Ingredient class
+                result.add(new com.jeifolders.integration.ingredient.Ingredient(ingredient));
                 // Add to cache
                 keyToIngredientCache.put(key, ingredient);
             } else {
@@ -290,12 +298,18 @@ public class IngredientServiceImpl implements IngredientService {
     }
 
     @Override
-    public List<ITypedIngredient<?>> getCachedIngredientsForFolder(int folderId) {
+    public List<com.jeifolders.integration.ingredient.Ingredient> getCachedIngredientsForFolder(int folderId) {
         // Return the cached ingredients if available
         if (folderIngredientsCache.containsKey(folderId)) {
             ModLogger.debug("Using cached ingredients for folder ID: {}, {} items", 
                 folderId, folderIngredientsCache.get(folderId).size());
-            return new ArrayList<>(folderIngredientsCache.get(folderId));
+            
+            // Convert cached ITypedIngredient objects to unified Ingredient objects
+            List<com.jeifolders.integration.ingredient.Ingredient> result = new ArrayList<>();
+            for (ITypedIngredient<?> typedIngredient : folderIngredientsCache.get(folderId)) {
+                result.add(new com.jeifolders.integration.ingredient.Ingredient(typedIngredient));
+            }
+            return result;
         }
         
         // Otherwise, process and cache them
@@ -306,13 +320,41 @@ public class IngredientServiceImpl implements IngredientService {
         }
         
         List<String> bookmarkKeys = folder.get().getBookmarkKeys();
-        List<ITypedIngredient<?>> ingredients = getIngredientsForKeys(bookmarkKeys);
+        
+        // Get typed ingredients from keys
+        List<ITypedIngredient<?>> typedIngredients = new ArrayList<>();
+        for (String key : bookmarkKeys) {
+            // First check the cache
+            if (keyToIngredientCache.containsKey(key)) {
+                ITypedIngredient<?> cachedIngredient = keyToIngredientCache.get(key);
+                if (cachedIngredient != null) {
+                    typedIngredients.add(cachedIngredient);
+                }
+            } else {
+                // Try to find the ingredient if not cached
+                Optional<IIngredientManager> managerOpt = jeiRuntime.getIngredientManager();
+                if (managerOpt.isPresent()) {
+                    ITypedIngredient<?> ingredient = findIngredientByKey(key, managerOpt.get());
+                    if (ingredient != null) {
+                        typedIngredients.add(ingredient);
+                        keyToIngredientCache.put(key, ingredient);
+                    } else {
+                        keyToIngredientCache.put(key, null); // Cache null result
+                    }
+                }
+            }
+        }
         
         // Cache the processed ingredients
-        folderIngredientsCache.put(folderId, new ArrayList<>(ingredients));
-        ModLogger.debug("Cached {} ingredients for folder ID: {}", ingredients.size(), folderId);
+        folderIngredientsCache.put(folderId, new ArrayList<>(typedIngredients));
+        ModLogger.debug("Cached {} ingredients for folder ID: {}", typedIngredients.size(), folderId);
         
-        return ingredients;
+        // Convert to unified Ingredient objects for return
+        List<com.jeifolders.integration.ingredient.Ingredient> result = new ArrayList<>();
+        for (ITypedIngredient<?> typedIngredient : typedIngredients) {
+            result.add(new com.jeifolders.integration.ingredient.Ingredient(typedIngredient));
+        }
+        return result;
     }
 
     @Override

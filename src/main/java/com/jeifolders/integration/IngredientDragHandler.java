@@ -18,8 +18,8 @@ public class IngredientDragHandler {
     private IIngredientManager ingredientManager;
     private ItemStack lastDraggedItem = ItemStack.EMPTY;
     
-    // Service instances
-    private final JEIService jeiService = JEIIntegrationFactory.getJEIService();
+    // Use the new JEIRuntime instead of JEIService
+    private final JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
     
     /**
      * Initialize with the JEI runtime
@@ -51,8 +51,8 @@ public class IngredientDragHandler {
             lastDraggedItem = carriedStack.copy();
             Optional<ITypedIngredient<ItemStack>> ingredient = ingredientManager.createTypedIngredient(VanillaTypes.ITEM_STACK, carriedStack);
             if (ingredient.isPresent()) {
-                jeiService.setDraggedIngredient(ingredient.get());
-                jeiService.setActuallyDragging(true);
+                jeiRuntime.setDraggedIngredient(ingredient.get());
+                jeiRuntime.setActuallyDragging(true);
                 ModLogger.debug("Detected potential JEI ingredient drag: {}", lastDraggedItem);
                 return true;
             }
@@ -65,16 +65,17 @@ public class IngredientDragHandler {
      */
     public void resetDragState() {
         lastDraggedItem = ItemStack.EMPTY;
-        jeiService.clearDraggedIngredient();
+        jeiRuntime.clearDraggedIngredient();
     }
     
     /**
      * Get the currently dragged ingredient, if any
      * 
-     * @return The wrapped typed ingredient
+     * @return The typed ingredient if available
      */
-    public Optional<TypedIngredient> getDraggedIngredient() {
-        return jeiService.getDraggedIngredient();
+    public Optional<ITypedIngredient<?>> getDraggedIngredient() {
+        // Use the JEIRuntime's method to directly get the ITypedIngredient
+        return jeiRuntime.getDraggedITypedIngredient();
     }
     
     /**
@@ -83,6 +84,6 @@ public class IngredientDragHandler {
      * @return true if an ingredient is being actively dragged
      */
     public boolean isActuallyDragging() {
-        return jeiService.isActuallyDragging();
+        return jeiRuntime.isActuallyDragging();
     }
 }

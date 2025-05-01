@@ -120,19 +120,28 @@ public class FolderContentsView implements HitTestable {
         FolderInteractionHandler interactionHandler
     ) {
         try {
-            // Get the JEI service and runtime directly
-            var jeiService = JEIIntegrationFactory.getJEIService();
-            var jeiRuntimeOpt = jeiService.getJeiRuntime();
+            // Get the JEI runtime wrapper
+            var jeiRuntimeWrapper = JEIIntegrationFactory.getJEIRuntime();
             
-            if (jeiRuntimeOpt.isEmpty()) {
+            if (jeiRuntimeWrapper == null) {
                 ModLogger.warn("Cannot create display - JEI runtime not available");
                 return Optional.empty();
             }
             
+            // Extract the actual IJeiRuntime from the wrapper
+            var jeiRuntimeOptional = jeiRuntimeWrapper.getJeiRuntime();
+            if (!jeiRuntimeOptional.isPresent()) {
+                ModLogger.warn("Cannot create display - IJeiRuntime not available from wrapper");
+                return Optional.empty();
+            }
+            
+            // Get the actual IJeiRuntime object
+            var jeiRuntime = jeiRuntimeOptional.get();
+            
             // Create a bookmark list
             var bookmarkList = new FolderBookmarkList(eventDispatcher);
             var bookmarkAdapter = new JeiBookmarkAdapter(bookmarkList);
-            var contentsImpl = new JeiContentsImpl(bookmarkAdapter, jeiRuntimeOpt.get());
+            var contentsImpl = new JeiContentsImpl(bookmarkAdapter, jeiRuntime);
             
             // Create the display with the JEI components
             var display = new FolderContentsView(
@@ -491,11 +500,9 @@ public class FolderContentsView implements HitTestable {
      * Updates the bounds of the display based on calculated positions
      */
     public void updateBoundsFromCalculatedPositions() {
-        ModLogger.debug("[POSITION-DEBUG-FORCE] FolderContentsView.updateBoundsFromCalculatedPositions called");
         
         // If we're already updating bounds, prevent recursion
         if (updatingBounds) {
-            ModLogger.debug("[POSITION-DEBUG-FORCE] Preventing recursive bounds update");
             return;
         }
         
@@ -504,8 +511,7 @@ public class FolderContentsView implements HitTestable {
             
             // Use the calculated displayY position only if it has been properly set
             int displayY = (calculatedDisplayY >= 0) ? calculatedDisplayY : 50;
-            ModLogger.debug("[POSITION-DEBUG-FORCE] Using displayY={} (calculatedDisplayY={})", 
-                          displayY, calculatedDisplayY);
+            
             
             // Calculate safe width to prevent GUI overlap
             int safeWidth = getSafeDisplayWidth(this.width);
@@ -521,12 +527,10 @@ public class FolderContentsView implements HitTestable {
                 lastCalculatedBounds.getHeight() != newBounds.getHeight();
             
             if (!boundsChanged) {
-                ModLogger.debug("[POSITION-DEBUG-FORCE] Bounds unchanged, skipping update");
+                
                 return;
             }
             
-            ModLogger.debug("[POSITION-DEBUG-FORCE] New bounds: x={}, y={}, w={}, h={}", 
-                          newBounds.getX(), newBounds.getY(), newBounds.getWidth(), newBounds.getHeight());
             
             // Update the bounds
             this.x = newBounds.getX();
@@ -544,7 +548,7 @@ public class FolderContentsView implements HitTestable {
             if (contentsImpl != null) {
                 // Use the new Rect2i method directly
                 contentsImpl.updateBounds(newBounds);
-                ModLogger.debug("[POSITION-DEBUG-FORCE] Updated contentsImpl with new bounds");
+                
             }
         } finally {
             updatingBounds = false;
@@ -557,7 +561,7 @@ public class FolderContentsView implements HitTestable {
      * @param displayY Y position for the bookmark display
      */
     public void setCalculatedPositions(int nameY, int displayY) {
-        ModLogger.debug("[POSITION-DEBUG-FORCE] FolderContentsView.setCalculatedPositions received positions: nameY={}, displayY={}", nameY, displayY);
+        
         this.calculatedNameY = nameY;
         this.calculatedDisplayY = displayY;
         

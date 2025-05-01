@@ -4,6 +4,9 @@ import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.ui.components.contents.FolderContentsView;
 import com.jeifolders.data.Folder;
 import com.jeifolders.util.ModLogger;
+import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.ingredient.IngredientManager;
+import com.jeifolders.integration.ingredient.IngredientType;
 import mezz.jei.api.ingredients.ITypedIngredient;
 
 import java.util.ArrayList;
@@ -165,10 +168,10 @@ public class TypedIngredientHelper {
             
             // Get fresh ingredients from ingredient service
             IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-            List<ITypedIngredient<?>> jeiIngredients = ingredientService.getCachedIngredientsForFolder(folderId);
+            List<Ingredient> unifiedIngredients = ingredientService.getCachedIngredientsForFolder(folderId);
             
-            // Convert JEI ingredients to our wrappers
-            List<BookmarkIngredient> bookmarkIngredients = wrapJeiIngredients(jeiIngredients);
+            // Convert unified ingredients to BookmarkIngredients
+            List<BookmarkIngredient> bookmarkIngredients = convertFromUnifiedIngredients(unifiedIngredients);
             return extractFromBookmarkIngredients(bookmarkIngredients);
         } catch (Exception e) {
             ModLogger.error("Error loading bookmarks from folder {}: {}", folderId, e.getMessage(), e);
@@ -293,37 +296,24 @@ public class TypedIngredientHelper {
     }
     
     /**
-     * Convert generic objects to BookmarkIngredient wrappers.
-     * Consolidated from BookmarkDisplayHelper and expanded to handle more types.
+     * Converts unified Ingredient objects to BookmarkIngredient objects
      * 
-     * @param objects The objects to convert
-     * @return A list of BookmarkIngredient wrappers
+     * @param ingredients The unified ingredients to convert
+     * @return List of BookmarkIngredient objects
      */
-    @SuppressWarnings("unchecked")
-    public static List<BookmarkIngredient> convertObjectsToBookmarkIngredients(List<Object> objects) {
+    public static List<BookmarkIngredient> convertFromUnifiedIngredients(List<Ingredient> ingredients) {
         List<BookmarkIngredient> result = new ArrayList<>();
         
-        if (objects == null || objects.isEmpty()) {
+        if (ingredients == null || ingredients.isEmpty()) {
             return result;
         }
         
-        for (Object obj : objects) {
-            if (obj instanceof ITypedIngredient<?>) {
-                result.add(new BookmarkIngredient((ITypedIngredient<?>)obj));
-            } else if (obj instanceof BookmarkIngredient) {
-                result.add((BookmarkIngredient)obj);
-            } else if (obj instanceof TypedIngredient) {
-                TypedIngredient typedIngredient = (TypedIngredient)obj;
-                Object wrappedObj = typedIngredient.getWrappedIngredient();
-                if (wrappedObj instanceof ITypedIngredient<?>) {
-                    result.add(new BookmarkIngredient((ITypedIngredient<?>)wrappedObj));
-                } else {
-                    ModLogger.warn("Unable to convert TypedIngredient with non-ITypedIngredient content: {}", 
-                        wrappedObj != null ? wrappedObj.getClass().getName() : "null");
-                }
+        for (Ingredient ingredient : ingredients) {
+            Optional<ITypedIngredient<?>> typedIngredient = Optional.ofNullable(ingredient.getTypedIngredient());
+            if (typedIngredient.isPresent()) {
+                result.add(new BookmarkIngredient(typedIngredient.get()));
             } else {
-                ModLogger.warn("Skipping non-supported object: {}", 
-                    obj != null ? obj.getClass().getName() : "null");
+                ModLogger.debug("Unable to convert unified ingredient with no ITypedIngredient: {}", ingredient);
             }
         }
         
@@ -331,7 +321,26 @@ public class TypedIngredientHelper {
     }
     
     /**
-     * Gets the ingredient key from various ingredient types
+     * Converts unified Ingredient to BookmarkIngredient
+     * 
+     * @param ingredient The unified ingredient to convert
+     * @return BookmarkIngredient object or null if conversion failed
+     */
+    public static BookmarkIngredient convertFromUnifiedIngredient(Ingredient ingredient) {
+        if (ingredient == null) {
+            return null;
+        }
+        
+        if (ingredient.getTypedIngredient() != null) {
+            return new BookmarkIngredient(ingredient.getTypedIngredient());
+        } else {
+            ModLogger.debug("Unable to convert unified ingredient with no ITypedIngredient: {}", ingredient);
+            return null;
+        }
+    }
+    
+    /**
+     * Gets the ingredient key from various ingredient types including the new unified Ingredient
      * 
      * @param ingredient The ingredient to get the key for
      * @return The key string or empty if unable to determine
@@ -344,7 +353,12 @@ public class TypedIngredientHelper {
         try {
             IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
             
-            if (ingredient instanceof BookmarkIngredient) {
+            if (ingredient instanceof Ingredient) {
+                Ingredient unifiedIngredient = (Ingredient) ingredient;
+                if (unifiedIngredient.getTypedIngredient() != null) {
+                    return ingredientService.getKeyForIngredient(unifiedIngredient.getTypedIngredient());
+                }
+            } else if (ingredient instanceof BookmarkIngredient) {
                 return ingredientService.getKeyForIngredient(((BookmarkIngredient)ingredient).getTypedIngredient());
             } else if (ingredient instanceof TypedIngredient) {
                 return ingredientService.getKeyForIngredient(((TypedIngredient)ingredient).getWrappedIngredient());
@@ -355,10 +369,60 @@ public class TypedIngredientHelper {
             ModLogger.error("Error getting key for ingredient: {}", e.getMessage(), e);
             return "";
         }
+        
+        return "";
     }
     
     /**
-     * Compare two ingredients for equality based on their keys
+     * Convert generic objects to the unified Ingredient objects
+     * 
+     * @param objects The objects to convert
+     * @return A list of unified Ingredient objects
+     */
+    public static List<Ingredient> convertObjectsToUnifiedIngredients(List<Object> objects) {
+        IngredientManager ingredientManager = IngredientManager.getInstance();
+        List<Ingredient> result = new ArrayList<>();
+        
+        if (objects == null || objects.isEmpty() || !ingredientManager.isInitialized()) {
+            return result;
+        }
+        
+        for (Object obj : objects) {
+            if (obj == null) continue;
+            
+            Ingredient ingredient = null;
+            
+            if (obj instanceof Ingredient) {
+                ingredient = (Ingredient) obj;
+            } else if (obj instanceof ITypedIngredient<?>) {
+                ingredient = ingredientManager.createIngredient((ITypedIngredient<?>)obj);
+            } else if (obj instanceof BookmarkIngredient) {
+                BookmarkIngredient bookmarkIngredient = (BookmarkIngredient) obj;
+                if (bookmarkIngredient.getTypedIngredient() != null) {
+                    ingredient = ingredientManager.createIngredient(bookmarkIngredient.getTypedIngredient());
+                }
+            } else if (obj instanceof TypedIngredient) {
+                TypedIngredient typedIngredient = (TypedIngredient) obj;
+                Object wrappedObj = typedIngredient.getWrappedIngredient();
+                if (wrappedObj instanceof ITypedIngredient<?>) {
+                    ingredient = ingredientManager.createIngredient((ITypedIngredient<?>) wrappedObj);
+                } else {
+                    ingredient = ingredientManager.createIngredient(wrappedObj);
+                }
+            } else {
+                ingredient = ingredientManager.createIngredient(obj);
+            }
+            
+            if (ingredient != null) {
+                result.add(ingredient);
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Compare two ingredients for equality based on their keys, with support for unified Ingredients
      * 
      * @param a First ingredient
      * @param b Second ingredient
@@ -454,17 +518,114 @@ public class TypedIngredientHelper {
         
         try {
             IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-            Optional<ITypedIngredient<?>> ingredient = ingredientService.getIngredientForKey(key);
+            Optional<Ingredient> unifiedIngredient = ingredientService.getIngredientForKey(key);
             
-            if (ingredient.isPresent()) {
-                return new TypedIngredient(ingredient.get());
+            if (unifiedIngredient.isPresent()) {
+                Ingredient ingredient = unifiedIngredient.get();
+                ITypedIngredient<?> typedIngredient = ingredient.getTypedIngredient();
+                if (typedIngredient != null) {
+                    return new TypedIngredient(typedIngredient);
+                }
             } else {
                 ModLogger.debug("No ingredient found for key: {}", key);
-                return null;
             }
+            return null;
         } catch (Exception e) {
             ModLogger.error("Error getting typed ingredient for key {}: {}", key, e.getMessage(), e);
             return null;
         }
+    }
+    
+    /**
+     * Converts a list of TypedIngredient objects to Ingredient objects
+     * 
+     * @param typedIngredients The TypedIngredient objects to convert
+     * @return A list of unified Ingredient objects
+     */
+    public static List<Ingredient> convertToIngredients(List<TypedIngredient> typedIngredients) {
+        List<Ingredient> result = new ArrayList<>();
+        
+        if (typedIngredients == null || typedIngredients.isEmpty()) {
+            return result;
+        }
+        
+        IngredientManager ingredientManager = IngredientManager.getInstance();
+        if (!ingredientManager.isInitialized()) {
+            ModLogger.warn("Cannot convert TypedIngredients to Ingredients - IngredientManager not initialized");
+            return result;
+        }
+        
+        for (TypedIngredient typedIngredient : typedIngredients) {
+            if (typedIngredient == null) {
+                continue;
+            }
+            
+            Object wrappedObj = typedIngredient.getWrappedIngredient();
+            Ingredient ingredient = null;
+            
+            if (wrappedObj instanceof ITypedIngredient<?>) {
+                ingredient = ingredientManager.createIngredient((ITypedIngredient<?>) wrappedObj);
+            } else {
+                ingredient = ingredientManager.createIngredient(wrappedObj);
+            }
+            
+            if (ingredient != null) {
+                result.add(ingredient);
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Converts a single TypedIngredient to an Ingredient
+     * 
+     * @param typedIngredient The TypedIngredient to convert
+     * @return A unified Ingredient object, or null if conversion failed
+     */
+    public static Ingredient convertToIngredient(TypedIngredient typedIngredient) {
+        if (typedIngredient == null) {
+            return null;
+        }
+        
+        IngredientManager ingredientManager = IngredientManager.getInstance();
+        if (!ingredientManager.isInitialized()) {
+            ModLogger.warn("Cannot convert TypedIngredient to Ingredient - IngredientManager not initialized");
+            return null;
+        }
+        
+        Object wrappedObj = typedIngredient.getWrappedIngredient();
+        if (wrappedObj instanceof ITypedIngredient<?>) {
+            return ingredientManager.createIngredient((ITypedIngredient<?>) wrappedObj);
+        } else {
+            return ingredientManager.createIngredient(wrappedObj);
+        }
+    }
+    
+    /**
+     * Converts a list of unified Ingredient objects to TypedIngredient objects
+     * 
+     * @param ingredients The unified Ingredient objects to convert
+     * @return A list of TypedIngredient objects
+     */
+    public static List<TypedIngredient> convertFromIngredients(List<Ingredient> ingredients) {
+        List<TypedIngredient> result = new ArrayList<>();
+        
+        if (ingredients == null || ingredients.isEmpty()) {
+            return result;
+        }
+        
+        for (Ingredient ingredient : ingredients) {
+            if (ingredient == null) {
+                continue;
+            }
+            
+            ITypedIngredient<?> typedIngredient = ingredient.getTypedIngredient();
+            if (typedIngredient != null) {
+                result.add(new TypedIngredient(typedIngredient));
+            }
+        }
+        
+        return result;
     }
 }

@@ -2,8 +2,8 @@ package com.jeifolders.ui.interaction;
 
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
-import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.TypedIngredientHelper;
+import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.ingredient.IngredientManager;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.controllers.FolderUIController;
 import com.jeifolders.ui.events.FolderEventType;
@@ -176,9 +176,37 @@ public class FolderInteractionHandler {
             return false;
         }
         
+        // Add debug log to identify ingredient type
+        ModLogger.debug("[HOVER-FIX] Ingredient dropped on folder: {}", folder.getName());
+        ModLogger.debug("[DROP-DEBUG] Handling ingredient drop on folder with type: {}", ingredient.getClass().getName());
+        
         try {
-            // Generate ingredient key
-            String key = TypedIngredientHelper.getKeyForIngredient(ingredient);
+            // First attempt to generate key directly from the original ingredient
+            String key = null;
+            
+            // Try direct approach first (same as bookmark display uses)
+            try {
+                key = com.jeifolders.integration.TypedIngredientHelper.getKeyForIngredient(ingredient);
+            } catch (Exception e) {
+                ModLogger.debug("[DROP-DEBUG] Failed to get key from direct ingredient: {}", e.getMessage());
+            }
+            
+            // If direct key generation failed, try unified ingredient approach
+            if (key == null || key.isEmpty()) {
+                Ingredient unifiedIngredient = IngredientManager.getInstance().createIngredient(ingredient);
+                if (unifiedIngredient == null) {
+                    ModLogger.debug("Failed to create unified ingredient");
+                    return false;
+                }
+                
+                ModLogger.debug("[DROP-DEBUG] Created unified ingredient with type: {}", 
+                    unifiedIngredient.getTypedIngredient() != null ? 
+                    unifiedIngredient.getTypedIngredient().getClass().getName() : "null");
+                
+                key = com.jeifolders.integration.TypedIngredientHelper.getKeyForIngredient(unifiedIngredient);
+            }
+            
+            // Final check if key generation succeeded
             if (key == null || key.isEmpty()) {
                 ModLogger.debug("Failed to generate key for ingredient");
                 return false;
@@ -192,20 +220,11 @@ public class FolderInteractionHandler {
             
             // Add the bookmark to the folder
             folderManager.getStorageService().addBookmark(folder.getId(), key);
+            ModLogger.debug("Added bookmark to folder {} (ID: {}): {}", folder.getName(), folder.getId(), key);
             
-            // Fire appropriate event based on ingredient type
-            if (ingredient instanceof BookmarkIngredient) {
-                ModLogger.debug("Ingredient is a BookmarkIngredient, firing BOOKMARK_ADDED event");
-                folderManager.getEventDispatcher().fire(FolderEventType.BOOKMARK_ADDED)
-                    .withFolder(folder)
-                    .withIngredient((BookmarkIngredient)ingredient)
-                    .withBookmarkKey(key)
-                    .build();
-            } else {
-                // For non-BookmarkIngredient, fire a folder contents changed event
-                ModLogger.debug("Ingredient is not a BookmarkIngredient, firing FOLDER_CONTENTS_CHANGED event");
-                folderManager.getEventDispatcher().fireFolderContentsChangedEvent(folder);
-            }
+            // Fire folder contents changed event
+            ModLogger.debug("Ingredient added, firing FOLDER_CONTENTS_CHANGED event");
+            folderManager.getEventDispatcher().fireFolderContentsChangedEvent(folder);
             
             // Save the changes
             folderManager.getStorageService().saveData();
@@ -219,7 +238,7 @@ public class FolderInteractionHandler {
             ModLogger.debug("Successfully added bookmark to folder: {}", folder.getName());
             return true;
         } catch (Exception e) {
-            ModLogger.error("Error handling ingredient drop on folder: {}", e.getMessage(), e);
+            ModLogger.error("Error adding bookmark to folder: {}", e.getMessage(), e);
             return false;
         }
     }

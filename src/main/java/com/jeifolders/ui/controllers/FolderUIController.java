@@ -1,9 +1,11 @@
 package com.jeifolders.ui.controllers;
 
-import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
+import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.JEIIntegrationFactory;
+import com.jeifolders.integration.JEIRuntime;
+import com.jeifolders.integration.TypedIngredient;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.components.buttons.FolderButtonTextures;
 import com.jeifolders.ui.components.contents.FolderContentsView;
@@ -16,6 +18,7 @@ import com.jeifolders.ui.screen.FolderScreenManager;
 import com.jeifolders.ui.state.FolderUIStateManager;
 import com.jeifolders.ui.util.LayoutConstants;
 import com.jeifolders.util.ModLogger;
+import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -184,7 +187,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             uiStateManager.getFolderButtons().size(), uiStateManager.areFoldersVisible(), layoutService.getFoldersPerRow());
             
         // Set up JEI runtime initialization
-        initializeJeiRuntime();
+        setupJeiIntegration();
         
         // Restore the state if needed
         if (uiStateManager.shouldRestoreFromStaticState()) {
@@ -345,8 +348,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             // Create a new exclusion zone with the expanded dimensions
             lastDrawnArea = new Rect2i(0, 0, expandedWidth, expandedHeight);
             
-            ModLogger.debug("Expanded exclusion zone for active folder - width: {}, height: {}", 
-                expandedWidth, expandedHeight);
+            
         }
     }
     
@@ -501,28 +503,31 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         return folder;
     }
     
-    public void initializeJeiRuntime() {
-        JEIIntegrationFactory.getJEIService().registerRuntimeCallback(runtime -> {
-            // Perform any initialization that depends on the JEI runtime
-            ModLogger.debug("JEI runtime initialized in FolderButtonSystem");
+    /**
+     * Initializes the folder button functionality when the Minecraft client is ready
+     */
+    private void setupJeiIntegration() {
+        // Register a callback to be notified when the JEI runtime becomes available
+        JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
+        jeiRuntime.registerRuntimeCallback(runtime -> {
+            ModLogger.debug("JEI runtime available in FolderUIController");
+            if (this != FolderUIController.getInstance()) {
+                ModLogger.warn("Runtime callback received by non-singleton FolderUIController instance");
+                return;
+            }
+            
+            rebuildFolders();
         });
     }
     
     /**
-     * Sets the JEI runtime object
-     * @param runtime The JEI runtime object from JEI API
+     * Sets the JEI runtime for this instance
      */
-    public void setJeiRuntime(Object runtime) {
-        JEIIntegrationFactory.getJEIService().setJeiRuntime(runtime);
-        
-        // Schedule refresh on the main thread to ensure it happens after current operations
-        Minecraft.getInstance().execute(() -> {
-            // Force a complete refresh of the folders
-            rebuildFolders();
-            
-            // Make sure the bookmark display is refreshed
-            refreshBookmarkDisplay();
-        });
+    public void setJeiRuntime(IJeiRuntime runtime) {
+        ModLogger.debug("JEI runtime provided to folder UI controller");
+        // Update to use the new JEIRuntime class
+        JEIIntegrationFactory.getJEIRuntime().setJeiRuntime(runtime);
+        rebuildFolders();
     }
     
     // Event handlers 

@@ -118,11 +118,11 @@ public class IngredientCacheManager {
             return;
         }
 
-        // Get the service and check if it's available
-        var jeiService = JEIIntegrationFactory.getJEIService();
+        // Get the JEI runtime and check if it's available
+        var jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
         
         // JEI might not be initialized yet
-        if (!jeiService.getJeiRuntime().isPresent()) {
+        if (!jeiRuntime.getJeiRuntime().isPresent()) {
             ModLogger.debug("Cannot load ingredients - JEI runtime not available");
             return;
         }
@@ -159,11 +159,11 @@ public class IngredientCacheManager {
             return false;
         }
         
-        // Get the service and check if it's available
-        var jeiService = JEIIntegrationFactory.getJEIService();
+        // Get the JEI runtime and check if it's available
+        var jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
         
         // JEI might not be initialized yet
-        if (!jeiService.getJeiRuntime().isPresent()) {
+        if (!jeiRuntime.getJeiRuntime().isPresent()) {
             return false;
         }
 
