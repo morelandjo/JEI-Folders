@@ -2,12 +2,11 @@ package com.jeifolders.integration.impl;
 
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.IngredientService;
-import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.integration.ingredient.IngredientManager;
 import com.jeifolders.integration.JEIRuntime;
 import com.jeifolders.util.ModLogger;
 
-import mezz.jei.api.helpers.ICodecHelper;
 import mezz.jei.api.helpers.IJeiHelpers;
 import mezz.jei.api.ingredients.IIngredientHelper;
 import mezz.jei.api.ingredients.IIngredientType;
@@ -18,7 +17,6 @@ import mezz.jei.api.constants.VanillaTypes;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Implementation of the IngredientService interface that handles all JEI ingredient-related operations.
@@ -27,19 +25,16 @@ import java.util.stream.Collectors;
 public class JEIIngredientService implements IngredientService {
 
     // Cache for ingredients by folder ID
-    private final Map<Integer, List<Ingredient>> ingredientCache = new ConcurrentHashMap<>();
+    private final Map<Integer, List<IIngredient>> ingredientCache = new ConcurrentHashMap<>();
     
     // Cache for ingredients by key
-    private final Map<String, Ingredient> keyToIngredientCache = new ConcurrentHashMap<>();
+    private final Map<String, IIngredient> keyToIngredientCache = new ConcurrentHashMap<>();
     
     // Reference to the folder service to access bookmark keys - initialized lazily to avoid circular dependency
     private FolderStorageService folderService;
     
     // Reference to the JEIRuntime for centralized JEI access
     private final JEIRuntime jeiRuntime = JEIRuntime.getInstance();
-    
-    // JEI's codec helper for serialization
-    private ICodecHelper codecHelper;
     
     // Reference to the ingredient manager
     private final IngredientManager unifiedIngredientManager = IngredientManager.getInstance();
@@ -60,10 +55,10 @@ public class JEIIngredientService implements IngredientService {
     }
     
     /**
-     * Sets the JEI codec helper, needed for ingredient serialization.
+     * Sets the JEI helpers, needed for ingredient operations.
      */
     public void setJeiHelpers(IJeiHelpers jeiHelpers) {
-        this.codecHelper = jeiHelpers.getCodecHelper();
+        // Store any necessary helpers from JEI
     }
     
     /**
@@ -85,10 +80,10 @@ public class JEIIngredientService implements IngredientService {
         try {
             // Get a typed ingredient if needed
             ITypedIngredient<?> typedIngredient;
-            if (ingredientObj instanceof Ingredient) {
-                typedIngredient = ((Ingredient) ingredientObj).getTypedIngredient();
+            if (ingredientObj instanceof IIngredient) {
+                typedIngredient = ((IIngredient) ingredientObj).getTypedIngredient();
                 if (typedIngredient == null) {
-                    return ((Ingredient) ingredientObj).getKey();
+                    return ((IIngredient) ingredientObj).getKey();
                 }
             } else if (ingredientObj instanceof ITypedIngredient<?>) {
                 typedIngredient = (ITypedIngredient<?>) ingredientObj;
@@ -112,10 +107,9 @@ public class JEIIngredientService implements IngredientService {
         }
     }
     
-    @SuppressWarnings("unchecked")
     private <T> String generateKeyForTypedIngredient(ITypedIngredient<T> ingredient, String typeId, IIngredientManager ingredientManager) {
         // Get the helper for this ingredient type
-        IIngredientHelper<T> helper = (IIngredientHelper<T>) ingredientManager.getIngredientHelper(ingredient.getType());
+        IIngredientHelper<T> helper = ingredientManager.getIngredientHelper(ingredient.getType());
         
         // Get the UID using the helper
         Object uid = helper.getUid(ingredient.getIngredient(), UidContext.Ingredient);
@@ -125,7 +119,7 @@ public class JEIIngredientService implements IngredientService {
     }
     
     @Override
-    public Optional<Ingredient> getIngredientForKey(String bookmarkKey) {
+    public Optional<IIngredient> getIngredientForKey(String bookmarkKey) {
         Optional<IIngredientManager> managerOpt = getIngredientManager();
         if (bookmarkKey == null || bookmarkKey.isEmpty() || managerOpt.isEmpty()) {
             return Optional.empty();
@@ -142,7 +136,7 @@ public class JEIIngredientService implements IngredientService {
             
             // If found, create a new Ingredient and cache it
             if (typedIngredient.isPresent()) {
-                Ingredient ingredient = unifiedIngredientManager.createIngredient(typedIngredient.get(), bookmarkKey);
+                IIngredient ingredient = unifiedIngredientManager.createIngredient(typedIngredient.get(), bookmarkKey);
                 keyToIngredientCache.put(bookmarkKey, ingredient);
                 return Optional.of(ingredient);
             }
@@ -209,17 +203,17 @@ public class JEIIngredientService implements IngredientService {
     }
     
     @Override
-    public List<Ingredient> getIngredientsForKeys(List<String> bookmarkKeys) {
+    public List<IIngredient> getIngredientsForKeys(List<String> bookmarkKeys) {
         Optional<IIngredientManager> managerOpt = getIngredientManager();
         if (bookmarkKeys == null || bookmarkKeys.isEmpty() || managerOpt.isEmpty()) {
             return Collections.emptyList();
         }
         
-        List<Ingredient> result = new ArrayList<>();
+        List<IIngredient> result = new ArrayList<>();
         
         // Process all keys
         for (String key : bookmarkKeys) {
-            Optional<Ingredient> ingredient = getIngredientForKey(key);
+            Optional<IIngredient> ingredient = getIngredientForKey(key);
             ingredient.ifPresent(result::add);
         }
         
@@ -227,15 +221,15 @@ public class JEIIngredientService implements IngredientService {
     }
     
     @Override
-    public Optional<Ingredient> getIngredientFromObject(Object ingredientObj) {
+    public Optional<IIngredient> getIngredientFromObject(Object ingredientObj) {
         Optional<IIngredientManager> managerOpt = getIngredientManager();
         if (ingredientObj == null || managerOpt.isEmpty()) {
             return Optional.empty();
         }
         
         // If it's already a unified Ingredient, return it
-        if (ingredientObj instanceof Ingredient) {
-            return Optional.of((Ingredient) ingredientObj);
+        if (ingredientObj instanceof IIngredient) {
+            return Optional.of((IIngredient) ingredientObj);
         }
         
         // Get a typed ingredient and create a new Ingredient
@@ -260,8 +254,8 @@ public class JEIIngredientService implements IngredientService {
         IIngredientManager ingredientManager = managerOpt.get();
         
         // If it's already a unified Ingredient, get the wrapped ITypedIngredient
-        if (ingredientObj instanceof Ingredient) {
-            return Optional.ofNullable(((Ingredient) ingredientObj).getTypedIngredient());
+        if (ingredientObj instanceof IIngredient) {
+            return Optional.ofNullable(((IIngredient) ingredientObj).getTypedIngredient());
         }
         
         // If it's already an ITypedIngredient, return it
@@ -271,13 +265,12 @@ public class JEIIngredientService implements IngredientService {
         
         // Try to create an ITypedIngredient from the raw object
         // Cast to appropriate wildcard type to match the method's return type
-        @SuppressWarnings("unchecked")
         Optional<ITypedIngredient<?>> result = (Optional<ITypedIngredient<?>>) (Optional<?>) ingredientManager.createTypedIngredient(ingredientObj);
         return result;
     }
     
     @Override
-    public List<Ingredient> getCachedIngredientsForFolder(int folderId) {
+    public List<IIngredient> getCachedIngredientsForFolder(int folderId) {
         // Return cached ingredients if available
         if (ingredientCache.containsKey(folderId)) {
             return ingredientCache.get(folderId);
@@ -293,7 +286,7 @@ public class JEIIngredientService implements IngredientService {
         }
         
         List<String> bookmarkKeys = folder.get().getBookmarkKeys();
-        List<Ingredient> ingredients = getIngredientsForKeys(bookmarkKeys);
+        List<IIngredient> ingredients = getIngredientsForKeys(bookmarkKeys);
         
         // Cache the result
         ingredientCache.put(folderId, ingredients);

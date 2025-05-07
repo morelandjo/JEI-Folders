@@ -5,7 +5,7 @@ import com.jeifolders.core.FolderManager;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
 import com.jeifolders.ui.interaction.FolderInteractionHandler;
-import com.jeifolders.ui.util.ExclusionHandler;
+import com.jeifolders.ui.util.UiExclusionHandler;
 import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.renderer.Rect2i;
@@ -492,7 +492,7 @@ public class FolderLayoutService {
     /**
      * Gets the exclusion handler for JEI integration
      */
-    public ExclusionHandler getExclusionHandler() {
+    public UiExclusionHandler getExclusionHandler() {
         return exclusionManager.getExclusionHandler();
     }
     

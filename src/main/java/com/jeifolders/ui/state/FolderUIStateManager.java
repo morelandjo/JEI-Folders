@@ -1,6 +1,6 @@
 package com.jeifolders.ui.state;
 
-import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.ui.components.buttons.FolderButton;
 
 import java.util.ArrayList;
@@ -13,7 +13,7 @@ import java.util.List;
 public class FolderUIStateManager {
     // ----- Transient State (preserved across GUI rebuilds) -----
     private static Integer lastActiveFolderId = null;
-    private static List<Ingredient> lastBookmarkContents = new ArrayList<>();
+    private static List<IIngredient> lastBookmarkContents = new ArrayList<>();
     private static long lastGuiRebuildTime = 0;
     private static final long GUI_REBUILD_DEBOUNCE_TIME = 500;
     
@@ -89,7 +89,7 @@ public class FolderUIStateManager {
      * 
      * @param bookmarkContents The bookmark contents to cache
      */
-    public void updateBookmarkContentsCache(List<Ingredient> bookmarkContents) {
+    public void updateBookmarkContentsCache(List<IIngredient> bookmarkContents) {
         lastBookmarkContents = bookmarkContents != null ? 
             new ArrayList<>(bookmarkContents) : new ArrayList<>();
     }
@@ -99,7 +99,7 @@ public class FolderUIStateManager {
      * 
      * @return The cached bookmark contents
      */
-    public List<Ingredient> getBookmarkContentsCache() {
+    public List<IIngredient> getBookmarkContentsCache() {
         return new ArrayList<>(lastBookmarkContents);
     }
     

@@ -3,7 +3,8 @@ package com.jeifolders.ui.components.contents;
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.JEIIntegrationFactory;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.JEIIntegrationService;
 import com.jeifolders.integration.impl.JeiBookmarkAdapter;
 import com.jeifolders.integration.impl.JeiContentsImpl;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
@@ -120,22 +121,22 @@ public class FolderContentsView implements HitTestable {
         FolderInteractionHandler interactionHandler
     ) {
         try {
-            // Get the JEI runtime wrapper
-            var jeiRuntimeWrapper = JEIIntegrationFactory.getJEIRuntime();
+            // Get the JEI integration service
+            var jeiIntegrationService = JEIIntegrationAPI.getIntegrationService();
             
-            if (jeiRuntimeWrapper == null) {
-                ModLogger.warn("Cannot create display - JEI runtime not available");
+            if (jeiIntegrationService == null) {
+                ModLogger.warn("Cannot create display - JEI integration service not available");
                 return Optional.empty();
             }
             
-            // Extract the actual IJeiRuntime from the wrapper
-            var jeiRuntimeOptional = jeiRuntimeWrapper.getJeiRuntime();
-            if (!jeiRuntimeOptional.isPresent()) {
-                ModLogger.warn("Cannot create display - IJeiRuntime not available from wrapper");
+            // Get the actual IJeiRuntime object from the Optional
+            var jeiRuntimeOptional = jeiIntegrationService.getJeiRuntime();
+            if (jeiRuntimeOptional.isEmpty()) {
+                ModLogger.warn("Cannot create display - IJeiRuntime not available from service");
                 return Optional.empty();
             }
             
-            // Get the actual IJeiRuntime object
+            // Extract the actual IJeiRuntime from the Optional
             var jeiRuntime = jeiRuntimeOptional.get();
             
             // Create a bookmark list
@@ -269,8 +270,19 @@ public class FolderContentsView implements HitTestable {
      * Sets the ingredients to be displayed.
      */
     public void setIngredients(List<BookmarkIngredient> bookmarkIngredients) {
+        ModLogger.info("DIRECT-TRACKING: FolderContentsView.setIngredients called with {} ingredients", 
+            bookmarkIngredients != null ? bookmarkIngredients.size() : 0);
+            
         if (bookmarkIngredients == null) {
             bookmarkIngredients = new ArrayList<>();
+        }
+        
+        // If empty ingredients are passed but the bookmarkList has ingredients, use those instead
+        if (bookmarkIngredients.isEmpty() && !bookmarkList.isEmpty()) {
+            List<BookmarkIngredient> existingIngredients = bookmarkList.getAllBookmarks();
+            ModLogger.info("DIRECT-TRACKING: Empty ingredient list passed, using {} ingredients from bookmarkList", 
+                existingIngredients.size());
+            bookmarkIngredients = existingIngredients;
         }
         
         // Store the new ingredients
@@ -280,8 +292,17 @@ public class FolderContentsView implements HitTestable {
             // Set ingredients in the bookmarks list
             bookmarkList.setIngredients(bookmarkIngredients);
             
-            // Set ingredients in the contents implementation
+            // Pass the actual ingredients to the JEI contents implementation
+            ModLogger.info("DIRECT-TRACKING: Setting {} ingredients in JEI contents implementation", bookmarkIngredients.size());
             contentsImpl.setIngredients(bookmarkIngredients);
+            
+            if (!bookmarkIngredients.isEmpty() && activeFolder != null) {
+                ModLogger.info("DIRECT-TRACKING: Configured {} ingredients for folder: {} (ID: {})",
+                    bookmarkIngredients.size(), activeFolder.getName(), activeFolder.getId());
+            } else if (bookmarkIngredients.isEmpty() && activeFolder != null) {
+                ModLogger.warn("DIRECT-TRACKING: Attempted to set empty ingredients list for folder '{}'", 
+                    activeFolder.getName());
+            }
         } catch (Exception e) {
             ModLogger.error("Error setting ingredients: {}", e.getMessage(), e);
         }

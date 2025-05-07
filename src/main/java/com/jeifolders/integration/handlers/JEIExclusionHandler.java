@@ -1,4 +1,4 @@
-package com.jeifolders.integration;
+package com.jeifolders.integration.handlers;
 
 import com.jeifolders.ui.util.UiExclusionHandler;
 import mezz.jei.api.gui.handlers.IGlobalGuiHandler;

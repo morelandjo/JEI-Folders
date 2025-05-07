@@ -14,7 +14,7 @@ import java.util.Set;
  * Handles exclusion areas for folder bookmarks.
  * Uses Minecraft's Rect2i class exclusively.
  */
-public class ExclusionHandler {
+public class UiExclusionHandler {
     // Primary storage uses Minecraft's Rect2i
     private final Set<Rect2i> exclusionAreas = new HashSet<>();
     

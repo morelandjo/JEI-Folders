@@ -1,93 +1,94 @@
 # JEI Integration Reorganization Plan
 
-## Current Issues
 
-The JEI integration package currently has:
+## Suggested File Structure
 
-- **22+ Java files** with overlapping responsibilities
-- **Multiple service layers** with complex interactions
-- **Inconsistent naming conventions** (`JEI` vs `Jei` prefixes)
-- **Redundant wrappers** for JEI types
-- **Scattered logic** for core operations like drag-and-drop
+```
+src/main/java/com/jeifolders/integration/
+├── api/                                # Public API interfaces
+│   ├── IngredientService.java          # Core ingredient service interface
+│   └── JEIFoldersAPI.java              # Public API facade
+├── core/                               # Core implementation classes
+│   ├── JEIPlugin.java                  # Main JEI plugin (entry point)
+│   ├── JEIRuntime.java                 # Unified runtime access
+│   ├── IngredientManager.java          # Centralized ingredient management
+│   └── BookmarkManager.java            # Bookmark management
+├── handlers/                           # Event and interaction handlers
+│   ├── DragDropHandler.java            # Drag and drop functionality
+│   ├── GhostIngredientHandler.java     # JEI ghost ingredient handling
+│   └── ExclusionHandler.java           # JEI exclusion handling
+├── model/                              # Data model classes
+│   ├── Ingredient.java                 # Unified ingredient model
+│   ├── BookmarkIngredient.java         # Bookmark-specific ingredient
+│   └── IngredientType.java             # Ingredient type enum
+└── util/                               # Utility classes
+    ├── IngredientHelper.java           # Helper for ingredient conversion
+    └── RenderHelper.java               # Rendering utilities
+```
+
+
+
+## Specific Recommendations
+
+### 1. Consolidate into Core Classes
+
+1. **Replace `JEIIntegration` with `JEIPlugin`**
+   - Keep your existing `src/main/java/com/jeifolders/integration/JEIPlugin.java` and retire `src/main/java/com/jeifolders/integration/JEIIntegration.java`
+   - Move handler implementations to separate files in `handlers/`
+
+2. **Consolidate Ingredient Services**
+   - Merge `IngredientServiceImpl`, `JEIIngredientService`, and `TypedIngredientHelper` into unified `IngredientManager`
+   - Keep your existing `IngredientManager` as the main implementation
+
+3. **Simplify Runtime Management**
+   - Use your existing `JEIRuntime` class as the central access point for JEI runtime
+
+### 2. Standardize Naming Convention
+
+1. **Use consistent capitalization**
+   - Use `JEI` prefix consistently (not `Jei`)
+   - Example: Change `JeiBookmarkAdapter` to `JEIBookmarkAdapter`
+
+2. **Use consistent naming patterns**
+   - Interface: `IIngredientService` 
+   - Implementation: `IngredientManager` or `DefaultIngredientService`
+
+### 3. Improve Ingredient System
+
+1. **Use your unified Ingredient class**
+   - Continue using the unified `Ingredient` class from `src/main/java/com/jeifolders/integration/ingredient/Ingredient.java` 
+   - Retire `TypedIngredient` and `BookmarkIngredient` classes after migration
+
+2. **Simplify ingredient creation**
+   - Create factory methods in `IngredientManager` for common ingredient types
+   - Implement serialization/deserialization in one place
+
+### 4. Reduce Redundancies
+
+1. **Remove duplicate implementations**
+   - `IngredientServiceImpl` and `JEIIngredientService` have significant overlap
+   - Keep the most comprehensive implementation and extend as needed
+
+2. **Consolidate helper methods**
+   - Move conversion methods from `TypedIngredientHelper` to `IngredientManager`
+
+### 5. Create a Clear API
+
+1. **Define a public API facade**
+   - Create `JEIFoldersAPI` as the main entry point for other modules
+   - Hide implementation details behind interfaces
+
+2. **Separate interfaces from implementations**
+   - Define clean interfaces in `api/` package
+   - Keep implementations in separate packages
 
 ## Implementation Strategy
 
-### Phase 1: Core Runtime Consolidation
+I suggest implementing these changes in phases:
 
-1. Create `JEIRuntime` class:
-   - Merge functionality from `JEIService`, `JEIServiceImpl`, and `JEIRuntimeWrapper`
-   - Implement as singleton with direct access to JEI runtime
-   - Define clear methods for common runtime operations
-
-2. Rename `JEIIntegration` to `JEIPlugin`:
-   - Keep IModPlugin implementation
-   - Move ghost ingredient handler to a separate class
-   - Simplify runtime initialization
-
-3. Update `JEIIntegrationFactory`:
-   - Simplify to use new unified classes
-   - Maintain factory pattern for backward compatibility during transition
-
-### Phase 2: Ingredient System Unification
-
-1. Create unified `Ingredient` class:
-   - Replace `TypedIngredient` and `BookmarkIngredient`
-   - Add type-safe conversion methods
-   - Support serialization/deserialization
-
-2. Create `IngredientManager` class:
-   - Consolidate `IngredientService`, `IngredientServiceImpl`, and `JEIIngredientService`
-   - Simplify the interface to essential methods
-   - Improve caching mechanism
-
-3. Migrate existing code to use the new classes:
-   - Update references in UI components
-   - Update serialization code in storage classes
-
-### Phase 3: UI Integration Simplification
-
-1. Create `DragAndDropHandler` class:
-   - Consolidate drag handling from `IngredientDragHandler`, `FolderGhostIngredientHandler`
-   - Simplify event handling
-   - Use Minecraft's native input handling
-
-2. Create `JEIDisplayAdapter` class:
-   - Merge functionality from `JeiBookmarkAdapter` and any rendering classes
-   - Simplify bookmark grid interaction
-
-3. Improve `UIExclusionManager`:
-   - Consolidate exclusion handling from multiple classes
-   - Use Minecraft's native rectangle utilities
-
-### Phase 4: Bookmark System Enhancement
-
-1. Create improved `BookmarkManager`:
-   - Merge functionality from `BookmarkService`, `BookmarkServiceImpl`, and `JEIBookmarkManager`
-   - Simplify bookmark operations
-   - Add robust event system
-
-2. Update bookmark listeners and hooks:
-   - Standardize event handling
-   - Improve documentation
-
-### Phase 5: Cleanup and Documentation
-
-1. Remove redundant classes
-2. Standardize naming conventions
-3. Add comprehensive documentation
-4. Create usage examples
-
-## Dependencies Between Components
-
-- `JEIRuntime` must be implemented first as other components depend on it
-- `Ingredient` system should be next as it's used by most other components
-- UI components can be implemented in parallel after core components
-- Bookmark system should be last as it depends on all other components
-
-## Testing Strategy
-
-For each phase:
-1. Implement changes
-2. Verify basic functionality
-3. Test edge cases
-4. Ensure backward compatibility with existing mod features
+1. **Preparation Phase**: Create the new folder structure without changing code
+2. **Core Components**: Implement the core classes first (JEIPlugin, JEIRuntime)
+3. **Ingredient System**: Consolidate ingredient-related functionality
+4. **Handlers**: Move handler implementations to dedicated classes
+5. **API Refinement**: Clean up interfaces and create the public API
+6. **Final Cleanup**: Remove redundant files and update references

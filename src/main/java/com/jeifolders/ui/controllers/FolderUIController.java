@@ -3,9 +3,9 @@ package com.jeifolders.ui.controllers;
 import com.jeifolders.data.Folder;
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.JEIRuntime;
-import com.jeifolders.integration.TypedIngredient;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.IngredientService;
+import com.jeifolders.integration.ingredient.Ingredient;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.components.buttons.FolderButtonTextures;
 import com.jeifolders.ui.components.contents.FolderContentsView;
@@ -115,7 +115,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             controller.connectComponents(folderManager);
             
             isInitialized = true;
-            ModLogger.error("[INIT-DEBUG] FolderButtonSystem initialized with explicit FolderManager");
+            ModLogger.debug("[INIT-DEBUG] FolderButtonSystem initialized with explicit FolderManager");
         }
     }
     
@@ -136,7 +136,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         // Update layout positions and bookmark display bounds
         updateLayoutPositions();
         
-        ModLogger.error("[INIT-DEBUG] FolderUIController explicitly connected to FolderManager");
+        ModLogger.debug("[INIT-DEBUG] FolderUIController explicitly connected to FolderManager");
     }
     
     /**
@@ -195,6 +195,92 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
         }
         
         ModLogger.debug("FolderButtonSystem initialization complete");
+    }
+    
+    /**
+     * Initialize the controller
+     * Called during mod startup to prepare the folder system
+     */
+    public void initialize() {
+        ModLogger.debug("FolderUIController initialize called");
+        
+        // Reset any cached state
+        firstTimeLoaded = true;
+        ticksAfterInit = 0;
+        
+        // Connect components and ensure proper initialization
+        connectComponents(FolderManager.getInstance());
+        
+        // Setup JEI integration
+        setupJeiIntegration();
+        
+        ModLogger.debug("FolderUIController initialization complete");
+    }
+    
+    /**
+     * Loads data from storage and initializes UI state
+     */
+    public void loadData() {
+        ModLogger.debug("FolderUIController loadData called");
+        
+        // Ensure storage is loaded
+        storageService.loadDataIfNeeded();
+        
+        // Rebuild folders from data
+        loadFolders();
+        
+        // Update layout
+        updateLayoutPositions();
+        
+        // Refresh bookmark display if needed
+        if (uiStateManager.hasActiveFolder()) {
+            refreshBookmarkDisplay();
+        }
+        
+        ModLogger.debug("FolderUIController data loading complete");
+    }
+    
+    /**
+     * Handles ingredient focus requests
+     * 
+     * @param ingredient The ingredient to focus on
+     * @return true if the focus was handled
+     */
+    public boolean handleIngredientFocus(com.jeifolders.integration.api.IIngredient ingredient) {
+        if (ingredient == null) {
+            return false;
+        }
+        
+        // Use JEI integration to focus on the ingredient
+        return JEIIntegrationAPI.getIntegrationService().showIngredientInJEI(ingredient);
+    }
+    
+    /**
+     * Adds an ingredient to the current active folder
+     * 
+     * @param ingredient The ingredient to add
+     * @return true if the ingredient was added
+     */
+    public boolean handleAddToCurrentFolder(com.jeifolders.integration.api.IIngredient ingredient) {
+        if (ingredient == null || !uiStateManager.hasActiveFolder()) {
+            return false;
+        }
+        
+        Folder activeFolder = uiStateManager.getActiveFolder().getFolder();
+        if (activeFolder == null) {
+            return false;
+        }
+        
+        // Add the ingredient to the folder
+        IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
+        boolean added = ingredientService.addIngredientToFolder(activeFolder.getId(), ingredient);
+        
+        if (added) {
+            // Refresh the bookmark display
+            refreshBookmarkDisplay();
+        }
+        
+        return added;
     }
     
     /**
@@ -453,7 +539,93 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
             return false;
         }
         
-        return interactionHandler.handleIngredientDrop(mouseX, mouseY, ingredient, uiStateManager.areFoldersVisible());
+        if (ingredient instanceof Ingredient) {
+            handleIngredientDrop((int) mouseX, (int) mouseY, (Ingredient) ingredient);
+            return true;
+        }
+        
+        return false;
+    }
+    
+    private void handleIngredientDrop(int mouseX, int mouseY, Ingredient ingredient) {
+        ModLogger.debug("Handling ingredient drop at {},{}", mouseX, mouseY);
+        
+        if (ingredient == null) {
+            ModLogger.warn("Attempted to handle null ingredient drop");
+            return;
+        }
+        
+        // Check if it's dropped on a folder button
+        for (FolderButton button : uiStateManager.getFolderButtons()) {
+            if (button.isMouseOver(mouseX, mouseY)) {
+                handleDropOnFolder(button, ingredient);
+                return;
+            }
+        }
+        
+        // Check if it's dropped on the bookmark display
+        if (displayManager.getBookmarkDisplay() != null && 
+            displayManager.getBookmarkDisplay().isMouseOver(mouseX, mouseY) &&
+            displayManager.getBookmarkDisplay().getActiveFolder() != null) {
+            
+            handleDropOnActiveFolder(ingredient);
+        }
+    }
+    
+    private void handleDropOnFolder(FolderButton button, Ingredient ingredient) {
+        if (button == null || ingredient == null) return;
+        
+        Folder folder = button.getFolder();
+        if (folder == null) return;
+        
+        ModLogger.info("Adding ingredient to folder: {}", folder.getName());
+        
+        try {
+            IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
+            
+            // Add the ingredient to the folder
+            boolean added = ingredientService.addIngredientToFolder(folder.getId(), ingredient);
+            
+            if (added) {
+                ModLogger.info("Successfully added ingredient to folder: {}", folder.getName());
+                if (displayManager.getBookmarkDisplay() != null && 
+                    displayManager.getBookmarkDisplay().getActiveFolder() != null && 
+                    displayManager.getBookmarkDisplay().getActiveFolder().getId() == folder.getId()) {
+                    
+                    // Refresh the display if this folder is currently active
+                    refreshBookmarkDisplay();
+                }
+            } else {
+                ModLogger.info("Ingredient was already in folder: {}", folder.getName());
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error handling ingredient drop on folder: {}", e.getMessage(), e);
+        }
+    }
+    
+    private void handleDropOnActiveFolder(Ingredient ingredient) {
+        if (displayManager.getBookmarkDisplay() == null || ingredient == null) return;
+        
+        Folder activeFolder = displayManager.getBookmarkDisplay().getActiveFolder();
+        if (activeFolder == null) return;
+        
+        ModLogger.info("Adding ingredient to active folder: {}", activeFolder.getName());
+        
+        try {
+            IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
+            
+            // Add the ingredient to the folder
+            boolean added = ingredientService.addIngredientToFolder(activeFolder.getId(), ingredient);
+            
+            if (added) {
+                ModLogger.info("Successfully added ingredient to active folder: {}", activeFolder.getName());
+                refreshBookmarkDisplay();
+            } else {
+                ModLogger.info("Ingredient was already in active folder: {}", activeFolder.getName());
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error handling ingredient drop on active folder: {}", e.getMessage(), e);
+        }
     }
     
     @Override
@@ -508,8 +680,7 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      */
     private void setupJeiIntegration() {
         // Register a callback to be notified when the JEI runtime becomes available
-        JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
-        jeiRuntime.registerRuntimeCallback(runtime -> {
+        JEIIntegrationAPI.getIntegrationService().registerRuntimeCallback(runtime -> {
             ModLogger.debug("JEI runtime available in FolderUIController");
             if (this != FolderUIController.getInstance()) {
                 ModLogger.warn("Runtime callback received by non-singleton FolderUIController instance");
@@ -524,10 +695,44 @@ public class FolderUIController extends AbstractWidget implements IngredientDrop
      * Sets the JEI runtime for this instance
      */
     public void setJeiRuntime(IJeiRuntime runtime) {
-        ModLogger.debug("JEI runtime provided to folder UI controller");
-        // Update to use the new JEIRuntime class
-        JEIIntegrationFactory.getJEIRuntime().setJeiRuntime(runtime);
-        rebuildFolders();
+        if (runtime == null) return;
+        
+        // Update the JEI runtime through the API
+        JEIIntegrationAPI.getIntegrationService().registerRuntimeCallback(r -> {
+            ModLogger.debug("JEI runtime provided to folder UI controller via callback");
+            rebuildFolders();
+        });
+    }
+    
+    /**
+     * Cleans up resources in preparation for reinitializing display components
+     */
+    public void cleanup() {
+        ModLogger.debug("Cleaning up FolderUIController resources");
+        
+        // Clean up the bookmark display if it exists
+        if (displayManager != null) {
+            displayManager.cleanupBookmarkDisplay();
+        }
+        
+        // Reset any cached state
+        firstTimeLoaded = false;
+        ticksAfterInit = 0;
+    }
+    
+    /**
+     * Creates necessary display components once JEI is available
+     */
+    public void createDisplayComponents() {
+        ModLogger.debug("Creating FolderUIController display components with JEI runtime");
+        
+        // Create bookmark display manager components
+        if (displayManager != null) {
+            displayManager.createBookmarkDisplay(true);
+        }
+        
+        // Update layout positions for the new components
+        updateLayoutPositions();
     }
     
     // Event handlers 

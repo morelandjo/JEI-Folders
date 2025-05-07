@@ -1,289 +1,255 @@
 package com.jeifolders.integration;
 
-import com.jeifolders.JEIFolders;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.data.IngredientCacheManager;
-import com.jeifolders.integration.impl.JEIIngredientService;
-import com.jeifolders.integration.ingredient.Ingredient;
-import com.jeifolders.integration.ingredient.IngredientManager;
+import com.jeifolders.integration.api.IIngredient;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.IngredientService;
+import com.jeifolders.integration.api.JEIIntegrationService;
+import com.jeifolders.integration.api.DragDropService;
 import com.jeifolders.ui.controllers.FolderUIController;
-import com.jeifolders.ui.util.IngredientDragManager;
-import com.jeifolders.ui.util.ExclusionHandler;
 import com.jeifolders.util.ModLogger;
-
-import mezz.jei.api.IModPlugin;
-import mezz.jei.api.JeiPlugin;
-import mezz.jei.api.constants.RecipeTypes;
-import mezz.jei.api.constants.VanillaTypes;
-import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
-import mezz.jei.api.gui.handlers.IGuiContainerHandler;
-import mezz.jei.api.helpers.IJeiHelpers;
-import mezz.jei.api.ingredients.IIngredientType;
 import mezz.jei.api.ingredients.ITypedIngredient;
-import mezz.jei.api.registration.IGuiHandlerRegistration;
-import mezz.jei.api.registration.IModIngredientRegistration;
-import mezz.jei.api.registration.IRecipeCatalystRegistration;
-import mezz.jei.api.registration.IRecipeRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
-import javax.annotation.Nonnull;
-import java.util.*;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * Main JEI plugin class for JEI-Folders integration.
- * Acts as the entry point for JEI integration.
+ * Central class for managing JEI integration.
  */
-@JeiPlugin
-public class JEIIntegration implements IModPlugin {
-    private static final ResourceLocation PLUGIN_ID = ResourceLocation.fromNamespaceAndPath(JEIFolders.MOD_ID, "jei_plugin");
+public class JEIIntegration {
+    // Singleton instance
+    private static JEIIntegration instance;
+
+    // Dependencies
+    private final FolderStorageService folderService;
+    private final IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
+    private final JEIIntegrationService integrationService = JEIIntegrationAPI.getIntegrationService();
+    private final DragDropService dragDropService = JEIIntegrationAPI.getDragDropService();
     
-    // Access the services through the appropriate instance getters
-    private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-    private final JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
-    
-    // Static instance of the exclusion handler
-    private static final ExclusionHandler exclusionHandler = new ExclusionHandler();
-
-    @Override
-    public ResourceLocation getPluginUid() {
-        return PLUGIN_ID;
-    }
-
-    @Override
-    public void registerGuiHandlers(@Nonnull IGuiHandlerRegistration registration) {
-        // Register our exclusion handler using the JEI-specific wrapper
-        registration.addGlobalGuiHandler(new JEIExclusionHandler(exclusionHandler));
-
-        // Register container handler to add folder areas to exclusion zones
-        // Use raw types with unchecked conversion to match JEI's API expectations
-        @SuppressWarnings("unchecked")
-        Class<AbstractContainerScreen<?>> screenClass = (Class<AbstractContainerScreen<?>>) (Class<?>) AbstractContainerScreen.class;
-        registration.addGuiContainerHandler(screenClass, new FolderAreaContainerHandler<>());
-        
-        // Register ghost ingredient handler for folder drag and drop
-        registration.addGhostIngredientHandler(screenClass, new FolderGhostIngredientHandler<>(screenClass));
-    }
-
-    @Override
-    public void onRuntimeAvailable(@Nonnull IJeiRuntime runtime) {
-        // Initialize the runtime directly instead of using JeiRuntimeHelper
-        initializeJeiRuntime(runtime);
-        
-        // Initialize components that specifically need runtime access
-        IngredientDragManager.getInstance().setJeiRuntime(runtime);
-        initializeFolderButton(runtime);
+    /**
+     * Private constructor for singleton pattern
+     */
+    private JEIIntegration(FolderStorageService folderService) {
+        this.folderService = folderService;
     }
     
     /**
-     * Initializes the JEI runtime and sets up all necessary components.
-     * This should be called when the JEI runtime becomes available.
+     * Gets the singleton instance
      * 
-     * @param runtime The JEI runtime instance
+     * @param folderService The folder storage service
+     * @return The JEI integration instance
      */
-    private void initializeJeiRuntime(IJeiRuntime runtime) {
-        // Set the runtime in the JEIRuntime
-        jeiRuntime.setJeiRuntime(runtime);
-        
-        // Request data to be loaded now that JEI is available
-        FolderStorageService.getInstance().loadData();
-        
-        // Force a UI refresh to make folders visible immediately
-        Minecraft.getInstance().execute(() -> {
-            if (FolderUIController.isInitialized()) {
-                FolderUIController.getInstance().rebuildFolders();
-            }
+    public static synchronized JEIIntegration getInstance(FolderStorageService folderService) {
+        if (instance == null) {
+            instance = new JEIIntegration(folderService);
+        }
+        return instance;
+    }
+    
+    /**
+     * Called when a screen is displayed to register any JEI handlers
+     * 
+     * @param screen The screen being displayed
+     * @return true if the screen is handled
+     */
+    public boolean onScreenDisplay(Screen screen) {
+        // No specific logic needed here currently
+        return false;
+    }
+    
+    /**
+     * Checks if drag is allowed for the given ingredient
+     * 
+     * @param object The object being dragged
+     * @return true if dragging is allowed
+     */
+    public boolean isDragAllowed(Object object) {
+        // Implemented in subclasses
+        return true;
+    }
+    
+    /**
+     * Checks if JEI is available.
+     * 
+     * @return true if JEI is available, false otherwise
+     */
+    public static boolean isJeiAvailable() {
+        return JEIIntegrationAPI.getIntegrationService().isJeiRuntimeAvailable();
+    }
+    
+    /**
+     * Called when JEI runtime becomes available.
+     */
+    public void onJeiStarted() {
+        ModLogger.debug("JEI started - initializing folders");
+        // Load the folder data when JEI becomes available
+        FolderUIController.getInstance().loadData();
+    }
+    
+    /**
+     * Registers a callback for when the JEI runtime becomes available
+     * 
+     * @param callback The callback to run
+     */
+    public static void registerRuntimeCallback(Consumer<IJeiRuntime> callback) {
+        JEIIntegrationAPI.getIntegrationService().registerRuntimeCallback(callback);
+    }
+    
+    /**
+     * Registers a callback to initialize folder integration
+     */
+    public void registerFolderIntegrationCallback() {
+        JEIIntegrationAPI.getIntegrationService().registerRuntimeCallback(r -> {
+            onJeiStarted();
         });
     }
-
+    
     /**
-     * Checks if the JEI runtime is currently available
+     * Gets the current JEI runtime, if available.
      * 
-     * @return true if JEI runtime is available, false otherwise
+     * @return The JEI runtime
      */
-    public static boolean isJeiRuntimeAvailable() {
-        return JEIIntegrationFactory.getJEIRuntime().getJeiRuntime().isPresent();
+    public Optional<IJeiRuntime> getJeiRuntime() {
+        return JEIIntegrationAPI.getIntegrationService().getJeiRuntime();
     }
-
-    private void initializeFolderButton(IJeiRuntime runtime) {
-        // Get the folder button interface from FolderButtonSystem
-        if (FolderUIController.isInitialized()) {
-            FolderUIController folderButton = FolderUIController.getInstance();
-            folderButton.setJeiRuntime(runtime);
-            ModLogger.debug("JEI runtime provided to folder button");
-        } else {
-            ModLogger.warn("FolderButtonSystem not initialized when JEI runtime became available");
-        }
-    }
-
+    
     /**
-     * Registers a callback to be executed when the JEI runtime becomes available.
+     * Sets an ingredient as being dragged
      */
-    public static void registerRuntimeAvailableCallback(Consumer<IJeiRuntime> callback) {
-        JEIIntegrationFactory.getJEIRuntime().registerRuntimeCallback(callback);
-    }
-
-    public static void setJeiRuntime(IJeiRuntime runtime) {
-        JEIIntegrationFactory.getJEIRuntime().setJeiRuntime(runtime);
-    }
-
-    public static Optional<IJeiRuntime> getJeiRuntime() {
-        return JEIIntegrationFactory.getJEIRuntime().getJeiRuntime();
-    }
-
-    public static void setDraggedIngredient(ITypedIngredient<?> ingredient) {
-        JEIIntegrationFactory.getJEIRuntime().setDraggedIngredient(ingredient);
-    }
-
-    public static void clearDraggedIngredient() {
-        JEIIntegrationFactory.getJEIRuntime().clearDraggedIngredient();
-    }
-
-    public static Optional<ITypedIngredient<?>> getDraggedIngredient() {
-        Optional<Ingredient> unifiedIngredientOpt = JEIIntegrationFactory.getJEIRuntime().getDraggedIngredient();
-        if (unifiedIngredientOpt.isEmpty()) {
-            return Optional.empty();
+    public void setDraggedIngredient(IIngredient ingredient) {
+        if (ingredient == null) {
+            clearDraggedIngredient();
+            return;
         }
         
-        Ingredient unifiedIngredient = unifiedIngredientOpt.get();
-        ITypedIngredient<?> typedIngredient = unifiedIngredient.getTypedIngredient();
-        
+        // Get the ITypedIngredient from the IIngredient
+        ITypedIngredient<?> typedIngredient = ingredient.getTypedIngredient();
         if (typedIngredient != null) {
-            return Optional.of(typedIngredient);
+            JEIIntegrationAPI.getDragDropService().setDraggedIngredient(typedIngredient);
         } else {
-            ModLogger.error("Unified ingredient does not have a valid typed ingredient");
-            return Optional.empty();
+            ModLogger.warn("Cannot set dragged ingredient - no typed ingredient available");
+            clearDraggedIngredient();
         }
     }
     
-    public static void setActuallyDragging(boolean isDragging) {
-        JEIIntegrationFactory.getJEIRuntime().setActuallyDragging(isDragging);
-    }
-
     /**
-     * Gets the shared exclusion handler instance
+     * Clears any currently dragged ingredient
      */
-    public static ExclusionHandler getExclusionHandler() {
-        return exclusionHandler;
+    public void clearDraggedIngredient() {
+        JEIIntegrationAPI.getDragDropService().clearDraggedIngredient();
     }
-
+    
     /**
-     * Container handler specifically for folder areas
+     * Gets the currently dragged ingredient, if any
      */
-    private static class FolderAreaContainerHandler<T extends AbstractContainerScreen<?>> implements IGuiContainerHandler<T> {
-        @Override
-        @Nonnull
-        public List<Rect2i> getGuiExtraAreas(@Nonnull T containerScreen) {
-            List<Rect2i> areas = new ArrayList<>();
-
-            // Add the folder button exclusion zone if available
-            if (FolderUIController.lastDrawnArea.getWidth() > 0 && FolderUIController.lastDrawnArea.getHeight() > 0) {
-                areas.add(FolderUIController.lastDrawnArea);
-            }
-
-            return areas;
-        }
+    public Optional<IIngredient> getDraggedIngredient() {
+        Optional<IIngredient> unifiedIngredientOpt = JEIIntegrationAPI.getDragDropService().getDraggedIngredient();
+        return unifiedIngredientOpt;
     }
-
+    
     /**
-     * Ghost ingredient handler specifically for folder interactions
+     * Checks if an ingredient is currently being dragged
+     * 
+     * @return true if dragging is active
      */
-    private static class FolderGhostIngredientHandler<T extends AbstractContainerScreen<?>> implements IGhostIngredientHandler<T> {
-        private final Class<T> screenClass;
-        
-        public FolderGhostIngredientHandler(Class<T> screenClass) {
-            this.screenClass = screenClass;
-        }
-        
-        @Override
-        @Nonnull
-        public <I> List<Target<I>> getTargetsTyped(@Nonnull T screen, @Nonnull ITypedIngredient<I> ingredient, boolean doStart) {
-            // Get the controller for the current screen
-            FolderUIController controller = FolderUIController.getInstance();
-            if (controller == null || !controller.isBookmarkAreaAvailable()) {
-                return Collections.emptyList();
+    public boolean isDraggingIngredient() {
+        return getDraggedIngredient().isPresent();
+    }
+    
+    /**
+     * Sets whether a drag operation is in progress
+     */
+    public void setActuallyDragging(boolean isDragging) {
+        JEIIntegrationAPI.getDragDropService().setActuallyDragging(isDragging);
+    }
+    
+    /**
+     * Handles the preview drag operation to show where an ingredient will be dropped
+     * 
+     * @param x The x position
+     * @param y The y position
+     * @return true if the preview was handled
+     */
+    public boolean handleDragPreview(int x, int y) {
+        // No default implementation
+        return false;
+    }
+    
+    /**
+     * Handles ingredient drop operation
+     * 
+     * @param x The x position
+     * @param y The y position
+     * @return true if the drop was handled
+     */
+    public boolean handleDrop(int x, int y) {
+        // No default implementation
+        return false;
+    }
+    
+    /**
+     * Shows a tooltip for a hovered ingredient
+     * 
+     * @param graphics The graphics context
+     * @param ingredient The ingredient being hovered
+     * @param x The x position
+     * @param y The y position
+     */
+    public void showTooltip(Object graphics, Object ingredient, int x, int y) {
+        // Implemented in subclasses
+    }
+    
+    /**
+     * Registers handlers for JEI integration
+     */
+    public void registerHandlers() {
+        // Each integration implementation can register its own handlers
+        registerFolderIntegrationCallback();
+    }
+    
+    /**
+     * Handles a click on an ingredient
+     * 
+     * @param ingredient The ingredient being clicked
+     * @param mouseButton The mouse button used
+     * @return true if the click was handled
+     */
+    public boolean handleClick(Object ingredient, int mouseButton) {
+        try {
+            if (ingredientService == null) {
+                ModLogger.debug("Ingredient service not available");
+                return false;
             }
             
-            // Create targets for all folder buttons and the active bookmark display
-            List<Target<I>> targets = new ArrayList<>();
-            
-            // Add targets for folder buttons
-            controller.getFolderButtons().forEach(button -> {
-                targets.add(createFolderTarget(button, controller, ingredient));
-            });
-            
-            // Add target for the bookmark area if present
-            Rect2i bookmarkArea = controller.getBookmarkDisplayArea();
-            if (bookmarkArea != null) {
-                targets.add(createBookmarkAreaTarget(bookmarkArea, controller, ingredient));
+            // Handle different click behaviors based on mouse button
+            if (mouseButton == 0) { // Left click - focus on ingredient
+                if (ingredient instanceof ITypedIngredient) {
+                    // Create a unified ingredient from the JEI ingredient
+                    IIngredient unifiedIngredient = JEIIntegrationAPI.getIngredientService().createIngredient((ITypedIngredient<?>) ingredient);
+                    
+                    // Hand off to UI controller for focus handling
+                    FolderUIController controller = FolderUIController.getInstance();
+                    if (controller != null) {
+                        return controller.handleIngredientFocus(unifiedIngredient);
+                    }
+                }
+            } else if (mouseButton == 1) { // Right click - add to current folder
+                if (ingredient instanceof ITypedIngredient) {
+                    // Create a unified ingredient from the JEI ingredient
+                    IIngredient unifiedIngredient = JEIIntegrationAPI.getIngredientService().createIngredient((ITypedIngredient<?>) ingredient);
+                    
+                    // Hand off to UI controller for addition handling
+                    FolderUIController controller = FolderUIController.getInstance();
+                    if (controller != null) {
+                        return controller.handleAddToCurrentFolder(unifiedIngredient);
+                    }
+                }
             }
-            
-            return targets;
+        } catch (Exception e) {
+            ModLogger.error("Error handling ingredient click: {}", e.getMessage(), e);
         }
-        
-        @Override
-        public void onComplete() {
-            // Nothing to do here
-        }
-        
-        private <I> Target<I> createFolderTarget(
-                com.jeifolders.ui.components.buttons.FolderButton button,
-                FolderUIController controller,
-                ITypedIngredient<I> ingredient) {
-
-            return new Target<I>() {
-                @Override
-                public Rect2i getArea() {
-                    // Use button's area directly instead of creating a new Rect2i
-                    return new Rect2i(button.getX(), button.getY(), button.getWidth(), button.getHeight());
-                }
-
-                @Override
-                public void accept(I ingredientObj) {
-                    ModLogger.debug("[HOVER-FIX] Ingredient dropped on folder: {}", button.getFolder().getName());
-                    
-                    // Get the center of the button for the drop position
-                    int centerX = button.getX() + button.getWidth() / 2;
-                    int centerY = button.getY() + button.getHeight() / 2;
-                    
-                    // Create and pass the unified ingredient to the controller
-                    Ingredient unifiedIngredient = IngredientManager.getInstance().createIngredient(ingredient);
-                    controller.handleIngredientDrop(centerX, centerY, unifiedIngredient);
-                }
-            };
-        }
-        
-        private <I> Target<I> createBookmarkAreaTarget(
-                Rect2i bookmarkArea,
-                FolderUIController controller,
-                ITypedIngredient<I> ingredient) {
-                
-            return new Target<I>() {
-                @Override
-                public Rect2i getArea() {
-                    return bookmarkArea;
-                }
-                
-                @Override
-                public void accept(I ingredientObj) {
-                    ModLogger.debug("[HOVER-FIX] Ingredient dropped on bookmark display");
-                    
-                    // Calculate center of bookmark area for better drop accuracy
-                    int centerX = bookmarkArea.getX() + bookmarkArea.getWidth() / 2;
-                    int centerY = bookmarkArea.getY() + bookmarkArea.getHeight() / 2;
-                    
-                    // Create and pass the unified ingredient to the controller
-                    Ingredient unifiedIngredient = IngredientManager.getInstance().createIngredient(ingredient);
-                    controller.handleIngredientDrop(centerX, centerY, unifiedIngredient);
-                }
-            };
-        }
+        return false;
     }
 }

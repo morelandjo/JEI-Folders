@@ -1,127 +1,95 @@
 package com.jeifolders;
 
-import com.jeifolders.core.FolderManager;
-import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.JEIRuntime;
-import com.jeifolders.ui.controllers.FolderUIController;
-import com.jeifolders.ui.layout.FolderLayoutService;
 import com.jeifolders.data.FolderStorageService;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.JEIIntegrationService;
+import com.jeifolders.ui.controllers.FolderUIController;
+import com.jeifolders.ui.keybinds.KeyBindingManager;
 import com.jeifolders.util.ModLogger;
+import com.mojang.logging.LogUtils;
+import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
-import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.bus.api.IEventBus;
+import org.slf4j.Logger;
 
-@net.neoforged.fml.common.Mod(JEIFolders.MOD_ID)
+/**
+ * Main mod class for JEI-Folders.
+ */
+@Mod(JEIFolders.MOD_ID)
 public class JEIFolders {
     public static final String MOD_ID = "jeifolders";
-    
-    // Track whether data has been loaded this session to prevent double-loading
-    private boolean dataLoaded = false;
-    
-    /**
-     * Centralizes event registration logic
-     */
-    private static class EventRegistration {
-        private final JEIFolders mod;
-        private final IEventBus modEventBus;
-        
-        EventRegistration(JEIFolders mod, IEventBus modEventBus) {
-            this.mod = mod;
-            this.modEventBus = modEventBus;
-        }
-        
-        void registerAll() {
-            registerModEvents();
-            registerForgeEvents();
-            
-            ModLogger.info("JEI Folders events registered");
-        }
-        
-        void registerModEvents() {
-            modEventBus.addListener(mod::commonSetup);
-            modEventBus.addListener(mod::clientSetup);
-        }
-        
-        void registerForgeEvents() {
-            NeoForge.EVENT_BUS.addListener(mod::onWorldLoad);
-            NeoForge.EVENT_BUS.addListener(mod::onWorldUnload);
-            NeoForge.EVENT_BUS.addListener(mod::onPlayerLoggedIn);
-        }
-    }
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     public JEIFolders(IEventBus modEventBus) {
-        ModLogger.info("JEI Folders initializing");
+        // Register for mod setup events
+        modEventBus.addListener(this::clientSetup);
         
-        new EventRegistration(this, modEventBus).registerAll();
-    }
-
-    private void commonSetup(final FMLCommonSetupEvent event) {
-    }
-
-    private void clientSetup(final FMLClientSetupEvent event) {
-        ModLogger.info("Setting up JEI Folders client");
+        // Initialize key bindings
+        KeyBindingManager.initialize(modEventBus);
         
-        // Initialize FolderManager first and ensure it's fully initialized
-        FolderManager folderManager = FolderManager.getInstance();
-        ModLogger.error("[INIT-DEBUG] FolderManager initialized in JEIFolders.clientSetup");
+        // Initialize UI controller early to ensure it's ready before JEI initializes
+        FolderUIController.init();
         
-        // Initialize the layout service with the FolderManager instance
-        FolderLayoutService.init(folderManager);
-        
-        // Initialize the folder button system with the same FolderManager instance
-        FolderUIController.init(folderManager);
-        
-        // Initialize JEI integration using the new JEIRuntime class
-        JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
-        jeiRuntime.registerRuntimeCallback(runtime -> {
-            ModLogger.debug("JEI Runtime available, initializing JEI-Folders integration");
-            // Pass the JEI runtime to our main controller
-            FolderUIController.getInstance().setJeiRuntime(runtime);
-        });
-        
-        ModLogger.error("[INIT-DEBUG] JEI Folders client setup complete");
+        LOGGER.info("JEI-Folders initialized");
     }
 
     /**
-     * Helper method to load data when needed
-     * 
-     * @param source The source of the data load request for logging
-     * @param shouldCheck Whether to check the dataLoaded flag before loading
-     * @return True if data was loaded, false otherwise
+     * Client setup handler.
      */
-    private boolean loadDataIfNeeded(String source, boolean shouldCheck) {
-        if (!shouldCheck || !dataLoaded) {
-            ModLogger.debug("Loading folder data on {}", source);
+    private void clientSetup(final FMLClientSetupEvent event) {
+        // Initialize data services first
+        FolderStorageService.getInstance().initialize();
+        
+        // Re-initialize UI controller to ensure it's properly set up
+        FolderUIController controller = FolderUIController.getInstance();
+        controller.initialize();
+        
+        // Make sure the folders are visible by default
+        controller.getUIStateManager().setFoldersVisible(true);
+        
+        // Check for JEI runtime
+        JEIIntegrationService integrationService = JEIIntegrationAPI.getIntegrationService();
+        
+        if (integrationService.isJeiRuntimeAvailable()) {
+            ModLogger.info("JEI runtime already available during setup, initializing folders");
             FolderStorageService.getInstance().loadData();
-            dataLoaded = true;
-            
-            // Refresh UI after data load if system is initialized
-            if (FolderUIController.isInitialized()) {
-                FolderUIController.getInstance().refreshBookmarkDisplay();
-            }
-            return true;
-        }
-        return false;
-    }
-
-    private void onWorldLoad(LevelEvent.Load event) {
-        if (event.getLevel().isClientSide()) {
-            loadDataIfNeeded("world load", true);
-        }
-    }
-
-    private void onWorldUnload(LevelEvent.Unload event) {
-        if (event.getLevel().isClientSide()) {
-            ModLogger.debug("Saving folder data on world unload");
-            FolderStorageService.getInstance().saveData();
-            dataLoaded = false;
+            initializeWithJEI();
+        } else {
+            ModLogger.info("JEI runtime not yet available, folders will be initialized when JEI loads");
+            integrationService.registerRuntimeCallback(runtime -> {
+                ModLogger.info("JEI runtime now available, initializing folders");
+                // Perform a full initialization sequence now that JEI is ready
+                initializeWithJEI();
+            });
         }
     }
     
-    private void onPlayerLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        loadDataIfNeeded("player login", true);
+    /**
+     * Performs a complete initialization sequence with JEI runtime
+     */
+    private void initializeWithJEI() {
+        try {
+            // Ensure data is loaded
+            FolderStorageService.getInstance().loadData();
+            
+            // Force a complete UI controller re-initialization
+            FolderUIController controller = FolderUIController.getInstance();
+            
+            // Ensure folder visibility is set
+            controller.getUIStateManager().setFoldersVisible(true);
+            
+            // First clean up any existing resources
+            controller.cleanup();
+            
+            // Then create new display components
+            controller.createDisplayComponents();
+            
+            // Finally rebuild all folders with their contents
+            controller.rebuildFolders();
+            
+            ModLogger.info("JEI-Folders successfully initialized with JEI runtime");
+        } catch (Exception e) {
+            ModLogger.error("Failed to initialize JEI-Folders with JEI runtime", e);
+        }
     }
 }

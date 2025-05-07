@@ -4,8 +4,8 @@ import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
 import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.integration.TypedIngredient;
-import com.jeifolders.integration.TypedIngredientHelper;
-import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.model.TypedIngredientHelper;
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.ui.components.contents.FolderContentsView;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.ui.util.RefreshCoordinator;
@@ -114,8 +114,8 @@ public class BookmarkDisplayManager {
                 // Use the helper to get ingredients from the display
                 List<TypedIngredient> typedIngredients = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
                 
-                // Convert TypedIngredient list to Ingredient list
-                List<Ingredient> ingredients = TypedIngredientHelper.convertToIngredients(typedIngredients);
+                // Convert TypedIngredient list to IIngredient list
+                List<IIngredient> ingredients = TypedIngredientHelper.convertToIngredients(typedIngredients);
                 
                 // Update cache with the converted list
                 folderManager.updateBookmarkContentsCache(ingredients);
@@ -356,5 +356,26 @@ public class BookmarkDisplayManager {
             createBookmarkDisplay(true);
         }
         return bookmarkDisplay;
+    }
+    
+    /**
+     * Cleans up the bookmark display resources
+     * Used when reinitializing the display components after JEI becomes available
+     */
+    public void cleanupBookmarkDisplay() {
+        ModLogger.debug("Cleaning up bookmark display resources");
+        
+        // Save the current contents to cache before cleanup if possible
+        if (bookmarkDisplay != null) {
+            safeUpdateBookmarkContents();
+            
+            // Call cleanup on the bookmark display to release resources
+            bookmarkDisplay.cleanup();
+            
+            // Set to null so it will be recreated on next access
+            bookmarkDisplay = null;
+        }
+        
+        ModLogger.debug("Bookmark display cleanup complete");
     }
 }

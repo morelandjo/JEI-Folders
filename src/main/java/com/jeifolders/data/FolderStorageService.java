@@ -466,4 +466,37 @@ public class FolderStorageService {
         }
         return prunedCount;
     }
+
+    /**
+     * Saves a specific folder to persistent storage
+     * 
+     * @param folder The folder to save
+     * @return true if the folder was saved successfully
+     */
+    public boolean saveFolder(Folder folder) {
+        if (folder == null) {
+            return false;
+        }
+        
+        ensureDataLoaded();
+        folderRepository.updateFolder(folder);
+        markDirtyAndSave();
+        return true;
+    }
+
+    /**
+     * Initialize the storage service
+     * This ensures the config directory is set up and data is loaded
+     */
+    public void initialize() {
+        ModLogger.debug("FolderStorageService initialize called");
+        
+        // Set up the configuration directory
+        setupConfigDir();
+        
+        // Load the data if needed
+        loadDataIfNeeded();
+        
+        ModLogger.debug("FolderStorageService initialization complete");
+    }
 }

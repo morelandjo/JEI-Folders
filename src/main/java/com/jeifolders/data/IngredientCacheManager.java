@@ -1,6 +1,8 @@
 package com.jeifolders.data;
 
-import com.jeifolders.integration.JEIIntegrationFactory;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.JEIIntegrationService;
+import com.jeifolders.integration.api.IngredientService;
 import com.jeifolders.util.ModLogger;
 
 import java.util.Collection;
@@ -118,17 +120,17 @@ public class IngredientCacheManager {
             return;
         }
 
-        // Get the JEI runtime and check if it's available
-        var jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
+        // Get the JEI integration service
+        JEIIntegrationService integrationService = JEIIntegrationAPI.getIntegrationService();
         
         // JEI might not be initialized yet
-        if (!jeiRuntime.getJeiRuntime().isPresent()) {
+        if (!integrationService.isJeiRuntimeAvailable()) {
             ModLogger.debug("Cannot load ingredients - JEI runtime not available");
             return;
         }
 
         // Get the ingredient service that has the getIngredientForKey method
-        var ingredientService = JEIIntegrationFactory.getIngredientService();
+        IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
         
         // Load all bookmark ingredients
         for (String bookmarkKey : folder.getBookmarkKeys()) {
@@ -159,16 +161,16 @@ public class IngredientCacheManager {
             return false;
         }
         
-        // Get the JEI runtime and check if it's available
-        var jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
+        // Get the JEI integration service
+        JEIIntegrationService integrationService = JEIIntegrationAPI.getIntegrationService();
         
         // JEI might not be initialized yet
-        if (!jeiRuntime.getJeiRuntime().isPresent()) {
+        if (!integrationService.isJeiRuntimeAvailable()) {
             return false;
         }
 
         // Get the ingredient service that has the getIngredientForKey method
-        var ingredientService = JEIIntegrationFactory.getIngredientService();
+        IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
         
         try {
             // Try to parse the ingredient from the bookmark key

@@ -1,7 +1,9 @@
-package com.jeifolders.integration;
+package com.jeifolders.integration.core;
 
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.integration.api.IIngredient;
+import com.jeifolders.integration.api.JEIIntegrationService;
+import com.jeifolders.integration.api.DragDropService;
 import com.jeifolders.integration.ingredient.IngredientManager;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.runtime.IIngredientManager;
@@ -18,7 +20,7 @@ import java.util.function.Consumer;
  * Centralized access point for JEI runtime functionality.
  * Consolidates functionality previously spread across multiple service classes.
  */
-public class JEIRuntime {
+public class JEIRuntime implements JEIIntegrationService, DragDropService {
     private static final JEIRuntime INSTANCE = new JEIRuntime();
     
     // JEI runtime components
@@ -51,6 +53,7 @@ public class JEIRuntime {
      * 
      * @return Optional containing the JEI runtime instance, if available
      */
+    @Override
     public Optional<IJeiRuntime> getJeiRuntime() {
         return Optional.ofNullable(jeiRuntime);
     }
@@ -60,6 +63,7 @@ public class JEIRuntime {
      * 
      * @return Optional containing the ingredient manager, if available
      */
+    @Override
     public Optional<IIngredientManager> getIngredientManager() {
         if (ingredientManager != null) {
             return Optional.of(ingredientManager);
@@ -78,6 +82,7 @@ public class JEIRuntime {
      * 
      * @return Optional containing JEI helpers, if available
      */
+    @Override
     public Optional<IJeiHelpers> getJeiHelpers() {
         if (jeiRuntime != null) {
             return Optional.of(jeiRuntime.getJeiHelpers());
@@ -90,6 +95,7 @@ public class JEIRuntime {
      * 
      * @param runtime The JEI runtime instance
      */
+    @Override
     public void setJeiRuntime(IJeiRuntime runtime) {
         if (runtime == null) {
             ModLogger.error("Null runtime provided to JEIRuntime");
@@ -122,6 +128,7 @@ public class JEIRuntime {
      * 
      * @param callback The callback to register
      */
+    @Override
     public void registerRuntimeCallback(Consumer<IJeiRuntime> callback) {
         if (callback == null) {
             return;
@@ -137,10 +144,21 @@ public class JEIRuntime {
     }
     
     /**
+     * Checks if the JEI runtime is currently available
+     * 
+     * @return true if JEI runtime is available, false otherwise
+     */
+    @Override
+    public boolean isJeiRuntimeAvailable() {
+        return jeiRuntime != null;
+    }
+    
+    /**
      * Gets the currently dragged ingredient as a JEI ITypedIngredient
      * 
      * @return Optional containing the dragged ITypedIngredient, if any
      */
+    @Override
     public Optional<ITypedIngredient<?>> getDraggedITypedIngredient() {
         // Only return the dragged ingredient if we're actually dragging
         if (isActuallyDragging && currentDraggedIngredient != null) {
@@ -154,10 +172,11 @@ public class JEIRuntime {
      * 
      * @return Optional containing the dragged ingredient, if any
      */
+    @Override
     public Optional<IIngredient> getDraggedIngredient() {
         // Only return the dragged ingredient if we're actually dragging
         if (isActuallyDragging && currentDraggedIngredient != null) {
-            // Convert from JEI's ITypedIngredient to our unified IIngredient
+            // Convert from JEI's ITypedIngredient to our unified Ingredient
             return Optional.of(IngredientManager.getInstance().createIngredient(currentDraggedIngredient));
         }
         return Optional.empty();
@@ -168,14 +187,18 @@ public class JEIRuntime {
      * 
      * @param ingredient The ingredient being dragged
      */
+    @Override
     public void setDraggedIngredient(ITypedIngredient<?> ingredient) {
-        this.currentDraggedIngredient = ingredient;
-        ModLogger.debug("Dragged ingredient set: {}", ingredient);
+        if (ingredient != null) {
+            this.currentDraggedIngredient = ingredient;
+            ModLogger.debug("Dragged ingredient set: {}", ingredient);
+        }
     }
     
     /**
      * Clears the current dragged ingredient
      */
+    @Override
     public void clearDraggedIngredient() {
         this.currentDraggedIngredient = null;
         this.isActuallyDragging = false;
@@ -187,6 +210,7 @@ public class JEIRuntime {
      * 
      * @param dragging Whether an ingredient is being dragged
      */
+    @Override
     public void setActuallyDragging(boolean dragging) {
         this.isActuallyDragging = dragging;
         ModLogger.debug("Actually dragging set to: {}", dragging);
@@ -197,7 +221,49 @@ public class JEIRuntime {
      * 
      * @return true if an ingredient is being actively dragged
      */
+    @Override
     public boolean isActuallyDragging() {
         return this.isActuallyDragging;
+    }
+    
+    /**
+     * Shows an ingredient in JEI (focuses on it in the ingredient list)
+     * 
+     * @param ingredient The ingredient to show
+     * @return true if the ingredient was shown successfully
+     */
+    @Override
+    public boolean showIngredientInJEI(IIngredient ingredient) {
+        if (ingredient == null || jeiRuntime == null) {
+            return false;
+        }
+        
+        try {
+            // Get the typed ingredient from our unified ingredient
+            ITypedIngredient<?> typedIngredient = ingredient.getTypedIngredient();
+            
+            if (typedIngredient != null) {
+                // Get the JEI RecipesGui
+                var recipesGui = jeiRuntime.getRecipesGui();
+                
+                // Get the JEI helpers to access the focus factory
+                var jeiHelpers = jeiRuntime.getJeiHelpers();
+                var focusFactory = jeiHelpers.getFocusFactory();
+                
+                // Create a focus using the proper factory method with INPUT role
+                var focus = focusFactory.createFocus(
+                    mezz.jei.api.recipe.RecipeIngredientRole.INPUT, 
+                    typedIngredient
+                );
+                
+                // Show the ingredient in JEI
+                recipesGui.show(focus);
+                return true;
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error showing ingredient in JEI: {}", e.getMessage(), e);
+        }
+        
+        return false;
     }
 }

@@ -1,9 +1,11 @@
-package com.jeifolders.integration;
+package com.jeifolders.integration.core;
 
 import com.jeifolders.JEIFolders;
 import com.jeifolders.data.FolderStorageService;
 import com.jeifolders.integration.api.JEIIntegrationAPI;
 import com.jeifolders.integration.api.JEIIntegrationService;
+import com.jeifolders.integration.handlers.FolderAreaContainerHandler;
+import com.jeifolders.integration.handlers.FolderGhostIngredientHandler;
 import com.jeifolders.integration.handlers.GhostIngredientHandler;
 import com.jeifolders.integration.handlers.JEIExclusionHandler;
 import com.jeifolders.ui.controllers.FolderUIController;
@@ -11,19 +13,13 @@ import com.jeifolders.ui.util.UiExclusionHandler;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
-import mezz.jei.api.gui.handlers.IGuiContainerHandler;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -34,7 +30,7 @@ import java.util.function.Consumer;
 public class JEIPlugin implements IModPlugin {
     private static final ResourceLocation PLUGIN_ID = ResourceLocation.fromNamespaceAndPath(JEIFolders.MOD_ID, "jei_plugin");
     
-    // Use the JEIIntegrationAPI to get the integration service
+    // Access the JEI runtime directly using the unified class
     private final JEIIntegrationService integrationService = JEIIntegrationAPI.getIntegrationService();
     
     // Static instance of the exclusion handler
@@ -57,87 +53,29 @@ public class JEIPlugin implements IModPlugin {
         Class<AbstractContainerScreen<?>> screenClass = (Class<AbstractContainerScreen<?>>) (Class<?>) AbstractContainerScreen.class;
         registration.addGuiContainerHandler(screenClass, new FolderAreaContainerHandler<>());
         
-        // Register ghost ingredient handler for folder drag and drop
-        // Now using the refactored class from handlers package
+        // Register ghost ingredient handlers for folder drag and drop
+        // Using both handlers to ensure compatibility during transition
         registration.addGhostIngredientHandler(screenClass, new GhostIngredientHandler<>());
+        registration.addGhostIngredientHandler(screenClass, new FolderGhostIngredientHandler<>(screenClass));
     }
 
     @Override
     public void onRuntimeAvailable(@Nonnull IJeiRuntime runtime) {
-        ModLogger.info("JEI runtime becoming available in JEIPlugin");
-        
-        // Initialize the runtime directly
-        integrationService.setJeiRuntime(runtime);
+        // Initialize the runtime through the service
+        ((JEIRuntime) integrationService).setJeiRuntime(runtime);
         
         // Load data once JEI is available
         FolderStorageService.getInstance().loadData();
         
         // Force a UI refresh to make folders visible immediately
         Minecraft.getInstance().execute(() -> {
-            ModLogger.info("Executing JEI runtime initialization tasks");
-            
-            // Initialize the controller if needed
-            if (!FolderUIController.isInitialized()) {
-                ModLogger.info("FolderUIController not initialized - initializing now");
-                FolderUIController.init();
+            if (FolderUIController.isInitialized()) {
+                FolderUIController.getInstance().rebuildFolders();
             }
-            
-            FolderUIController controller = FolderUIController.getInstance();
-            
-            // Always force visibility to true
-            controller.getUIStateManager().setFoldersVisible(true);
-            
-            // Clean up and re-create components
-            controller.cleanup();
-            controller.createDisplayComponents();
-            
-            // Force a rebuild to ensure everything is displayed
-            controller.rebuildFolders();
-            
-            // Directly add to current screen if possible
-            Screen currentScreen = Minecraft.getInstance().screen;
-            if (currentScreen instanceof AbstractContainerScreen) {
-                ModLogger.info("Adding controller to current screen");
-                
-                // Use the correct methods to add to screen
-                if (!currentScreen.renderables.contains(controller)) {
-                    currentScreen.renderables.add(controller);
-                }
-                
-                // Add to the children list using reflection to avoid generics issues
-                try {
-                    @SuppressWarnings("unchecked")
-                    List<net.minecraft.client.gui.components.events.GuiEventListener> listeners = 
-                            (List<net.minecraft.client.gui.components.events.GuiEventListener>)currentScreen.children();
-                    if (!listeners.contains(controller)) {
-                        // Use the add method directly to avoid type issues
-                        listeners.add(controller);
-                    }
-                } catch (Exception e) {
-                    ModLogger.error("Failed to add controller to screen children: {}", e.getMessage());
-                }
-            }
-            
-            ModLogger.info("JEI runtime initialization completed");
         });
-    }
-    
-    /**
-     * Container handler specifically for folder areas
-     */
-    private static class FolderAreaContainerHandler<T extends AbstractContainerScreen<?>> implements IGuiContainerHandler<T> {
-        @Override
-        @Nonnull
-        public List<Rect2i> getGuiExtraAreas(@Nonnull T containerScreen) {
-            List<Rect2i> areas = new ArrayList<>();
-
-            // Add the folder button exclusion zone if available
-            if (FolderUIController.lastDrawnArea.getWidth() > 0 && FolderUIController.lastDrawnArea.getHeight() > 0) {
-                areas.add(FolderUIController.lastDrawnArea);
-            }
-
-            return areas;
-        }
+        
+        // Initialize the folder UI with the JEI runtime
+        initializeFolderUI(runtime);
     }
     
     /**
@@ -163,19 +101,17 @@ public class JEIPlugin implements IModPlugin {
     
     /**
      * Registers a callback to be executed when the JEI runtime becomes available.
-     * Moved from JEIIntegration for consolidation.
      */
-    public static void registerRuntimeCallback(Consumer<IJeiRuntime> callback) {
+    public static void registerRuntimeAvailableCallback(Consumer<IJeiRuntime> callback) {
         JEIIntegrationAPI.getIntegrationService().registerRuntimeCallback(callback);
     }
 
     /**
      * Checks if the JEI runtime is currently available
-     * Moved from JEIIntegration for consolidation.
      * 
      * @return true if JEI runtime is available, false otherwise
      */
-    public static boolean isJeiAvailable() {
+    public static boolean isJeiRuntimeAvailable() {
         return JEIIntegrationAPI.getIntegrationService().isJeiRuntimeAvailable();
     }
 }

@@ -1,8 +1,8 @@
 package com.jeifolders.integration.impl;
 
 import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.IngredientService;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.IngredientService;
 import com.jeifolders.ui.util.MouseHitUtil;
 import com.jeifolders.util.ModLogger;
 
@@ -115,25 +115,42 @@ public class JeiContentsImpl {
      * Sets the ingredients to be displayed.
      */
     public void setIngredients(List<BookmarkIngredient> bookmarkIngredients) {
-        ModLogger.debug("Setting {} ingredients in JEI contents implementation", bookmarkIngredients.size());
+        ModLogger.info("DIRECT-TRACKING: JeiContentsImpl.setIngredients called with {} ingredients", 
+            bookmarkIngredients != null ? bookmarkIngredients.size() : 0);
         
         try {
-            // Clear existing bookmarks first
-            bookmarkAdapter.getFolderBookmarkList().clear();
+            // If we're being asked to clear but we have ingredients, skip it
+            if ((bookmarkIngredients == null || bookmarkIngredients.isEmpty()) && 
+                !bookmarkAdapter.getFolderBookmarkList().isEmpty()) {
+                ModLogger.info("DIRECT-TRACKING: Skipping clear operation when we already have ingredients");
+                // Just force layout update without clearing
+                updateLayout(true);
+                return;
+            }
             
             // Convert the BookmarkIngredient wrappers to JEI ingredients
             List<ITypedIngredient<?>> jeiIngredients = unwrapIngredients(bookmarkIngredients);
             
-            // Add the new ingredients one by one
-            for (ITypedIngredient<?> ingredient : jeiIngredients) {
-                bookmarkAdapter.addBookmark(ingredient);
+            if (!jeiIngredients.isEmpty()) {
+                ModLogger.info("DIRECT-TRACKING: Setting {} JEI ingredients", jeiIngredients.size());
+                
+                // Clear existing bookmarks first
+                bookmarkAdapter.getFolderBookmarkList().clear();
+                
+                // Add the new ingredients one by one
+                for (ITypedIngredient<?> ingredient : jeiIngredients) {
+                    bookmarkAdapter.addBookmark(ingredient);
+                }
+                
+                // Make sure listeners are notified of the change
+                bookmarkAdapter.notifyListeners();
+                
+                // Force layout update
+                updateLayout(true);
+                ModLogger.info("DIRECT-TRACKING: Successfully set JEI ingredients and updated layout");
+            } else if (bookmarkIngredients != null && !bookmarkIngredients.isEmpty()) {
+                ModLogger.warn("DIRECT-TRACKING: Received non-empty bookmarkIngredients but got empty JEI ingredients after unwrapping");
             }
-            
-            // Make sure listeners are notified of the change
-            bookmarkAdapter.notifyListeners();
-            
-            // Force layout update
-            updateLayout(true);
         } catch (Exception e) {
             ModLogger.error("Error setting ingredients in JEI contents: {}", e.getMessage(), e);
         }
@@ -143,17 +160,64 @@ public class JeiContentsImpl {
      * Unwraps BookmarkIngredient objects to JEI ITypedIngredient objects.
      */
     private List<ITypedIngredient<?>> unwrapIngredients(List<BookmarkIngredient> bookmarkIngredients) {
+        ModLogger.info("DIRECT-TRACKING: Unwrapping {} BookmarkIngredient objects", 
+            bookmarkIngredients != null ? bookmarkIngredients.size() : 0);
+            
         if (bookmarkIngredients == null || bookmarkIngredients.isEmpty()) {
+            ModLogger.info("DIRECT-TRACKING: No bookmarkIngredients to unwrap");
             return Collections.emptyList();
         }
         
         List<ITypedIngredient<?>> result = new ArrayList<>(bookmarkIngredients.size());
-        for (BookmarkIngredient ingredient : bookmarkIngredients) {
-            if (ingredient != null && ingredient.getTypedIngredient() != null) {
-                result.add(ingredient.getTypedIngredient());
+        int nullCount = 0;
+        int nullWrappedCount = 0;
+        
+        for (int i = 0; i < bookmarkIngredients.size(); i++) {
+            BookmarkIngredient ingredient = bookmarkIngredients.get(i);
+            if (ingredient == null) {
+                nullCount++;
+                ModLogger.warn("DIRECT-TRACKING: Skipping null BookmarkIngredient at index {}", i);
+                continue;
+            }
+            
+            // Log details about each ingredient we're trying to unwrap
+            ModLogger.info("DIRECT-TRACKING: BookmarkIngredient[{}] class={}, wrappedType={}", 
+                i, 
+                ingredient.getClass().getSimpleName(),
+                ingredient.getWrappedIngredient() != null ? ingredient.getWrappedIngredient().getClass().getSimpleName() : "null");
+            
+            Object typedIngredient = ingredient.getTypedIngredient();
+            if (typedIngredient != null) {
+                ModLogger.info("DIRECT-TRACKING: Found valid ITypedIngredient in BookmarkIngredient[{}]", i);
+                
+                if (typedIngredient instanceof ITypedIngredient) {
+                    result.add((ITypedIngredient<?>) typedIngredient);
+                } else {
+                    ModLogger.warn("DIRECT-TRACKING: typedIngredient is not an instance of ITypedIngredient: {}", 
+                        typedIngredient.getClass().getName());
+                }
+            } else {
+                nullWrappedCount++;
+                ModLogger.warn("DIRECT-TRACKING: BookmarkIngredient[{}] has null typedIngredient", i);
+                
+                // Try to examine what's in the wrapped ingredient
+                Object wrapped = ingredient.getWrappedIngredient();
+                if (wrapped != null) {
+                    ModLogger.info("DIRECT-TRACKING: Examining wrapped ingredient: class={}", 
+                        wrapped.getClass().getName());
+                        
+                    // If the wrapped ingredient is actually an ITypedIngredient itself, use that directly
+                    if (wrapped instanceof ITypedIngredient) {
+                        ModLogger.info("DIRECT-TRACKING: Wrapped ingredient is ITypedIngredient, adding it directly");
+                        result.add((ITypedIngredient<?>) wrapped);
+                    }
+                }
             }
         }
         
+        ModLogger.info("DIRECT-TRACKING: Unwrapped {} out of {} ingredients (skipped {} null, {} with null typedIngredient)",
+            result.size(), bookmarkIngredients.size(), nullCount, nullWrappedCount);
+            
         return result;
     }
 
@@ -239,24 +303,47 @@ public class JeiContentsImpl {
     }
 
     /**
-     * Gets the bookmark key at the given mouse coordinates.
+     * Gets the bookmark key at the given coordinates, if any.
+     *
+     * @param mouseX X coordinate
+     * @param mouseY Y coordinate
+     * @return Optional containing the key if found
      */
     public Optional<String> getBookmarkKeyAt(double mouseX, double mouseY) {
-        try {
-            // Get the ingredient service instance
-            IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
-            
-            // Get the ingredient under the mouse cursor
-            return this.contents.getIngredientUnderMouse(mouseX, mouseY)
-                .findFirst()
-                .flatMap(clickable -> Optional.ofNullable(clickable.getTypedIngredient()))
-                .map(ingredient -> ingredientService.getKeyForIngredient(ingredient));
-                
-        } catch (Exception e) {
-            ModLogger.error("Error getting bookmark key at position: {}", e.getMessage(), e);
+        if (!isWithinBounds(mouseX, mouseY)) {
+            return Optional.empty();
         }
-        
+
+        try {
+            // First check if we clicked a bookmark
+            Optional<BookmarkIngredient> ingredient = bookmarkAdapter.getBookmarkAt(mouseX, mouseY);
+            if (ingredient.isPresent()) {
+                IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
+                return Optional.ofNullable(ingredientService.getKeyForIngredient(ingredient.get().getTypedIngredient()));
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error getting bookmark key at mouse position: {}", e.getMessage(), e);
+        }
+
         return Optional.empty();
+    }
+
+    /**
+     * Checks if the coordinates are within the bounds of the grid.
+     *
+     * @param mouseX X coordinate
+     * @param mouseY Y coordinate
+     * @return True if the coordinates are within bounds
+     */
+    public boolean isWithinBounds(double mouseX, double mouseY) {
+        try {
+            // Convert JEI's ImmutableRect2i to Minecraft's Rect2i and use MouseHitUtil
+            Rect2i area = RectangleHelper.jeiToMinecraft(this.contents.getBackgroundArea());
+            return MouseHitUtil.isMouseOverRect(mouseX, mouseY, area);
+        } catch (Exception e) {
+            ModLogger.error("Error checking if mouse is within bounds: {}", e.getMessage(), e);
+            return false;
+        }
     }
 
     /**

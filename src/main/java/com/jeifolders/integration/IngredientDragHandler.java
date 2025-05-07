@@ -1,10 +1,11 @@
 package com.jeifolders.integration;
 
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.DragDropService;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.runtime.IIngredientManager;
-import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
@@ -15,12 +16,11 @@ import java.util.Optional;
  * Contains all the JEI API functionality that was previously in GlobalIngredientDragManager.
  */
 public class IngredientDragHandler {
+    // Reference to the drag drop service
+    private final DragDropService dragDropService = JEIIntegrationAPI.getDragDropService();
     private IIngredientManager ingredientManager;
     private ItemStack lastDraggedItem = ItemStack.EMPTY;
-    
-    // Use the new JEIRuntime instead of JEIService
-    private final JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
-    
+
     /**
      * Initialize with the JEI runtime
      * 
@@ -51,8 +51,8 @@ public class IngredientDragHandler {
             lastDraggedItem = carriedStack.copy();
             Optional<ITypedIngredient<ItemStack>> ingredient = ingredientManager.createTypedIngredient(VanillaTypes.ITEM_STACK, carriedStack);
             if (ingredient.isPresent()) {
-                jeiRuntime.setDraggedIngredient(ingredient.get());
-                jeiRuntime.setActuallyDragging(true);
+                dragDropService.setDraggedIngredient(ingredient.get());
+                dragDropService.setActuallyDragging(true);
                 ModLogger.debug("Detected potential JEI ingredient drag: {}", lastDraggedItem);
                 return true;
             }
@@ -65,7 +65,7 @@ public class IngredientDragHandler {
      */
     public void resetDragState() {
         lastDraggedItem = ItemStack.EMPTY;
-        jeiRuntime.clearDraggedIngredient();
+        dragDropService.clearDraggedIngredient();
     }
     
     /**
@@ -74,8 +74,8 @@ public class IngredientDragHandler {
      * @return The typed ingredient if available
      */
     public Optional<ITypedIngredient<?>> getDraggedIngredient() {
-        // Use the JEIRuntime's method to directly get the ITypedIngredient
-        return jeiRuntime.getDraggedITypedIngredient();
+        // Use the DragDropService's method to directly get the ITypedIngredient
+        return dragDropService.getDraggedITypedIngredient();
     }
     
     /**
@@ -84,6 +84,6 @@ public class IngredientDragHandler {
      * @return true if an ingredient is being actively dragged
      */
     public boolean isActuallyDragging() {
-        return jeiRuntime.isActuallyDragging();
+        return dragDropService.isActuallyDragging();
     }
 }

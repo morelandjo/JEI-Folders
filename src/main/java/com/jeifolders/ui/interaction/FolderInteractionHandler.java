@@ -2,7 +2,7 @@ package com.jeifolders.ui.interaction;
 
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
-import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.integration.ingredient.IngredientManager;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.controllers.FolderUIController;
@@ -186,14 +186,14 @@ public class FolderInteractionHandler {
             
             // Try direct approach first (same as bookmark display uses)
             try {
-                key = com.jeifolders.integration.TypedIngredientHelper.getKeyForIngredient(ingredient);
+                key = com.jeifolders.integration.model.TypedIngredientHelper.getKeyForIngredient(ingredient);
             } catch (Exception e) {
                 ModLogger.debug("[DROP-DEBUG] Failed to get key from direct ingredient: {}", e.getMessage());
             }
             
             // If direct key generation failed, try unified ingredient approach
             if (key == null || key.isEmpty()) {
-                Ingredient unifiedIngredient = IngredientManager.getInstance().createIngredient(ingredient);
+                IIngredient unifiedIngredient = IngredientManager.getInstance().createIngredient(ingredient);
                 if (unifiedIngredient == null) {
                     ModLogger.debug("Failed to create unified ingredient");
                     return false;
@@ -203,7 +203,7 @@ public class FolderInteractionHandler {
                     unifiedIngredient.getTypedIngredient() != null ? 
                     unifiedIngredient.getTypedIngredient().getClass().getName() : "null");
                 
-                key = com.jeifolders.integration.TypedIngredientHelper.getKeyForIngredient(unifiedIngredient);
+                key = com.jeifolders.integration.model.TypedIngredientHelper.getKeyForIngredient(unifiedIngredient);
             }
             
             // Final check if key generation succeeded

@@ -4,8 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.util.ModLogger;
 
 import mezz.jei.api.ingredients.IIngredientHelper;
@@ -61,13 +61,20 @@ public class IngredientManager {
     }
     
     /**
+     * Get the JEI ingredient manager if available
+     */
+    public Optional<IIngredientManager> getIngredientManager() {
+        return Optional.ofNullable(jeiIngredientManager);
+    }
+    
+    /**
      * Convert a JEI ITypedIngredient to our unified Ingredient with a specific key
      * 
      * @param typedIngredient The JEI typed ingredient
      * @param key The ingredient key to use
      * @return The unified ingredient with the specified key
      */
-    public Ingredient createIngredient(ITypedIngredient<?> typedIngredient, String key) {
+    public IIngredient createIngredient(ITypedIngredient<?> typedIngredient, String key) {
         return new Ingredient(typedIngredient, key);
     }
     
@@ -77,7 +84,7 @@ public class IngredientManager {
      * @param typedIngredient The JEI typed ingredient
      * @return The unified ingredient
      */
-    public Ingredient createIngredient(ITypedIngredient<?> typedIngredient) {
+    public IIngredient createIngredient(ITypedIngredient<?> typedIngredient) {
         return new Ingredient(typedIngredient);
     }
     
@@ -87,7 +94,7 @@ public class IngredientManager {
      * @param ingredient The raw ingredient object
      * @return The unified ingredient, or null if conversion failed
      */
-    public Ingredient createIngredient(Object ingredient) {
+    public IIngredient createIngredient(Object ingredient) {
         if (!isInitialized) {
             ModLogger.error("Cannot create ingredient before manager is initialized");
             return null;
@@ -110,13 +117,13 @@ public class IngredientManager {
      * @param ingredientType The ingredient type
      * @return A list of all ingredients of the specified type
      */
-    public <T> List<Ingredient> getAllIngredientsOfType(IngredientType ingredientType) {
+    public <T> List<IIngredient> getAllIngredientsOfType(IngredientType ingredientType) {
         if (!isInitialized) {
             ModLogger.error("Cannot get ingredients before manager is initialized");
             return Collections.emptyList();
         }
         
-        List<Ingredient> result = new ArrayList<>();
+        List<IIngredient> result = new ArrayList<>();
         
         // Handle specific ingredient types
         switch (ingredientType) {
@@ -146,7 +153,7 @@ public class IngredientManager {
             case FLUID:
                 // Get all fluids from JEI and convert them to our unified Ingredient
                 try {
-                    
+                    // Fluid handling would go here
                 } catch (Exception e) {
                     ModLogger.error("Error getting fluid ingredients: {}", e.getMessage());
                 }
@@ -165,13 +172,13 @@ public class IngredientManager {
      * 
      * @return A list of all ingredients
      */
-    public List<Ingredient> getAllIngredients() {
+    public List<IIngredient> getAllIngredients() {
         if (!isInitialized) {
             ModLogger.error("Cannot get all ingredients before manager is initialized");
             return Collections.emptyList();
         }
         
-        List<Ingredient> allIngredients = new ArrayList<>();
+        List<IIngredient> allIngredients = new ArrayList<>();
         
         // Add items
         allIngredients.addAll(getAllIngredientsOfType(IngredientType.ITEM));
@@ -201,7 +208,7 @@ public class IngredientManager {
      * @param ingredient The ingredient
      * @return The display name
      */
-    public String getDisplayName(Ingredient ingredient) {
+    public String getDisplayName(IIngredient ingredient) {
         if (!isInitialized) {
             return "Unknown";
         }

@@ -1,6 +1,6 @@
 package com.jeifolders.ui.layout;
 
-import com.jeifolders.ui.util.ExclusionHandler;
+import com.jeifolders.ui.util.UiExclusionHandler;
 import com.jeifolders.util.ModLogger;
 
 import net.minecraft.client.Minecraft;
@@ -12,7 +12,7 @@ import net.minecraft.client.renderer.Rect2i;
  * This class has been updated to use Minecraft's Rect2i exclusively.
  */
 public class ExclusionManager {
-    private final ExclusionHandler exclusionHandler;
+    private final UiExclusionHandler exclusionHandler;
     private final LayoutCalculator layoutCalculator;
     private Rect2i exclusionZone = new Rect2i(0, 0, 0, 0);
     
@@ -34,7 +34,7 @@ public class ExclusionManager {
      * @param layoutCalculator The layout calculator for dimensions
      */
     public ExclusionManager(LayoutCalculator layoutCalculator) {
-        this.exclusionHandler = new ExclusionHandler();
+        this.exclusionHandler = new UiExclusionHandler();
         this.layoutCalculator = layoutCalculator;
     }
     
@@ -181,7 +181,7 @@ public class ExclusionManager {
     /**
      * Gets the exclusion handler for JEI integration
      */
-    public ExclusionHandler getExclusionHandler() {
+    public UiExclusionHandler getExclusionHandler() {
         return exclusionHandler;
     }
     

@@ -2,6 +2,8 @@ package com.jeifolders.integration.ingredient;
 
 import mezz.jei.api.ingredients.ITypedIngredient;
 import com.jeifolders.util.ModLogger;
+import com.jeifolders.integration.core.IngredientServiceImpl;
+import com.jeifolders.integration.api.IIngredient;
 
 import java.util.Objects;
 
@@ -9,7 +11,7 @@ import java.util.Objects;
  * Unified ingredient class that replaces both TypedIngredient and BookmarkIngredient.
  * This class provides a consistent way to work with ingredients across the mod.
  */
-public class Ingredient {
+public class Ingredient implements IIngredient {
     private final Object rawIngredient;
     private final ITypedIngredient<?> typedIngredient;
     private final IngredientType type;
@@ -121,9 +123,9 @@ public class Ingredient {
             return key;
         }
         if (typedIngredient != null) {
-            // Try to get the key from the IngredientManager via JEIIntegrationFactory
+            // Try to get the key from the IngredientServiceImpl directly
             try {
-                return com.jeifolders.integration.JEIIntegrationFactory.getIngredientService().getKeyForIngredient(typedIngredient);
+                return IngredientServiceImpl.getInstance().getKeyForIngredient(typedIngredient);
             } catch (Exception e) {
                 ModLogger.warn("Failed to get key for ingredient: {}", e.getMessage());
                 // Fall back to toString if there's an error

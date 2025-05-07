@@ -1,10 +1,10 @@
 package com.jeifolders.ui.components.contents;
 
 import com.jeifolders.data.Folder;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.IngredientService;
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.JEIIntegrationFactory;
-import com.jeifolders.integration.IngredientService;
-import com.jeifolders.integration.ingredient.Ingredient;
 import com.jeifolders.events.FolderEventDispatcher;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.util.ModLogger;
@@ -27,7 +27,7 @@ public class FolderBookmarkList {
     private final FolderEventDispatcher eventDispatcher;
 
     // Access services
-    private final IngredientService ingredientService = JEIIntegrationFactory.getIngredientService();
+    private final IngredientService ingredientService = JEIIntegrationAPI.getIngredientService();
 
     private boolean batchUpdateMode = false;
     private boolean pendingNotification = false;
@@ -59,31 +59,72 @@ public class FolderBookmarkList {
      * Refreshes the bookmarks based on the current folder
      */
     private void refreshBookmarks() {
+        ModLogger.info("DIRECT-TRACKING: FolderBookmarkList.refreshBookmarks() called");
         ingredients.clear();
         ingredientMap.clear();
 
         if (folder != null) {
             List<String> keys = folder.getBookmarkKeys();
+            ModLogger.info("DIRECT-TRACKING: Processing {} bookmark keys: {}", keys.size(), keys);
+            
             if (!keys.isEmpty()) {
                 // Use ingredient service to get ingredients for bookmark keys
                 try {
                     startBatchUpdate();
                     for (String key : keys) {
-                        // Handle Optional<Ingredient> return type
-                        Optional<Ingredient> ingredientOpt = ingredientService.getIngredientForKey(key);
+                        ModLogger.info("DIRECT-TRACKING: Looking up ingredient for key: {}", key);
+                        
+                        // Get the ingredient via the service
+                        Optional<IIngredient> ingredientOpt = ingredientService.getIngredientForKey(key);
+                        
                         if (ingredientOpt.isPresent()) {
-                            Ingredient ingredient = ingredientOpt.get();
-                            // Create BookmarkIngredient from the Ingredient's ITypedIngredient
-                            if (ingredient.getTypedIngredient() != null) {
-                                BookmarkIngredient bookmarkIngredient = new BookmarkIngredient(ingredient.getTypedIngredient());
-                                ingredients.add(bookmarkIngredient);
-                                ingredientMap.put(key, bookmarkIngredient);
+                            IIngredient ingredient = ingredientOpt.get();
+                            ModLogger.info("DIRECT-TRACKING: Found ingredient for key: {}", key);
+                            
+                            // Create BookmarkIngredient from the IIngredient
+                            BookmarkIngredient bookmarkIngredient = new BookmarkIngredient(ingredient);
+                            ingredients.add(bookmarkIngredient);
+                            ingredientMap.put(key, bookmarkIngredient);
+                        } else {
+                            ModLogger.info("DIRECT-TRACKING: No ingredient found for key: {}", key);
+                            
+                            // Try direct lookup with our ItemMigrationHelper
+                            try {
+                                com.jeifolders.integration.api.JEIIntegrationService integrationService = 
+                                    JEIIntegrationAPI.getIntegrationService();
+                                
+                                Optional<mezz.jei.api.runtime.IIngredientManager> managerOpt = 
+                                    integrationService.getIngredientManager();
+                                    
+                                if (managerOpt.isPresent()) {
+                                    ModLogger.info("DIRECT-TRACKING: Trying ItemMigrationHelper lookup for key: {}", key);
+                                    Optional<mezz.jei.api.ingredients.ITypedIngredient<?>> migrationResult = 
+                                        com.jeifolders.integration.ItemMigrationHelper.getInstance()
+                                            .findMatchingIngredient(key, managerOpt.get());
+                                    
+                                    if (migrationResult.isPresent()) {
+                                        ModLogger.info("DIRECT-TRACKING: ItemMigrationHelper found ingredient for key: {}", key);
+                                        mezz.jei.api.ingredients.ITypedIngredient<?> typedIngredient = migrationResult.get();
+                                        
+                                        // Create a BookmarkIngredient directly
+                                        BookmarkIngredient bookmarkIngredient = new BookmarkIngredient(typedIngredient);
+                                        ingredients.add(bookmarkIngredient);
+                                        ingredientMap.put(key, bookmarkIngredient);
+                                    } else {
+                                        ModLogger.info("DIRECT-TRACKING: ItemMigrationHelper failed to find ingredient: {}", key);
+                                    }
+                                }
+                            } catch (Exception e) {
+                                ModLogger.error("DIRECT-TRACKING: Error during migration helper lookup: {}", e.getMessage());
                             }
                         }
                     }
                     finishBatchUpdate();
+                    
+                    ModLogger.info("DIRECT-TRACKING: Refreshed bookmarks. Found {} ingredients out of {} keys", 
+                        ingredients.size(), keys.size());
                 } catch (Exception e) {
-                    ModLogger.error("Error while refreshing bookmarks: {}", e.getMessage());
+                    ModLogger.error("DIRECT-TRACKING: Error while refreshing bookmarks: {}", e.getMessage());
                     ingredients.clear();
                     ingredientMap.clear();
                 }
@@ -306,28 +347,66 @@ public class FolderBookmarkList {
      * @param bookmarkIngredients The list of bookmark ingredients to set
      */
     public void setIngredients(List<BookmarkIngredient> bookmarkIngredients) {
+        // Add logging to diagnose why ingredients are being cleared
+        ModLogger.info("DIRECT-TRACKING: setIngredients called with {} ingredients", 
+            bookmarkIngredients != null ? bookmarkIngredients.size() : 0);
+
         if (bookmarkIngredients == null) {
             bookmarkIngredients = new ArrayList<>();
         }
         
-        // Clear current ingredients first
+        // If the passed ingredient list is empty but we already have ingredients, keep our existing ingredients
+        if (bookmarkIngredients.isEmpty() && !ingredients.isEmpty()) {
+            ModLogger.info("DIRECT-TRACKING: Empty ingredient list passed, but we have {} loaded ingredients - keeping them",
+                ingredients.size());
+            
+            // Show the folder details for diagnosis
+            if (folder != null) {
+                ModLogger.info("DIRECT-TRACKING: Active folder: {} (ID: {}), has {} bookmark keys: {}", 
+                    folder.getName(), folder.getId(), folder.getBookmarkKeys().size(), folder.getBookmarkKeys());
+            }
+            
+            // Skip the clearing operation, keep the ingredients we already loaded
+            notifyListenersOfChange();
+            return;
+        }
+        
+        // Don't clear if we're being given the same list as we already have (recursive call protection)
+        if (!ingredients.isEmpty() && ingredients.size() == bookmarkIngredients.size() && 
+            ingredients.containsAll(bookmarkIngredients)) {
+            ModLogger.info("DIRECT-TRACKING: Same ingredients passed, skipping reprocessing");
+            return;
+        }
+        
+        // If the ingredient list is not empty, process it normally
+        ModLogger.info("DIRECT-TRACKING: Processing {} ingredients", bookmarkIngredients.size());
+        
+        // Clear current ingredients first, unless we're in a recursive call
         ingredients.clear();
         ingredientMap.clear();
         
         // Add all new ingredients in batch mode
         try {
             startBatchUpdate();
+            int validCount = 0;
             for (BookmarkIngredient ingredient : bookmarkIngredients) {
+                if (ingredient == null || ingredient.getTypedIngredient() == null) {
+                    ModLogger.warn("DIRECT-TRACKING: Skipping null/invalid ingredient");
+                    continue;
+                }
+                
                 // Try to get a key for this ingredient
                 String key = ingredientService.getKeyForIngredient(ingredient.getWrappedIngredient());
                 if (key != null && !key.isEmpty() && !ingredientMap.containsKey(key)) {
                     ingredients.add(ingredient);
                     ingredientMap.put(key, ingredient);
+                    validCount++;
                 }
             }
             finishBatchUpdate();
             
-            ModLogger.debug("Set {} ingredients on bookmark list", ingredients.size());
+            ModLogger.info("DIRECT-TRACKING: Set {} ingredients (out of {}) on bookmark list", 
+                validCount, bookmarkIngredients.size());
         } catch (Exception e) {
             ModLogger.error("Error setting ingredients: {}", e.getMessage(), e);
         }

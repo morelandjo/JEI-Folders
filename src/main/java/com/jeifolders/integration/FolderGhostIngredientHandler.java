@@ -1,135 +1,107 @@
 package com.jeifolders.integration;
 
+import com.jeifolders.integration.api.IIngredient;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.DragDropService;
 import com.jeifolders.ui.components.buttons.FolderButton;
 import com.jeifolders.ui.controllers.FolderUIController;
 import com.jeifolders.util.ModLogger;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.Rect2i;
 
-import javax.annotation.Nonnull;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * Ghost ingredient handler for folder drag-and-drop operations.
- * Handles interaction between JEI's drag system and our folder UI.
+ * Handler for ghost ingredients that allows dropping JEI ingredients onto folders.
+ *
+ * @param <T> The screen class type
  */
-public class FolderGhostIngredientHandler<T extends AbstractContainerScreen<?>> implements IGhostIngredientHandler<T> {
-    // Track if we're in an actual drag (not just hover) using mouse state
-    private boolean mouseButtonDown = false;
+public class FolderGhostIngredientHandler<T extends Screen> implements IGhostIngredientHandler<T> {
+    private final Class<T> screenClass;
+    private final DragDropService dragDropService = JEIIntegrationAPI.getDragDropService();
+    
+    /**
+     * Creates a new ghost ingredient handler for the specified screen class
+     *
+     * @param screenClass The class of screen to handle
+     */
+    public FolderGhostIngredientHandler(Class<T> screenClass) {
+        this.screenClass = screenClass;
+    }
     
     @Override
-    public <I> List<Target<I>> getTargetsTyped(@Nonnull T gui, @Nonnull ITypedIngredient<I> ingredient, boolean doStart) {
-        List<Target<I>> targets = new ArrayList<>();
-        
-        // If doStart is true, JEI is informing us that a drag operation has started
-        boolean dragStarting = doStart;
-        
-        // For additional precision, we also check mouse state directly
-        Minecraft minecraft = Minecraft.getInstance();
-        boolean leftMouseDown = minecraft.mouseHandler.isLeftPressed();
-        
-        // Detect start of drag through either doStart or mouse state
-        if (dragStarting || leftMouseDown) {
-            // This is either the start of a drag or an ongoing drag
-            if (!mouseButtonDown) {
-                // First detection of this drag operation
-                mouseButtonDown = true;
-                ModLogger.debug("[DRAG-DEBUG] Ingredient drag detected, targets will be created");
-                
-                // Set the dragged ingredient for the actual drag
-                JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
-                jeiRuntime.setDraggedIngredient(ingredient);
-                jeiRuntime.setActuallyDragging(true);
+    public <I> List<Target<I>> getTargetsTyped(T screen, ITypedIngredient<I> typedIngredient, boolean doStart) {
+        try {
+            FolderUIController controller = FolderUIController.getInstance();
+            if (controller == null) {
+                return Collections.emptyList();
             }
             
-            // Now add the targets for the drag operation
-            if (FolderUIController.isInitialized()) {
-                FolderUIController controller = FolderUIController.getInstance();
-                
-                // Add targets for folder buttons
-                controller.getFolderButtons().forEach(buttonInstance -> {
-                    targets.add(createFolderTarget(buttonInstance, controller, ingredient));
-                });
-
-                // Add target for bookmark display area if available
-                if (controller.isBookmarkAreaAvailable()) {
-                    Rect2i bookmarkArea = controller.getBookmarkDisplayArea();
-                    targets.add(createBookmarkAreaTarget(bookmarkArea, controller, ingredient));
-                }
+            // Create a list of targets, one for each folder button
+            List<Target<I>> targets = new ArrayList<>();
+            
+            // Get the folder buttons from the controller
+            List<FolderButton> buttons = controller.getFolderButtons();
+            for (FolderButton button : buttons) {
+                targets.add(createTarget(button, controller, typedIngredient));
             }
-        } else if (mouseButtonDown) {
-            // Mouse button was down but now it's up - reset the state
-            mouseButtonDown = false;
-            JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
-            jeiRuntime.setActuallyDragging(false);
-            jeiRuntime.clearDraggedIngredient();
-            ModLogger.debug("[DRAG-DEBUG] Drag operation ended");
+            
+            return targets;
+        } catch (Exception e) {
+            ModLogger.error("Error getting ghost ingredient targets: {}", e.getMessage(), e);
+            return Collections.emptyList();
         }
-        
-        return targets;
     }
-
-    private <I> Target<I> createFolderTarget(
-            FolderButton button,
-            FolderUIController controller,
-            ITypedIngredient<I> ingredient) {
-
+    
+    /**
+     * Creates a target for a folder button
+     *
+     * @param button The folder button
+     * @param controller The folder UI controller
+     * @param typedIngredient The typed ingredient
+     * @return The target
+     */
+    private <I> Target<I> createTarget(
+            FolderButton button, 
+            FolderUIController controller, 
+            ITypedIngredient<I> typedIngredient) {
+        
         return new Target<I>() {
             @Override
             public Rect2i getArea() {
-                // Use button's area directly instead of creating a new Rect2i
                 return new Rect2i(button.getX(), button.getY(), button.getWidth(), button.getHeight());
             }
-
+            
             @Override
-            public void accept(I ingredientObj) {
-                ModLogger.debug("[HOVER-FIX] Ingredient dropped on folder: {}", button.getFolder().getName());
-                
-                // Get the center of the button for the drop position
-                int centerX = button.getX() + button.getWidth() / 2;
-                int centerY = button.getY() + button.getHeight() / 2;
-                
-                controller.handleIngredientDrop(centerX, centerY, ingredient);
+            public void accept(I ingredient) {
+                try {
+                    ModLogger.debug("Ghost ingredient accepted for folder: {}", button.getFolder().getName());
+                    
+                    // Get the folder center for better drop position
+                    int centerX = button.getX() + button.getWidth() / 2;
+                    int centerY = button.getY() + button.getHeight() / 2;
+                    
+                    // Create a unified ingredient from the JEI ingredient
+                    IIngredient unifiedIngredient = JEIIntegrationAPI.getIngredientService().createIngredient(typedIngredient);
+                    
+                    // Pass to the controller for handling
+                    controller.handleIngredientDrop(centerX, centerY, unifiedIngredient);
+                    
+                    // Ensure any relevant state is updated
+                    dragDropService.clearDraggedIngredient();
+                } catch (Exception e) {
+                    ModLogger.error("Error accepting ghost ingredient: {}", e.getMessage(), e);
+                }
             }
         };
     }
-
-    private <I> Target<I> createBookmarkAreaTarget(
-            Rect2i bookmarkArea,
-            FolderUIController controller,
-            ITypedIngredient<I> ingredient) {
-
-        return new Target<I>() {
-            @Override
-            public Rect2i getArea() {
-                // Return the bookmark area directly
-                return bookmarkArea;
-            }
-
-            @Override
-            public void accept(I ingredientObj) {
-                ModLogger.debug("[HOVER-FIX] Ingredient dropped on bookmark display");
-                
-                // Calculate center of bookmark area for better drop accuracy
-                int centerX = bookmarkArea.getX() + bookmarkArea.getWidth() / 2;
-                int centerY = bookmarkArea.getY() + bookmarkArea.getHeight() / 2;
-                
-                // Pass the actual Minecraft item (ingredientObj) instead of the wrapper
-                controller.handleIngredientDrop(centerX, centerY, ingredientObj);
-            }
-        };
-    }
-
+    
     @Override
     public void onComplete() {
-        ModLogger.debug("[HOVER-FIX] Ghost ingredient drag completed");
-        mouseButtonDown = false;
-        JEIRuntime jeiRuntime = JEIIntegrationFactory.getJEIRuntime();
-        jeiRuntime.setActuallyDragging(false);
-        jeiRuntime.clearDraggedIngredient();
+        // Nothing to do here, the targets handle acceptance
     }
 }

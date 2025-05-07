@@ -163,6 +163,25 @@ public class FolderRepository {
     }
     
     /**
+     * Updates a folder in the repository
+     * 
+     * @param folder The folder to update
+     * @return true if the folder was updated, false if it didn't exist
+     */
+    public boolean updateFolder(Folder folder) {
+        if (folder == null || !folders.containsKey(folder.getId())) {
+            return false;
+        }
+        
+        // Update the folder
+        folders.put(folder.getId(), folder);
+        markDirty();
+        
+        ModLogger.debug("Updated folder: {} (ID: {})", folder.getName(), folder.getId());
+        return true;
+    }
+    
+    /**
      * Adds a bookmark to a folder
      * 
      * @param folderId The ID of the folder to add the bookmark to

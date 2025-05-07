@@ -2,7 +2,7 @@ package com.jeifolders.ui.util;
 
 import com.jeifolders.util.ModLogger;
 import com.jeifolders.integration.IngredientDragHandler;
-import com.jeifolders.integration.ingredient.Ingredient;
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.integration.ingredient.IngredientManager;
 import mezz.jei.api.ingredients.ITypedIngredient;
 
@@ -45,9 +45,9 @@ public class IngredientDragManager {
 
     /**
      * Gets the currently dragged ingredient, if any
-     * @return Optional containing the unified Ingredient, or empty if none
+     * @return Optional containing the unified IIngredient, or empty if none
      */
-    public Optional<Ingredient> getDraggedIngredient() {
+    public Optional<IIngredient> getDraggedIngredient() {
         // Get the dragged ingredient as ITypedIngredient<?> from the handler
         Optional<ITypedIngredient<?>> jeiIngredient = ingredientDragHandler.getDraggedIngredient();
         
@@ -56,7 +56,7 @@ public class IngredientDragManager {
             return Optional.empty();
         }
         
-        // Convert from JEI's ITypedIngredient to our unified Ingredient
+        // Convert from JEI's ITypedIngredient to our unified IIngredient
         return Optional.of(IngredientManager.getInstance().createIngredient(jeiIngredient.get()));
     }
     
