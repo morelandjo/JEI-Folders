@@ -1,6 +1,7 @@
 package com.jeifolders.integration.impl;
 
-import com.jeifolders.integration.BookmarkIngredient;
+import com.jeifolders.integration.api.IIngredient;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
 import com.jeifolders.ui.components.contents.FolderBookmarkList;
 import com.jeifolders.util.ModLogger;
 
@@ -23,17 +24,17 @@ import javax.annotation.Nonnull;
  * Adapter that connects our folder bookmarks to JEI's ingredient grid system.
  * Implements IIngredientGridSource to provide ingredients to JEI's grid.
  */
-public class JeiBookmarkAdapter implements IIngredientGridSource {
+public class JEIBookmarkAdapter implements IIngredientGridSource {
     private final FolderBookmarkList bookmarkList;
     private ITypedIngredient<?> typedIngredient;
     private List<Runnable> listeners = new ArrayList<>();
     private List<SourceListChangedListener> sourceListChangedListeners = new ArrayList<>();
 
     /**
-     * Creates a new JeiBookmarkAdapter with the specified bookmark list.
+     * Creates a new JEIBookmarkAdapter with the specified bookmark list.
      * This constructor is called via reflection from FolderBookmarkOverlay.
      */
-    public JeiBookmarkAdapter(FolderBookmarkList bookmarkList) {
+    public JEIBookmarkAdapter(FolderBookmarkList bookmarkList) {
         this.bookmarkList = bookmarkList;
         ModLogger.debug("Created JEI bookmark adapter for folder");
     }
@@ -89,65 +90,64 @@ public class JeiBookmarkAdapter implements IIngredientGridSource {
     }
 
     /**
-     * Adds a bookmark to the list.
+     * Adds an ingredient to the list.
      */
-    public boolean addBookmark(ITypedIngredient<?> ingredient) {
+    public boolean addIngredient(ITypedIngredient<?> ingredient) {
         if (ingredient != null) {
             try {
-                // Convert ITypedIngredient to BookmarkIngredient
-                BookmarkIngredient bookmarkIngredient = new BookmarkIngredient(ingredient);
+                // Convert ITypedIngredient to unified Ingredient
+                IIngredient unifiedIngredient = JEIIntegrationAPI.createIngredient(ingredient);
                 
                 // Generate a key for the ingredient
-                String key = com.jeifolders.integration.model.TypedIngredientHelper.getKeyForIngredient(ingredient);
+                String key = JEIIntegrationAPI.getKeyForIngredient(ingredient);
                 if (key == null || key.isEmpty()) {
                     ModLogger.warn("Failed to generate key for ingredient");
                     return false;
                 }
                 
-                // Add the bookmark with the generated key
-                if (bookmarkList.addBookmark(bookmarkIngredient, key)) {
-                    // Notify listeners that the list has changed
-                    notifyListeners();
+                // Add the ingredient with the generated key
+                if (bookmarkList.addIngredient(unifiedIngredient, key)) {
+                    // Notification is handled by the bookmark list
                     return true;
                 }
             } catch (Exception e) {
-                ModLogger.error("Error adding bookmark: {}", e.getMessage(), e);
+                ModLogger.error("Error adding ingredient: {}", e.getMessage(), e);
             }
         }
         return false;
     }
+    
+    /**
+     * Clears all ingredients from the list.
+     */
+    public void clearIngredients() {
+        bookmarkList.clear();
+    }
 
     /**
-     * Gets the list of ingredients to display in the grid.
-     * This is a custom method used by our implementation, not from IIngredientGridSource.
+     * Gets the list of JEI typed ingredients to display in the grid.
      */
     public List<ITypedIngredient<?>> getIngredients() {
         try {
             if (bookmarkList != null) {
-                // Get all objects from the bookmark list
-                List<?> bookmarks = bookmarkList.getAllBookmarks();
-                if (bookmarks.isEmpty()) {
+                // Get all unified ingredients from the bookmark list
+                List<IIngredient> unifiedIngredients = bookmarkList.getAllIngredients();
+                if (unifiedIngredients.isEmpty()) {
                     return Collections.emptyList();
                 }
                 
-                // Convert objects to ITypedIngredient
+                // Extract the JEI typed ingredients from the unified ingredients
                 List<ITypedIngredient<?>> result = new ArrayList<>();
-                for (Object bookmark : bookmarks) {
-                    if (bookmark instanceof ITypedIngredient<?>) {
-                        // Already a typed ingredient
-                        result.add((ITypedIngredient<?>) bookmark);
-                    } else if (bookmark instanceof BookmarkIngredient) {
-                        // Wrapped in our BookmarkIngredient class
-                        ITypedIngredient<?> ingredient = ((BookmarkIngredient) bookmark).getTypedIngredient();
-                        if (ingredient != null) {
-                            result.add(ingredient);
-                        }
+                for (IIngredient ingredient : unifiedIngredients) {
+                    ITypedIngredient<?> typedIngredient = ingredient.getTypedIngredient();
+                    if (typedIngredient != null) {
+                        result.add(typedIngredient);
                     }
                 }
                 
-                if (result.isEmpty() && !bookmarks.isEmpty()) {
-                    ModLogger.warn("Failed to convert bookmarks to ingredients: {} bookmarks resulted in 0 ingredients", 
-                        bookmarks.size());
+                if (result.isEmpty() && !unifiedIngredients.isEmpty()) {
+                    ModLogger.warn("Failed to extract typed ingredients: {} ingredients yielded 0 typed ingredients", 
+                        unifiedIngredients.size());
                 }
                 
                 return result;
@@ -165,15 +165,15 @@ public class JeiBookmarkAdapter implements IIngredientGridSource {
      */
     @Override
     public List<IElement<?>> getElements() {
-        // Get all ingredients and convert them to IElement instances for JEI
-        List<ITypedIngredient<?>> ingredients = getIngredients();
-        if (ingredients.isEmpty()) {
+        // Get all typed ingredients and convert them to IElement instances for JEI
+        List<ITypedIngredient<?>> typedIngredients = getIngredients();
+        if (typedIngredients.isEmpty()) {
             return Collections.emptyList();
         }
         
         // Transform ingredients into elements for JEI's ingredient grid
-        List<IElement<?>> elements = new ArrayList<>(ingredients.size());
-        for (ITypedIngredient<?> ingredient : ingredients) {
+        List<IElement<?>> elements = new ArrayList<>(typedIngredients.size());
+        for (ITypedIngredient<?> ingredient : typedIngredients) {
             try {
                 // Create an ingredient element for each ingredient
                 elements.add(createIngredientElement(ingredient));
@@ -238,15 +238,14 @@ public class JeiBookmarkAdapter implements IIngredientGridSource {
     }
 
     /**
-     * Gets the bookmark at the specified coordinates, if any.
+     * Gets the ingredient at the specified coordinates, if any.
      *
      * @param mouseX X coordinate
      * @param mouseY Y coordinate
-     * @return Optional containing the BookmarkIngredient if found
+     * @return Optional containing the unified Ingredient if found
      */
-    public Optional<BookmarkIngredient> getBookmarkAt(double mouseX, double mouseY) {
+    public Optional<IIngredient> getIngredientAt(double mouseX, double mouseY) {
         try {
-            // Convert mouse coordinates to element position
             List<IElement<?>> elements = getElements();
             for (IElement<?> element : elements) {
                 // Check if the element contains the mouse coordinates
@@ -254,20 +253,19 @@ public class JeiBookmarkAdapter implements IIngredientGridSource {
                     // Get the ingredient from the element
                     ITypedIngredient<?> typedIngredient = ingredientElement.getTypedIngredient();
                     
-                    // Since we can't directly check bounds, use the internal position 
-                    // information that JEI must be using to determine if mouse is over element
-                    // This is a workaround since we don't have direct access to position methods
-                    try {
-                        // Try to use reflection to get position information if needed
-                        // For now, let's assume this element is the one under the mouse
-                        return Optional.of(new BookmarkIngredient(typedIngredient));
-                    } catch (Exception e) {
-                        ModLogger.debug("Skipping element: {}", e.getMessage());
+                    // Since we can't directly check bounds, we'll look up the ingredient in our list
+                    // and consider any ingredient in the list as potentially at this position.
+                    // For proper position checking, we'd need to enhance this with JEI positional data.
+                    List<IIngredient> allIngredients = bookmarkList.getAllIngredients();
+                    for (IIngredient ingredient : allIngredients) {
+                        if (ingredient.getTypedIngredient() == typedIngredient) {
+                            return Optional.of(ingredient);
+                        }
                     }
                 }
             }
         } catch (Exception e) {
-            ModLogger.error("Error getting bookmark at mouse position: {}", e.getMessage(), e);
+            ModLogger.error("Error getting ingredient at mouse position: {}", e.getMessage(), e);
         }
         return Optional.empty();
     }

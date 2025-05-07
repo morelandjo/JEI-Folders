@@ -4,14 +4,22 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 
 import com.jeifolders.integration.api.IIngredient;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
+import com.jeifolders.integration.api.IngredientService;
+import com.jeifolders.integration.BookmarkIngredient;
 import com.jeifolders.util.ModLogger;
 
 import mezz.jei.api.ingredients.IIngredientHelper;
 import mezz.jei.api.ingredients.IIngredientType;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.runtime.IIngredientManager;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.fluids.FluidStack;
 
 /**
  * Unified manager for all ingredient-related operations.
@@ -108,6 +116,151 @@ public class IngredientManager {
         } catch (Exception e) {
             ModLogger.error("Failed to create ingredient: {}", e.getMessage());
             return new Ingredient(ingredient);
+        }
+    }
+    
+    // Factory methods for common ingredient types
+    
+    /**
+     * Create an ingredient from an ItemStack
+     * 
+     * @param itemStack The ItemStack to convert
+     * @return The unified ingredient
+     */
+    public IIngredient createFromItemStack(ItemStack itemStack) {
+        if (!isInitialized || itemStack == null || itemStack.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            IIngredientType<ItemStack> itemType = mezz.jei.api.constants.VanillaTypes.ITEM_STACK;
+            Optional<ITypedIngredient<ItemStack>> typedIngredient = 
+                jeiIngredientManager.createTypedIngredient(itemType, itemStack);
+            return typedIngredient.map(this::createIngredient)
+                    .orElseGet(() -> new Ingredient(itemStack));
+        } catch (Exception e) {
+            ModLogger.error("Failed to create ingredient from ItemStack: {}", e.getMessage());
+            return new Ingredient(itemStack);
+        }
+    }
+    
+    /**
+     * Create an ingredient from a FluidStack
+     * 
+     * @param fluidStack The FluidStack to convert
+     * @return The unified ingredient
+     */
+    public IIngredient createFromFluidStack(FluidStack fluidStack) {
+        if (!isInitialized || fluidStack == null || fluidStack.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            IIngredientType<FluidStack> fluidType = mezz.jei.api.constants.VanillaTypes.FLUID_STACK;
+            Optional<ITypedIngredient<FluidStack>> typedIngredient = 
+                jeiIngredientManager.createTypedIngredient(fluidType, fluidStack);
+            return typedIngredient.map(this::createIngredient)
+                    .orElseGet(() -> new Ingredient(fluidStack));
+        } catch (Exception e) {
+            ModLogger.error("Failed to create ingredient from FluidStack: {}", e.getMessage());
+            return new Ingredient(fluidStack);
+        }
+    }
+    
+    /**
+     * Create an ingredient from a serialized CompoundTag
+     * 
+     * @param tag The CompoundTag containing serialized ingredient data
+     * @return The unified ingredient, or null if deserialization failed
+     */
+    public IIngredient deserializeFromTag(CompoundTag tag) {
+        if (!isInitialized || tag == null) {
+            return null;
+        }
+        
+        try {
+            // Check what type of ingredient it is
+            String typeStr = tag.getString("IngredientType");
+            IngredientType type = IngredientType.valueOf(typeStr);
+            
+            switch (type) {
+                case ITEM:
+                    if (tag.contains("ItemStack")) {
+                        ItemStack itemStack = ItemStack.of(tag.getCompound("ItemStack"));
+                        return createFromItemStack(itemStack);
+                    }
+                    break;
+                case FLUID:
+                    if (tag.contains("FluidStack")) {
+                        FluidStack fluidStack = FluidStack.loadFluidStackFromNBT(tag.getCompound("FluidStack"));
+                        return createFromFluidStack(fluidStack);
+                    }
+                    break;
+                default:
+                    ModLogger.error("Unknown ingredient type in tag: {}", typeStr);
+                    break;
+            }
+            
+            // If we reach here, fall back to trying to load by ID if possible
+            if (tag.contains("RegistryId")) {
+                ResourceLocation id = new ResourceLocation(tag.getString("RegistryId"));
+                // Try to resolve from registry... implementation depends on specific registries
+            }
+            
+            return null;
+        } catch (Exception e) {
+            ModLogger.error("Failed to deserialize ingredient from tag: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Serialize an ingredient to a CompoundTag
+     * 
+     * @param ingredient The ingredient to serialize
+     * @return The CompoundTag containing serialized data, or null if serialization failed
+     */
+    public CompoundTag serializeToTag(IIngredient ingredient) {
+        if (!isInitialized || ingredient == null) {
+            return null;
+        }
+        
+        try {
+            CompoundTag tag = new CompoundTag();
+            
+            // Store the ingredient type
+            tag.putString("IngredientType", ingredient.getType().name());
+            
+            // Handle different types of ingredients
+            Object rawIngredient = ingredient.getRawIngredient();
+            if (rawIngredient instanceof ItemStack) {
+                ItemStack itemStack = (ItemStack) rawIngredient;
+                CompoundTag itemTag = new CompoundTag();
+                itemStack.save(itemTag);
+                tag.put("ItemStack", itemTag);
+                
+                // Also store ID for easier lookup
+                ResourceLocation id = itemStack.getItem().getRegistryName();
+                if (id != null) {
+                    tag.putString("RegistryId", id.toString());
+                }
+            } else if (rawIngredient instanceof FluidStack) {
+                FluidStack fluidStack = (FluidStack) rawIngredient;
+                CompoundTag fluidTag = new CompoundTag();
+                fluidStack.writeToNBT(fluidTag);
+                tag.put("FluidStack", fluidTag);
+                
+                // Also store ID for easier lookup
+                ResourceLocation id = fluidStack.getFluid().getRegistryName();
+                if (id != null) {
+                    tag.putString("RegistryId", id.toString());
+                }
+            }
+            
+            return tag;
+        } catch (Exception e) {
+            ModLogger.error("Failed to serialize ingredient to tag: {}", e.getMessage());
+            return null;
         }
     }
     
@@ -266,5 +419,227 @@ public class IngredientManager {
     @SuppressWarnings("unchecked")
     private <T> IIngredientHelper<T> getHelper(IIngredientType<T> type) {
         return (IIngredientHelper<T>) jeiIngredientManager.getIngredientHelper(type);
+    }
+
+    /**
+     * Gets the ingredient key for various ingredient types
+     * 
+     * @param ingredient The ingredient to get the key for
+     * @return The key string or empty if unable to determine
+     */
+    public String getKeyForIngredient(Object ingredient) {
+        if (ingredient == null || !isInitialized) {
+            return "";
+        }
+        
+        try {
+            // Handle different types of ingredients
+            if (ingredient instanceof IIngredient) {
+                IIngredient unifiedIngredient = (IIngredient) ingredient;
+                if (unifiedIngredient.getTypedIngredient() != null) {
+                    return getKeyForTypedIngredient(unifiedIngredient.getTypedIngredient());
+                } else if (unifiedIngredient.getRawIngredient() != null) {
+                    return getKeyForRawIngredient(unifiedIngredient.getRawIngredient());
+                }
+            } else if (ingredient instanceof BookmarkIngredient) {
+                return getKeyForTypedIngredient(((BookmarkIngredient)ingredient).getTypedIngredient());
+            } else if (ingredient instanceof ITypedIngredient) {
+                return getKeyForTypedIngredient((ITypedIngredient<?>)ingredient);
+            } else {
+                return getKeyForRawIngredient(ingredient);
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error getting key for ingredient: {}", e.getMessage(), e);
+        }
+        
+        return "";
+    }
+    
+    /**
+     * Gets the key for a JEI typed ingredient
+     * 
+     * @param ingredient The typed ingredient
+     * @return The key string
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private String getKeyForTypedIngredient(ITypedIngredient<?> ingredient) {
+        if (ingredient == null || !isInitialized) {
+            return "";
+        }
+        
+        try {
+            // Get the helper for this ingredient type
+            IIngredientHelper helper = jeiIngredientManager.getIngredientHelper(ingredient.getType());
+            if (helper != null) {
+                // Use the UidForIngredient as the key
+                return helper.getUniqueId(ingredient.getIngredient()).toString();
+            }
+        } catch (Exception e) {
+            ModLogger.error("Failed to get key for typed ingredient: {}", e.getMessage());
+        }
+        
+        return "";
+    }
+    
+    /**
+     * Gets the key for a raw ingredient object
+     * 
+     * @param ingredient The raw ingredient object
+     * @return The key string
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private String getKeyForRawIngredient(Object ingredient) {
+        if (ingredient == null || !isInitialized) {
+            return "";
+        }
+        
+        try {
+            // Try to find the appropriate ingredient helper for this object
+            for (IIngredientType<?> type : jeiIngredientManager.getRegisteredIngredientTypes()) {
+                try {
+                    Object ingredientClass = type.getClass().getMethod("getIngredientClass").invoke(type);
+                    if (ingredientClass != null && ((Class<?>)ingredientClass).isInstance(ingredient)) {
+                        // Found the right type, use its helper
+                        IIngredientHelper helper = jeiIngredientManager.getIngredientHelper(type);
+                        return helper.getUniqueId(ingredient).toString();
+                    }
+                } catch (Exception e) {
+                    // Try next type
+                }
+            }
+            
+            // Create a typed ingredient from the raw ingredient as a fallback
+            Optional<ITypedIngredient<Object>> typedIngredient = jeiIngredientManager.createTypedIngredient(ingredient);
+            if (typedIngredient.isPresent()) {
+                return getKeyForTypedIngredient(typedIngredient.get());
+            }
+        } catch (Exception e) {
+            ModLogger.error("Failed to get key for raw ingredient: {}", e.getMessage());
+        }
+        
+        return "";
+    }
+    
+    /**
+     * Compare two ingredients for equality based on their keys
+     * 
+     * @param a First ingredient
+     * @param b Second ingredient
+     * @return true if both ingredients have the same key
+     */
+    public boolean areIngredientsEqual(Object a, Object b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        
+        if (a == b) {
+            return true;
+        }
+        
+        String keyA = getKeyForIngredient(a);
+        String keyB = getKeyForIngredient(b);
+        
+        return !keyA.isEmpty() && !keyB.isEmpty() && keyA.equals(keyB);
+    }
+    
+    /**
+     * Find an ingredient in a list based on key matching
+     * 
+     * @param ingredient The ingredient to find
+     * @param list The list to search in
+     * @return The found ingredient or empty if not found
+     */
+    public <T> Optional<T> findIngredient(Object ingredient, List<T> list) {
+        if (ingredient == null || list == null || list.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        String key = getKeyForIngredient(ingredient);
+        if (key.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        return list.stream()
+            .filter(Objects::nonNull)
+            .filter(item -> {
+                String itemKey = getKeyForIngredient(item);
+                return !itemKey.isEmpty() && itemKey.equals(key);
+            })
+            .findFirst();
+    }
+    
+    /**
+     * Creates a combined, deduplicated list of ingredients
+     * 
+     * @param listA First list
+     * @param listB Second list
+     * @return Combined list with no duplicates
+     */
+    public <T> List<T> combineIngredientLists(List<T> listA, List<T> listB) {
+        if (listA == null || listA.isEmpty()) {
+            return listB != null ? new ArrayList<>(listB) : new ArrayList<>();
+        }
+        
+        if (listB == null || listB.isEmpty()) {
+            return new ArrayList<>(listA);
+        }
+        
+        List<T> result = new ArrayList<>(listA);
+        
+        for (T item : listB) {
+            if (item == null) {
+                continue;
+            }
+            
+            // Check if item already exists in result by ingredient key
+            boolean exists = result.stream()
+                .anyMatch(existingItem -> areIngredientsEqual(item, existingItem));
+                
+            if (!exists) {
+                result.add(item);
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Gets an ingredient for a specific bookmark key.
+     * 
+     * @param key The bookmark key to look up
+     * @return The ingredient for the key, or empty if not found
+     */
+    public Optional<IIngredient> getIngredientForKey(String key) {
+        if (key == null || key.isEmpty() || !isInitialized) {
+            return Optional.empty();
+        }
+        
+        try {
+            // Loop through ingredient types and try to find a match
+            for (IIngredientType<?> type : jeiIngredientManager.getRegisteredIngredientTypes()) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    IIngredientHelper<Object> helper = (IIngredientHelper<Object>) jeiIngredientManager.getIngredientHelper(type);
+                    
+                    // Try to parse the key and get the ingredient
+                    Object rawIngredient = helper.getIngredientFromUniqueId(key);
+                    if (rawIngredient != null) {
+                        // Create a typed ingredient from the raw ingredient
+                        @SuppressWarnings("unchecked")
+                        Optional<ITypedIngredient<Object>> typedIngredient = jeiIngredientManager.createTypedIngredient(rawIngredient);
+                        if (typedIngredient.isPresent()) {
+                            // Create our unified ingredient
+                            return Optional.of(createIngredient(typedIngredient.get()));
+                        }
+                    }
+                } catch (Exception e) {
+                    // Silently continue to next type
+                }
+            }
+        } catch (Exception e) {
+            ModLogger.error("Error getting ingredient for key {}: {}", key, e.getMessage());
+        }
+        
+        return Optional.empty();
     }
 }

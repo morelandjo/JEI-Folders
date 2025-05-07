@@ -39,19 +39,19 @@ import java.util.Set;
  * 
  * Uses Minecraft's Rect2i class for rectangle handling.
  */
-public class JeiContentsImpl {
-    private final JeiBookmarkAdapter bookmarkAdapter;
+public class JEIContentsImpl {
+    private final JEIBookmarkAdapter bookmarkAdapter;
     private final IngredientGridWithNavigation contents;
     private final IIngredientManager ingredientManager;
     private Set<ImmutableRect2i> guiExclusionAreas = Set.of();
     private boolean updatingLayout = false;
 
     /**
-     * Creates a new JeiContentsImpl with the specified bookmark adapter and JEI runtime.
+     * Creates a new JEIContentsImpl with the specified bookmark adapter and JEI runtime.
      */
-    public JeiContentsImpl(Object bookmarkAdapterObj, Object jeiRuntimeObj) {
-        if (!(bookmarkAdapterObj instanceof JeiBookmarkAdapter)) {
-            throw new IllegalArgumentException("Expected JeiBookmarkAdapter, got " + 
+    public JEIContentsImpl(Object bookmarkAdapterObj, Object jeiRuntimeObj) {
+        if (!(bookmarkAdapterObj instanceof JEIBookmarkAdapter)) {
+            throw new IllegalArgumentException("Expected JEIBookmarkAdapter, got " + 
                 (bookmarkAdapterObj != null ? bookmarkAdapterObj.getClass().getName() : "null"));
         }
         
@@ -60,7 +60,7 @@ public class JeiContentsImpl {
                 (jeiRuntimeObj != null ? jeiRuntimeObj.getClass().getName() : "null"));
         }
         
-        this.bookmarkAdapter = (JeiBookmarkAdapter)bookmarkAdapterObj;
+        this.bookmarkAdapter = (JEIBookmarkAdapter)bookmarkAdapterObj;
         IJeiRuntime jeiRuntime = (IJeiRuntime)jeiRuntimeObj;
         this.ingredientManager = jeiRuntime.getIngredientManager();
 
@@ -89,7 +89,7 @@ public class JeiContentsImpl {
                 false  // searchable parameter: false for bookmark display
             );
 
-            // JeiBookmarkAdapter implements IIngredientGridSource, so we can use it directly
+            // JEIBookmarkAdapter implements IIngredientGridSource, so we can use it directly
             // Create the grid with navigation
             this.contents = new IngredientGridWithNavigation(
                 "FolderBookmarkOverlay",  // debug name
@@ -115,7 +115,7 @@ public class JeiContentsImpl {
      * Sets the ingredients to be displayed.
      */
     public void setIngredients(List<BookmarkIngredient> bookmarkIngredients) {
-        ModLogger.info("DIRECT-TRACKING: JeiContentsImpl.setIngredients called with {} ingredients", 
+        ModLogger.info("DIRECT-TRACKING: JEIContentsImpl.setIngredients called with {} ingredients", 
             bookmarkIngredients != null ? bookmarkIngredients.size() : 0);
         
         try {

@@ -2,11 +2,11 @@ package com.jeifolders.ui.components.contents;
 
 import com.jeifolders.data.Folder;
 import com.jeifolders.data.FolderStorageService;
-import com.jeifolders.integration.BookmarkIngredient;
+import com.jeifolders.integration.api.IIngredient;
 import com.jeifolders.integration.api.JEIIntegrationAPI;
 import com.jeifolders.integration.api.JEIIntegrationService;
-import com.jeifolders.integration.impl.JeiBookmarkAdapter;
-import com.jeifolders.integration.impl.JeiContentsImpl;
+import com.jeifolders.integration.impl.JEIBookmarkAdapter;
+import com.jeifolders.integration.impl.JEIContentsImpl;
 import com.jeifolders.ui.display.BookmarkDisplayManager;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.events.FolderEventDispatcher;
@@ -38,7 +38,7 @@ public class FolderContentsView implements HitTestable {
     // Core components
     private final FolderStorageService folderService;
     private final FolderBookmarkList bookmarkList;
-    private final JeiContentsImpl contentsImpl;
+    private final JEIContentsImpl contentsImpl;
     
     // Component architecture
     private final FolderEventDispatcher eventDispatcher;
@@ -50,7 +50,7 @@ public class FolderContentsView implements HitTestable {
     private Rect2i backgroundArea = new Rect2i(0, 0, 0, 0);
     private boolean updatingBounds = false;
     private boolean needsRefresh = false;
-    private List<BookmarkIngredient> ingredients = new ArrayList<>();
+    private List<IIngredient> ingredients = new ArrayList<>();
     private boolean refreshingBookmarks = false;
     
     // Layout properties
@@ -73,8 +73,8 @@ public class FolderContentsView implements HitTestable {
     private FolderContentsView(
         FolderStorageService folderService, 
         FolderBookmarkList bookmarkList,
-        JeiBookmarkAdapter bookmarkAdapter, 
-        JeiContentsImpl contentsImpl,
+        JEIBookmarkAdapter bookmarkAdapter, 
+        JEIContentsImpl contentsImpl,
         FolderEventDispatcher eventDispatcher,
         BookmarkDisplayManager displayManager,
         FolderInteractionHandler interactionHandler
@@ -141,8 +141,8 @@ public class FolderContentsView implements HitTestable {
             
             // Create a bookmark list
             var bookmarkList = new FolderBookmarkList(eventDispatcher);
-            var bookmarkAdapter = new JeiBookmarkAdapter(bookmarkList);
-            var contentsImpl = new JeiContentsImpl(bookmarkAdapter, jeiRuntime);
+            var bookmarkAdapter = new JEIBookmarkAdapter(bookmarkList);
+            var contentsImpl = new JEIContentsImpl(bookmarkAdapter, jeiRuntime);
             
             // Create the display with the JEI components
             var display = new FolderContentsView(
@@ -267,51 +267,43 @@ public class FolderContentsView implements HitTestable {
     }
 
     /**
-     * Sets the ingredients to be displayed.
+     * Sets the unified ingredients to be displayed.
      */
-    public void setIngredients(List<BookmarkIngredient> bookmarkIngredients) {
-        ModLogger.info("DIRECT-TRACKING: FolderContentsView.setIngredients called with {} ingredients", 
-            bookmarkIngredients != null ? bookmarkIngredients.size() : 0);
+    public void setUnifiedIngredients(List<IIngredient> unifiedIngredients) {
+        ModLogger.info("FolderContentsView.setUnifiedIngredients called with {} ingredients", 
+            unifiedIngredients != null ? unifiedIngredients.size() : 0);
             
-        if (bookmarkIngredients == null) {
-            bookmarkIngredients = new ArrayList<>();
-        }
-        
-        // If empty ingredients are passed but the bookmarkList has ingredients, use those instead
-        if (bookmarkIngredients.isEmpty() && !bookmarkList.isEmpty()) {
-            List<BookmarkIngredient> existingIngredients = bookmarkList.getAllBookmarks();
-            ModLogger.info("DIRECT-TRACKING: Empty ingredient list passed, using {} ingredients from bookmarkList", 
-                existingIngredients.size());
-            bookmarkIngredients = existingIngredients;
+        if (unifiedIngredients == null) {
+            unifiedIngredients = new ArrayList<>();
         }
         
         // Store the new ingredients
-        this.ingredients = new ArrayList<>(bookmarkIngredients);
+        this.ingredients = new ArrayList<>(unifiedIngredients);
         
         try {
             // Set ingredients in the bookmarks list
-            bookmarkList.setIngredients(bookmarkIngredients);
+            bookmarkList.setUnifiedIngredients(unifiedIngredients);
             
-            // Pass the actual ingredients to the JEI contents implementation
-            ModLogger.info("DIRECT-TRACKING: Setting {} ingredients in JEI contents implementation", bookmarkIngredients.size());
-            contentsImpl.setIngredients(bookmarkIngredients);
+            // Pass the ingredients to the JEI contents implementation
+            ModLogger.info("Setting {} unified ingredients in JEI contents implementation", unifiedIngredients.size());
+            contentsImpl.setUnifiedIngredients(unifiedIngredients);
             
-            if (!bookmarkIngredients.isEmpty() && activeFolder != null) {
-                ModLogger.info("DIRECT-TRACKING: Configured {} ingredients for folder: {} (ID: {})",
-                    bookmarkIngredients.size(), activeFolder.getName(), activeFolder.getId());
-            } else if (bookmarkIngredients.isEmpty() && activeFolder != null) {
-                ModLogger.warn("DIRECT-TRACKING: Attempted to set empty ingredients list for folder '{}'", 
+            if (!unifiedIngredients.isEmpty() && activeFolder != null) {
+                ModLogger.info("Configured {} ingredients for folder: {} (ID: {})",
+                    unifiedIngredients.size(), activeFolder.getName(), activeFolder.getId());
+            } else if (unifiedIngredients.isEmpty() && activeFolder != null) {
+                ModLogger.warn("Attempted to set empty ingredients list for folder '{}'", 
                     activeFolder.getName());
             }
         } catch (Exception e) {
-            ModLogger.error("Error setting ingredients: {}", e.getMessage(), e);
+            ModLogger.error("Error setting unified ingredients: {}", e.getMessage(), e);
         }
     }
 
     /**
-     * Gets the current ingredients.
+     * Gets the current unified ingredients.
      */
-    public List<BookmarkIngredient> getIngredients() {
+    public List<IIngredient> getUnifiedIngredients() {
         return new ArrayList<>(this.ingredients);
     }
 
@@ -400,7 +392,7 @@ public class FolderContentsView implements HitTestable {
      * Gets the JEI contents implementation for rendering
      * @return The JEI contents implementation
      */
-    public JeiContentsImpl getContentsImpl() {
+    public JEIContentsImpl getContentsImpl() {
         return contentsImpl;
     }
     

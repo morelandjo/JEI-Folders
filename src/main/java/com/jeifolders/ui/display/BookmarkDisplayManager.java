@@ -2,10 +2,8 @@ package com.jeifolders.ui.display;
 
 import com.jeifolders.core.FolderManager;
 import com.jeifolders.data.Folder;
-import com.jeifolders.integration.BookmarkIngredient;
-import com.jeifolders.integration.TypedIngredient;
-import com.jeifolders.integration.model.TypedIngredientHelper;
 import com.jeifolders.integration.api.IIngredient;
+import com.jeifolders.integration.api.JEIIntegrationAPI;
 import com.jeifolders.ui.components.contents.FolderContentsView;
 import com.jeifolders.ui.events.FolderEventType;
 import com.jeifolders.ui.util.RefreshCoordinator;
@@ -45,9 +43,10 @@ public class BookmarkDisplayManager {
      */
     public boolean createBookmarkDisplay(boolean preserveIngredients) {
         // Save current ingredients if requested
-        List<TypedIngredient> savedIngredients = new ArrayList<>();
+        List<IIngredient> savedIngredients = new ArrayList<>();
         if (preserveIngredients && bookmarkDisplay != null) {
-            savedIngredients = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
+            // Get ingredients directly from the display
+            savedIngredients = bookmarkDisplay.getUnifiedIngredients();
         }
         
         // Create the unified display
@@ -78,7 +77,8 @@ public class BookmarkDisplayManager {
                 if (preserveIngredients && !savedIngredients.isEmpty()) {
                     ModLogger.debug("Applying {} preserved ingredients during display creation", 
                         savedIngredients.size());
-                    TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, savedIngredients);
+                    // Set ingredients directly
+                    bookmarkDisplay.setUnifiedIngredients(savedIngredients);
                 }
                 // Otherwise, apply cached bookmark contents if available
                 else {
@@ -86,9 +86,8 @@ public class BookmarkDisplayManager {
                     if (!cachedContents.isEmpty()) {
                         ModLogger.debug("Applying {} cached bookmark items during display creation", 
                             cachedContents.size());
-                        // Convert Ingredient list to TypedIngredient list before passing to setIngredientsOnDisplay
-                        List<TypedIngredient> typedIngredients = TypedIngredientHelper.convertFromIngredients(cachedContents);
-                        TypedIngredientHelper.setIngredientsOnDisplay(bookmarkDisplay, typedIngredients);
+                        // Set unified ingredients directly
+                        bookmarkDisplay.setUnifiedIngredients(cachedContents);
                     }
                 }
             }
@@ -111,13 +110,10 @@ public class BookmarkDisplayManager {
         try {
             updatingBookmarkContents = true;
             if (bookmarkDisplay != null) {
-                // Use the helper to get ingredients from the display
-                List<TypedIngredient> typedIngredients = TypedIngredientHelper.getIngredientsFromDisplay(bookmarkDisplay);
+                // Get unified ingredients directly
+                List<IIngredient> ingredients = bookmarkDisplay.getUnifiedIngredients();
                 
-                // Convert TypedIngredient list to IIngredient list
-                List<IIngredient> ingredients = TypedIngredientHelper.convertToIngredients(typedIngredients);
-                
-                // Update cache with the converted list
+                // Update cache with ingredients
                 folderManager.updateBookmarkContentsCache(ingredients);
             }
         } finally {
@@ -161,18 +157,15 @@ public class BookmarkDisplayManager {
             // Store the current page number before refreshing
             int currentPageNumber = bookmarkDisplay.getCurrentPageNumber();
             
-            // Load bookmarks from the folder and convert to ingredients
-            List<BookmarkIngredient> bookmarkIngredients = TypedIngredientHelper.convertToBookmarkIngredients(
-                TypedIngredientHelper.loadBookmarksFromFolder(
-                    folderManager.getStorageService(), folderId, true)
-            );
+            // Get ingredients for folder directly from the service
+            List<IIngredient> ingredients = JEIIntegrationAPI.getIngredientService().getCachedIngredientsForFolder(folderId);
             
-            ModLogger.debug("[REFRESH-DEBUG] Loading {} bookmarks from folder ID {}", 
-                bookmarkIngredients.size(), folderId);
+            ModLogger.debug("[REFRESH-DEBUG] Loading {} ingredients from folder ID {}", 
+                ingredients.size(), folderId);
             
             // Set active folder and ingredients
             bookmarkDisplay.setActiveFolder(folder);
-            bookmarkDisplay.setIngredients(bookmarkIngredients);
+            bookmarkDisplay.setUnifiedIngredients(ingredients);
             
             // Force layout update if requested
             if (forceLayout && bookmarkDisplay.getContentsImpl() != null) {
@@ -275,12 +268,12 @@ public class BookmarkDisplayManager {
         if (bookmarkKey.isPresent() && folderManager.getUIStateManager().hasActiveFolder()) {
             String key = bookmarkKey.get();
             
-            // Get the typed ingredient from the bookmark
-            var typedIngredient = TypedIngredientHelper.getTypedIngredientForKey(key);
-            if (typedIngredient != null) {
-                // Fire bookmark clicked event using the new builder pattern
+            // Get the ingredient directly from the API
+            Optional<IIngredient> ingredient = JEIIntegrationAPI.getIngredientForKey(key);
+            if (ingredient.isPresent()) {
+                // Fire bookmark clicked event using the unified ingredient
                 folderManager.getEventDispatcher().fire(FolderEventType.BOOKMARK_CLICKED)
-                    .withIngredient(typedIngredient)
+                    .withUnifiedIngredient(ingredient.get())
                     .build();
                 return true;
             }
